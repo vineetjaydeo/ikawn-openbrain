@@ -398,6 +398,64 @@ function chatPage(user) {
     .msg-bubble li { margin-bottom: 0.25em; }
     .msg-bubble blockquote { border-left: 3px solid var(--accent); padding-left: 14px; color: var(--text-dim); margin: 0.5em 0; }
     .msg-bubble strong { color: #fff; font-weight: 600; }
+
+    /* ---------- Reply button on hover ---------- */
+    .msg-row { position: relative; }
+    .msg-reply-btn {
+      position: absolute;
+      top: 4px;
+      opacity: 0;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-muted);
+      padding: 3px 8px;
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+      z-index: 2;
+    }
+    .msg-row.assistant .msg-reply-btn { right: 8px; }
+    .msg-row.user .msg-reply-btn { left: 8px; }
+    .msg-row:hover .msg-reply-btn { opacity: 1; }
+    .msg-reply-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+    /* ---------- Reply preview bar ---------- */
+    .reply-preview {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+    .reply-preview-bar {
+      width: 3px;
+      height: 20px;
+      background: var(--accent);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .reply-preview-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .reply-preview-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 6px;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .reply-preview-close:hover { color: var(--danger); }
     .msg-bubble a { color: #a78bfa; text-decoration: none; }
     .msg-bubble a:hover { text-decoration: underline; }
     .msg-bubble code {
@@ -720,6 +778,7 @@ function chatPage(user) {
 
       <div class="input-area">
         <div class="input-area-inner">
+          <div id="reply-preview-container"></div>
           <div class="pending-attachments" id="pending-attachments"></div>
           <div class="compose">
             <button class="compose-btn" onclick="triggerFileUpload()" title="Attach file">
@@ -942,9 +1001,35 @@ function chatPage(user) {
       });
     }
 
+    let replyToContent = null;
+    let replyToRole = null;
+
+    function setReplyTo(role, content) {
+      replyToContent = content;
+      replyToRole = role;
+      const container = document.getElementById('reply-preview-container');
+      const sender = role === 'assistant' ? 'Ruhi' : 'You';
+      const preview = content.replace(/<[^>]*>/g, '').slice(0, 120);
+      container.innerHTML =
+        '<div class="reply-preview">'
+        + '<div class="reply-preview-bar"></div>'
+        + '<div class="reply-preview-text"><strong>' + sender + ':</strong> ' + preview + '</div>'
+        + '<button class="reply-preview-close" onclick="clearReplyTo()">&times;</button>'
+        + '</div>';
+      document.getElementById('msg-input').focus();
+    }
+
+    function clearReplyTo() {
+      replyToContent = null;
+      replyToRole = null;
+      document.getElementById('reply-preview-container').innerHTML = '';
+    }
+
     function createMessageElement(role, content, attachments) {
       const row = document.createElement('div');
       row.className = 'msg-row ' + role;
+
+      const replyBtn = '<button class="msg-reply-btn" data-role="' + role + '" onclick="setReplyTo(this.dataset.role, this.closest(\'.msg-row\').querySelector(\'.msg-bubble\').textContent)">Reply</button>';
 
       if (role === 'assistant') {
         row.innerHTML =
@@ -952,10 +1037,12 @@ function chatPage(user) {
           + '<div class="msg-bubble">'
           + renderAttachments(attachments)
           + renderContent(role, content)
-          + '</div>';
+          + '</div>'
+          + replyBtn;
       } else {
         row.innerHTML =
-          '<div class="msg-bubble">'
+          replyBtn
+          + '<div class="msg-bubble">'
           + renderAttachments(attachments)
           + renderContent(role, content)
           + '</div>'
@@ -1023,6 +1110,7 @@ function chatPage(user) {
       input.value = '';
       autoGrow(input);
       clearPendingAttachments();
+      clearReplyTo();
       updateSendBtn();
       scrollToBottom();
 
@@ -1046,7 +1134,9 @@ function chatPage(user) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             conversation_id: activeConvId,
-            content,
+            content: replyToContent
+              ? '[Replying to ' + (replyToRole === 'assistant' ? 'Ruhi' : 'my previous message') + ': "' + replyToContent.slice(0, 200) + '"]\n\n' + content
+              : content,
             attachments,
             use_secondary: useSecondaryModel,
           }),

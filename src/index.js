@@ -10,6 +10,10 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+app.get('/', (req, res) => {
+  res.json({ name: 'iKawn OpenBrain', status: 'running', endpoints: ['POST /capture', 'GET /search?q=', 'GET /recent', 'GET /stats', 'GET /health'] });
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });

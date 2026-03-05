@@ -1,25 +1,14 @@
 const { Router } = require('express');
-const Anthropic = require('@anthropic-ai/sdk').default;
 const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
+const { streamChat } = require('../utils/llm');
 const { buildSystemPrompt } = require('../ruhi/persona');
 
 const router = Router();
 
-let anthropicClient = null;
-function getAnthropicClient() {
-  if (!anthropicClient) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
-    anthropicClient = new Anthropic({ apiKey });
-  }
-  return anthropicClient;
-}
-
 async function searchMemory(query, accessLevels, limit = 10) {
   const embedding = await getEmbedding(query);
 
-  // Build access level filter
   const placeholders = accessLevels.map((_, i) => `$${i + 2}`).join(', ');
   const result = await pool.query(
     `SELECT id, content, memory_type, project, hashtags, author, created_at, cosine_similarity(embedding, $1) AS similarity
@@ -36,7 +25,6 @@ async function searchMemory(query, accessLevels, limit = 10) {
 }
 
 async function getConversationHistory(conversationId, limit = 10) {
-  // Use ob_conversations for Ruhi chats
   const result = await pool.query(
     `SELECT content, memory_type, author, created_at FROM memories
      WHERE conversation_id = $1
@@ -97,11 +85,16 @@ router.post('/chat', async (req, res) => {
     // Build system prompt with Ruhi persona
     const systemPrompt = buildSystemPrompt(obUser.name, obUser.role, memoryContext);
 
-    // Build messages for Claude
-    const claudeMessages = [
+    // Build OpenAI messages array
+    const openaiMessages = [
+      { role: 'system', content: systemPrompt },
       ...historyMessages,
       { role: 'user', content: message },
     ];
+
+    // Get model from settings (use secondary/powerful model for Ruhi)
+    const { rows: settingsRows } = await pool.query("SELECT value FROM settings WHERE key = 'secondary_model'");
+    const model = settingsRows.length ? settingsRows[0].value : 'gpt-4o';
 
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
@@ -109,23 +102,15 @@ router.post('/chat', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    // Call Claude with streaming
-    const client = getAnthropicClient();
     let fullResponse = '';
 
-    const stream = client.messages.stream({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: claudeMessages,
+    await streamChat(openaiMessages, {
+      model,
+      onChunk: (chunk) => {
+        fullResponse += chunk;
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+      },
     });
-
-    stream.on('text', (text) => {
-      fullResponse += text;
-      res.write(`data: ${JSON.stringify({ type: 'chunk', text })}\n\n`);
-    });
-
-    await stream.finalMessage();
 
     // Save user message to memories
     const userEmbedding = await getEmbedding(message);

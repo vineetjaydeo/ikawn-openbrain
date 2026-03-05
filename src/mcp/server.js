@@ -198,8 +198,7 @@ server.tool(
   'ask_ruhi',
   { message: z.string() },
   async ({ message }) => {
-    // Use the Ruhi chat flow inline — search memory, build prompt, call Claude
-    const Anthropic = require('@anthropic-ai/sdk').default;
+    const { chatCompletion } = require('../utils/llm');
     const { buildSystemPrompt } = require('../ruhi/persona');
 
     const embedding = await getEmbedding(message);
@@ -220,20 +219,15 @@ server.tool(
 
     const systemPrompt = buildSystemPrompt('Vineet', 'owner', memoryContext);
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return { content: [{ type: 'text', text: 'ANTHROPIC_API_KEY not set — cannot ask Ruhi' }] };
-    }
+    const response = await chatCompletion(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message },
+      ],
+      { model: 'gpt-4o' }
+    );
 
-    const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: message }],
-    });
-
-    const ruhiResponse = response.content.map(c => c.text).join('');
+    const ruhiResponse = response.content || '';
     return { content: [{ type: 'text', text: ruhiResponse }] };
   }
 );

@@ -16,29 +16,52 @@ router.get('/settings', requireAuth, (req, res) => {
   res.send(settingsPage(req.session.user));
 });
 
+const BASE_STYLES = `
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { font-family: inherit; background: #1a1a2e; color: #e8e8f0; }
+    a { color: #a78bfa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+`;
+
+const GOOGLE_FONTS = `
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+`;
+
 function loginPage() {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iKawn OpenBrain - Login</title>
+  <title>Ruhi - Sign In</title>
+  ${GOOGLE_FONTS}
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .container { text-align: center; padding: 40px; width: 100%; max-width: 360px; }
-    h1 { font-size: 2rem; margin-bottom: 8px; color: #fff; }
-    p { color: #888; margin-bottom: 24px; }
-    input { width: 100%; padding: 12px 14px; background: #141414; border: 1px solid #333; border-radius: 8px; color: #e0e0e0; font-size: 1rem; margin-bottom: 12px; }
-    input:focus { outline: none; border-color: #3b82f6; }
-    button { width: 100%; padding: 12px; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
-    button:hover { background: #2563eb; }
-    .error { color: #ef4444; margin-top: 12px; display: none; font-size: 0.875rem; }
+    ${BASE_STYLES}
+    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .container { text-align: center; padding: 40px; width: 100%; max-width: 380px; }
+    .brand-icon {
+      width: 56px; height: 56px; border-radius: 16px;
+      background: linear-gradient(135deg, #8b7cf6, #c084fc);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; font-weight: 700; color: #fff;
+      margin: 0 auto 16px;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 6px; color: #fff; font-weight: 600; letter-spacing: -0.02em; }
+    p { color: #a0a0c0; margin-bottom: 28px; font-size: 0.95rem; }
+    input { width: 100%; padding: 12px 16px; background: #232340; border: 1px solid #3a3a60; border-radius: 10px; color: #e8e8f0; font-size: 1rem; font-family: inherit; margin-bottom: 12px; }
+    input:focus { outline: none; border-color: #8b7cf6; box-shadow: 0 0 0 3px #8b7cf620; }
+    button { width: 100%; padding: 12px; background: #8b7cf6; color: #fff; border: none; border-radius: 10px; font-size: 1rem; font-family: inherit; cursor: pointer; font-weight: 500; }
+    button:hover { background: #7c6ce6; }
+    .error { color: #f06060; margin-top: 12px; display: none; font-size: 0.875rem; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>iKawn OpenBrain</h1>
+    <div class="brand-icon">R</div>
+    <h1>Ruhi</h1>
     <p>Sign in with your @ikawn.com account</p>
     <form onsubmit="login(event)">
       <input type="email" id="email" placeholder="you@ikawn.com" autofocus>
@@ -47,15 +70,15 @@ function loginPage() {
     </form>
     <p class="error" id="error"></p>
     <div id="reset-section" style="display:none; margin-top: 20px; text-align: left;">
-      <p style="color: #888; margin-bottom: 12px; text-align: center;">Enter your email to receive a reset code</p>
+      <p style="color: #a0a0c0; margin-bottom: 12px; text-align: center;">Enter your email to receive a reset code</p>
       <input type="email" id="reset-email" placeholder="you@ikawn.com">
       <button onclick="requestReset()" style="margin-bottom: 12px;">Send Reset Code</button>
       <input type="text" id="reset-code" placeholder="6-digit code" style="display:none;">
       <input type="password" id="reset-newpw" placeholder="New password (min 6 chars)" style="display:none;">
       <button id="reset-submit-btn" onclick="submitReset()" style="display:none;">Reset Password</button>
-      <p style="text-align:center;"><a href="#" onclick="toggleReset(false); return false;" style="color:#60a5fa; font-size:0.85rem;">Back to login</a></p>
+      <p style="text-align:center;"><a href="#" onclick="toggleReset(false); return false;" style="font-size:0.85rem;">Back to login</a></p>
     </div>
-    <p style="margin-top: 16px;" id="forgot-link"><a href="#" onclick="toggleReset(true); return false;" style="color:#60a5fa; font-size:0.85rem;">Forgot password?</a></p>
+    <p style="margin-top: 16px;" id="forgot-link"><a href="#" onclick="toggleReset(true); return false;" style="font-size:0.85rem;">Forgot password?</a></p>
   </div>
   <script>
     function toggleReset(show) {
@@ -75,8 +98,8 @@ function loginPage() {
         document.getElementById('reset-code').style.display = 'block';
         document.getElementById('reset-newpw').style.display = 'block';
         document.getElementById('reset-submit-btn').style.display = 'block';
-        errEl.textContent = 'Code sent! Check your email.'; errEl.style.display = 'block'; errEl.style.color = '#4ade80';
-      } catch(err) { errEl.textContent = err.message; errEl.style.display = 'block'; errEl.style.color = '#ef4444'; }
+        errEl.textContent = 'Code sent! Check your email.'; errEl.style.display = 'block'; errEl.style.color = '#5cd08a';
+      } catch(err) { errEl.textContent = err.message; errEl.style.display = 'block'; errEl.style.color = '#f06060'; }
     }
     async function submitReset() {
       const email = document.getElementById('reset-email').value;
@@ -88,9 +111,9 @@ function loginPage() {
         const res = await fetch('/auth/reset-password', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email, code, new_password}) });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        errEl.textContent = 'Password reset! Redirecting to login...'; errEl.style.display = 'block'; errEl.style.color = '#4ade80';
+        errEl.textContent = 'Password reset! Redirecting to login...'; errEl.style.display = 'block'; errEl.style.color = '#5cd08a';
         setTimeout(() => { toggleReset(false); }, 2000);
-      } catch(err) { errEl.textContent = err.message; errEl.style.display = 'block'; errEl.style.color = '#ef4444'; }
+      } catch(err) { errEl.textContent = err.message; errEl.style.display = 'block'; errEl.style.color = '#f06060'; }
     }
     async function login(e) {
       e.preventDefault();
@@ -120,50 +143,50 @@ function adminPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iKawn OpenBrain - Admin</title>
+  <title>Ruhi - Admin</title>
+  ${GOOGLE_FONTS}
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 24px; max-width: 900px; margin: 0 auto; }
-    h1 { font-size: 1.5rem; margin-bottom: 4px; }
-    .subtitle { color: #888; margin-bottom: 24px; font-size: 0.875rem; }
+    ${BASE_STYLES}
+    body { padding: 28px; max-width: 920px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; font-weight: 600; }
+    .subtitle { color: #a0a0c0; margin-bottom: 24px; font-size: 0.875rem; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .header-right { display: flex; gap: 12px; align-items: center; }
-    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }
-    .btn-primary { background: #3b82f6; color: #fff; }
-    .btn-primary:hover { background: #2563eb; }
-    .btn-danger { background: #ef4444; color: #fff; }
-    .btn-danger:hover { background: #dc2626; }
-    .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
-    .btn-outline { background: transparent; border: 1px solid #333; color: #e0e0e0; }
-    .btn-outline:hover { background: #1a1a1a; }
+    .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 0.875rem; font-family: inherit; font-weight: 500; }
+    .btn-primary { background: #8b7cf6; color: #fff; }
+    .btn-primary:hover { background: #7c6ce6; }
+    .btn-danger { background: #f06060; color: #fff; }
+    .btn-danger:hover { background: #e05050; }
+    .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+    .btn-outline { background: transparent; border: 1px solid #3a3a60; color: #e8e8f0; }
+    .btn-outline:hover { background: #2a2a4a; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #1a1a1a; }
-    th { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid #2d2d50; }
+    th { color: #a0a0c0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
     td { font-size: 0.875rem; }
-    .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; }
-    .badge-admin { background: #3b82f620; color: #60a5fa; }
-    .badge-user { background: #6b728020; color: #9ca3af; }
-    .badge-active { background: #22c55e20; color: #4ade80; }
-    .badge-suspended { background: #ef444420; color: #f87171; }
-    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
+    .badge { padding: 3px 10px; border-radius: 10px; font-size: 0.75rem; font-weight: 500; }
+    .badge-admin { background: #8b7cf620; color: #a78bfa; }
+    .badge-user { background: #6b728020; color: #a0a0c0; }
+    .badge-active { background: #5cd08a20; color: #5cd08a; }
+    .badge-suspended { background: #f0606020; color: #f06060; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(10,10,30,0.7); justify-content: center; align-items: center; z-index: 100; }
     .modal-overlay.active { display: flex; }
-    .modal { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 24px; width: 100%; max-width: 400px; }
-    .modal h2 { font-size: 1.1rem; margin-bottom: 16px; }
+    .modal { background: #232340; border: 1px solid #3a3a60; border-radius: 16px; padding: 28px; width: 100%; max-width: 420px; }
+    .modal h2 { font-size: 1.15rem; margin-bottom: 18px; font-weight: 600; }
     .form-group { margin-bottom: 14px; }
-    .form-group label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
-    .form-group input, .form-group select { width: 100%; padding: 8px 10px; background: #0a0a0a; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 0.875rem; }
-    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-    .toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 16px; border-radius: 8px; font-size: 0.875rem; display: none; z-index: 200; }
-    .toast-success { background: #22c55e; color: #fff; }
-    .toast-error { background: #ef4444; color: #fff; }
-    a { color: #60a5fa; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    .form-group label { display: block; font-size: 0.8rem; color: #a0a0c0; margin-bottom: 4px; font-weight: 500; }
+    .form-group input, .form-group select { width: 100%; padding: 9px 12px; background: #1a1a2e; border: 1px solid #3a3a60; border-radius: 8px; color: #e8e8f0; font-size: 0.875rem; font-family: inherit; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #8b7cf6; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 18px; border-radius: 10px; font-size: 0.875rem; font-family: inherit; display: none; z-index: 200; }
+    .toast-success { background: #5cd08a; color: #fff; }
+    .toast-error { background: #f06060; color: #fff; }
   </style>
 </head>
 <body>
   <div class="header">
     <div>
-      <h1>iKawn OpenBrain Admin</h1>
+      <h1>Ruhi Admin</h1>
       <p class="subtitle">Manage users &mdash; ${user.email}</p>
     </div>
     <div class="header-right">
@@ -192,7 +215,7 @@ function adminPage(user) {
   <div class="modal-overlay" id="pw-modal">
     <div class="modal">
       <h2>Reset Password</h2>
-      <p style="color:#888;font-size:0.85rem;margin-bottom:12px" id="pw-email"></p>
+      <p style="color:#a0a0c0;font-size:0.85rem;margin-bottom:12px" id="pw-email"></p>
       <div class="form-group"><label>New Password</label><input type="password" id="pw-new" placeholder="Min 6 characters"></div>
       <div class="form-actions">
         <button class="btn btn-outline" onclick="closePwModal()">Cancel</button>
@@ -264,24 +287,23 @@ function settingsPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iKawn OpenBrain - Settings</title>
+  <title>Ruhi - Settings</title>
+  ${GOOGLE_FONTS}
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .container { padding: 40px; width: 100%; max-width: 400px; }
-    h1 { font-size: 1.5rem; margin-bottom: 4px; }
-    .subtitle { color: #888; margin-bottom: 24px; font-size: 0.875rem; }
+    ${BASE_STYLES}
+    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .container { padding: 40px; width: 100%; max-width: 420px; }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; font-weight: 600; }
+    .subtitle { color: #a0a0c0; margin-bottom: 28px; font-size: 0.875rem; }
     .form-group { margin-bottom: 14px; }
-    .form-group label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
-    .form-group input { width: 100%; padding: 10px 12px; background: #141414; border: 1px solid #333; border-radius: 8px; color: #e0e0e0; font-size: 1rem; }
-    .form-group input:focus { outline: none; border-color: #3b82f6; }
-    button { width: 100%; padding: 12px; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; margin-top: 8px; }
-    button:hover { background: #2563eb; }
+    .form-group label { display: block; font-size: 0.8rem; color: #a0a0c0; margin-bottom: 4px; font-weight: 500; }
+    .form-group input { width: 100%; padding: 11px 14px; background: #232340; border: 1px solid #3a3a60; border-radius: 10px; color: #e8e8f0; font-size: 1rem; font-family: inherit; }
+    .form-group input:focus { outline: none; border-color: #8b7cf6; box-shadow: 0 0 0 3px #8b7cf620; }
+    button { width: 100%; padding: 12px; background: #8b7cf6; color: #fff; border: none; border-radius: 10px; font-size: 1rem; font-family: inherit; cursor: pointer; margin-top: 8px; font-weight: 500; }
+    button:hover { background: #7c6ce6; }
     .msg { margin-top: 12px; font-size: 0.875rem; display: none; text-align: center; }
-    .msg-success { color: #4ade80; }
-    .msg-error { color: #f87171; }
-    a { color: #60a5fa; text-decoration: none; font-size: 0.875rem; }
-    a:hover { text-decoration: underline; }
+    .msg-success { color: #5cd08a; }
+    .msg-error { color: #f06060; }
     .back { margin-bottom: 20px; display: inline-block; }
   </style>
 </head>

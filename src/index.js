@@ -1,5 +1,7 @@
 const express = require('express');
 const cookieSession = require('cookie-session');
+const fs = require('fs');
+const path = require('path');
 const { initSchema } = require('./db');
 const { requireAuth } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
@@ -12,6 +14,21 @@ const captureRoute = require('./routes/capture');
 const searchRoute = require('./routes/search');
 const recentRoute = require('./routes/recent');
 const statsRoute = require('./routes/stats');
+
+// Load Ruhi knowledge base at startup
+const docsDir = path.join(__dirname, '..', 'docs');
+const ruhiKnowledge = {};
+for (const file of ['soul.md', 'memory.md', 'tools.md', 'user.md']) {
+  const filePath = path.join(docsDir, file);
+  try {
+    ruhiKnowledge[file.replace('.md', '')] = fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    console.warn(`Warning: Could not load ${filePath}:`, err.message);
+    ruhiKnowledge[file.replace('.md', '')] = '';
+  }
+}
+// Expose globally for chat-api
+global.ruhiKnowledge = ruhiKnowledge;
 
 const app = express();
 const PORT = process.env.PORT || 3000;

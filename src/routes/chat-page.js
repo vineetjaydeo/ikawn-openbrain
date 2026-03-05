@@ -14,37 +14,42 @@ function chatPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>iKawn OpenBrain</title>
+  <title>Ruhi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark-dimmed.min.css">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #0a0a0a;
-      --bg-sidebar: #0f0f0f;
-      --bg-input: #141414;
-      --bg-hover: #1a1a1a;
-      --bg-assistant: #1a1a1a;
-      --bg-user: #1e3a5f;
-      --border: #222;
-      --border-light: #333;
-      --text: #e0e0e0;
-      --text-dim: #888;
-      --text-muted: #555;
-      --blue: #3b82f6;
-      --blue-hover: #2563eb;
-      --blue-glow: #3b82f620;
-      --danger: #ef4444;
-      --success: #4ade80;
+      --bg: #1a1a2e;
+      --bg-sidebar: #16162a;
+      --bg-input: #232340;
+      --bg-hover: #2a2a4a;
+      --bg-assistant: #1f1f3a;
+      --bg-user: #3b3b6d;
+      --border: #2d2d50;
+      --border-light: #3a3a60;
+      --text: #e8e8f0;
+      --text-dim: #a0a0c0;
+      --text-muted: #6a6a90;
+      --accent: #8b7cf6;
+      --accent-hover: #7c6ce6;
+      --accent-glow: #8b7cf620;
+      --accent-soft: #8b7cf615;
+      --danger: #f06060;
+      --success: #5cd08a;
+      --warm: #f0c878;
       --sidebar-w: 260px;
-      --radius: 12px;
-      --radius-sm: 8px;
+      --radius: 16px;
+      --radius-sm: 10px;
     }
 
     html, body {
       height: 100%;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg);
       color: var(--text);
     }
@@ -69,18 +74,46 @@ function chatPage(user) {
     }
 
     .sidebar-header {
-      padding: 14px;
+      padding: 16px;
       border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .sidebar-brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #8b7cf6, #c084fc);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .sidebar-brand-name {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
     }
 
     .btn-new-chat {
       width: 100%;
       padding: 10px 14px;
-      background: var(--bg-input);
+      background: var(--accent-soft);
       border: 1px solid var(--border-light);
       border-radius: var(--radius-sm);
       color: var(--text);
       font-size: 0.875rem;
+      font-family: inherit;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -89,7 +122,7 @@ function chatPage(user) {
     }
     .btn-new-chat:hover {
       background: var(--bg-hover);
-      border-color: var(--text-dim);
+      border-color: var(--accent);
     }
     .btn-new-chat svg { flex-shrink: 0; }
 
@@ -102,25 +135,24 @@ function chatPage(user) {
     .sidebar-conversations::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
 
     .conv-group-label {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
       color: var(--text-muted);
-      padding: 12px 8px 4px;
+      padding: 14px 8px 6px;
       font-weight: 600;
     }
 
     .conv-item {
       display: flex;
       align-items: center;
-      padding: 8px 10px;
+      padding: 9px 10px;
       border-radius: var(--radius-sm);
       cursor: pointer;
       font-size: 0.85rem;
       color: var(--text-dim);
       transition: background 0.12s, color 0.12s;
       position: relative;
-      group: conv;
     }
     .conv-item:hover { background: var(--bg-hover); color: var(--text); }
     .conv-item.active { background: var(--bg-hover); color: var(--text); }
@@ -159,16 +191,17 @@ function chatPage(user) {
     .conv-rename-input {
       flex: 1;
       background: var(--bg-input);
-      border: 1px solid var(--blue);
+      border: 1px solid var(--accent);
       border-radius: 4px;
       color: var(--text);
       padding: 2px 6px;
       font-size: 0.85rem;
+      font-family: inherit;
       outline: none;
     }
 
     .sidebar-footer {
-      padding: 12px 14px;
+      padding: 14px 16px;
       border-top: 1px solid var(--border);
       display: flex;
       flex-direction: column;
@@ -233,12 +266,12 @@ function chatPage(user) {
     .messages::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 
     .messages-inner {
-      max-width: 720px;
+      max-width: 740px;
       margin: 0 auto;
-      padding: 24px 20px 120px;
+      padding: 32px 24px 130px;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 28px;
     }
 
     .welcome-screen {
@@ -248,31 +281,48 @@ function chatPage(user) {
       align-items: center;
       justify-content: center;
       color: var(--text-dim);
-      gap: 8px;
-      padding: 60px 20px;
+      gap: 12px;
+      padding: 80px 20px;
+    }
+    .welcome-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #8b7cf6, #c084fc);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
     }
     .welcome-screen h2 {
-      font-size: 1.5rem;
+      font-size: 1.6rem;
       font-weight: 600;
       color: var(--text);
+      letter-spacing: -0.02em;
     }
     .welcome-screen p {
-      font-size: 0.95rem;
+      font-size: 1rem;
       color: var(--text-muted);
+      max-width: 360px;
+      text-align: center;
+      line-height: 1.5;
     }
 
     /* ---------- Message rows ---------- */
     .msg-row {
       display: flex;
-      gap: 12px;
-      line-height: 1.6;
+      gap: 14px;
+      line-height: 1.7;
     }
     .msg-row.user { justify-content: flex-end; }
 
     .msg-avatar {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -282,25 +332,25 @@ function chatPage(user) {
       margin-top: 2px;
     }
     .msg-avatar.assistant-avatar {
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      background: linear-gradient(135deg, #8b7cf6, #c084fc);
       color: #fff;
     }
     .msg-avatar.user-avatar {
       background: var(--bg-user);
-      color: #93c5fd;
+      color: #c0c0e8;
     }
 
     .msg-bubble {
-      max-width: 80%;
-      padding: 12px 16px;
+      max-width: 78%;
+      padding: 14px 18px;
       border-radius: var(--radius);
-      font-size: 0.925rem;
+      font-size: 1.05rem;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
     .msg-row.user .msg-bubble {
       background: var(--bg-user);
-      color: #e8eef6;
+      color: #e8e8f4;
       border-bottom-right-radius: 4px;
     }
     .msg-row.assistant .msg-bubble {
@@ -314,7 +364,7 @@ function chatPage(user) {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .msg-attachments:empty { display: none; }
 
@@ -332,45 +382,45 @@ function chatPage(user) {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
+      padding: 5px 12px;
       background: var(--bg-input);
       border: 1px solid var(--border);
       border-radius: 20px;
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       color: var(--text-dim);
     }
     .msg-attach-chip svg { flex-shrink: 0; }
 
     /* ---------- Markdown in assistant messages ---------- */
-    .msg-bubble p { margin-bottom: 0.6em; }
+    .msg-bubble p { margin-bottom: 0.65em; }
     .msg-bubble p:last-child { margin-bottom: 0; }
-    .msg-bubble ul, .msg-bubble ol { padding-left: 1.4em; margin-bottom: 0.6em; }
-    .msg-bubble li { margin-bottom: 0.2em; }
-    .msg-bubble blockquote { border-left: 3px solid var(--border-light); padding-left: 12px; color: var(--text-dim); margin: 0.5em 0; }
+    .msg-bubble ul, .msg-bubble ol { padding-left: 1.4em; margin-bottom: 0.65em; }
+    .msg-bubble li { margin-bottom: 0.25em; }
+    .msg-bubble blockquote { border-left: 3px solid var(--accent); padding-left: 14px; color: var(--text-dim); margin: 0.5em 0; }
     .msg-bubble strong { color: #fff; font-weight: 600; }
-    .msg-bubble a { color: #60a5fa; text-decoration: none; }
+    .msg-bubble a { color: #a78bfa; text-decoration: none; }
     .msg-bubble a:hover { text-decoration: underline; }
     .msg-bubble code {
-      background: #1e1e2e;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.85em;
+      background: #2a2a4a;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 0.88em;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
     }
     .msg-bubble pre {
-      background: #111118;
+      background: #14142a;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      padding: 14px;
+      padding: 16px;
       overflow-x: auto;
-      margin: 0.6em 0;
+      margin: 0.65em 0;
       position: relative;
     }
     .msg-bubble pre code {
       background: none;
       padding: 0;
-      font-size: 0.85em;
-      line-height: 1.5;
+      font-size: 0.88em;
+      line-height: 1.55;
     }
     .msg-bubble table {
       border-collapse: collapse;
@@ -379,9 +429,9 @@ function chatPage(user) {
     }
     .msg-bubble th, .msg-bubble td {
       border: 1px solid var(--border);
-      padding: 6px 10px;
+      padding: 7px 12px;
       text-align: left;
-      font-size: 0.85em;
+      font-size: 0.9em;
     }
     .msg-bubble th { background: var(--bg-input); color: var(--text-dim); font-weight: 600; }
     .msg-bubble hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
@@ -389,30 +439,30 @@ function chatPage(user) {
     /* ---------- Typing indicator ---------- */
     .typing-indicator {
       display: none;
-      gap: 12px;
+      gap: 14px;
     }
     .typing-indicator.visible { display: flex; }
     .typing-dots {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 14px 16px;
+      gap: 5px;
+      padding: 16px 18px;
       background: var(--bg-assistant);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       border-bottom-left-radius: 4px;
     }
     .typing-dots span {
-      width: 6px;
-      height: 6px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background: var(--text-muted);
+      background: var(--accent);
       animation: dotPulse 1.4s ease-in-out infinite;
     }
     .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
     .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes dotPulse {
-      0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+      0%, 60%, 100% { opacity: 0.25; transform: scale(0.8); }
       30% { opacity: 1; transform: scale(1); }
     }
 
@@ -420,12 +470,12 @@ function chatPage(user) {
     .input-area {
       position: sticky;
       bottom: 0;
-      background: var(--bg);
-      padding: 0 20px 20px;
+      background: linear-gradient(transparent, var(--bg) 20%);
+      padding: 8px 20px 20px;
     }
 
     .input-area-inner {
-      max-width: 720px;
+      max-width: 740px;
       margin: 0 auto;
     }
 
@@ -488,14 +538,17 @@ function chatPage(user) {
       background: var(--bg-input);
       border: 1px solid var(--border-light);
       border-radius: var(--radius);
-      padding: 8px 12px;
-      transition: border-color 0.2s;
+      padding: 10px 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .compose:focus-within { border-color: var(--blue); }
+    .compose:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
 
     .compose-btn {
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -503,7 +556,7 @@ function chatPage(user) {
       background: transparent;
       color: var(--text-dim);
       cursor: pointer;
-      border-radius: 6px;
+      border-radius: 8px;
       flex-shrink: 0;
       transition: background 0.12s, color 0.12s;
     }
@@ -512,10 +565,11 @@ function chatPage(user) {
     .compose-btn.model-toggle {
       font-size: 0.7rem;
       font-weight: 600;
+      font-family: inherit;
       letter-spacing: 0.02em;
       padding: 0 6px;
       width: auto;
-      min-width: 34px;
+      min-width: 36px;
     }
     .compose-btn.model-toggle.secondary-active {
       color: #c084fc;
@@ -527,30 +581,30 @@ function chatPage(user) {
       background: transparent;
       border: none;
       color: var(--text);
-      font-size: 0.925rem;
+      font-size: 1.05rem;
       font-family: inherit;
       resize: none;
       outline: none;
       max-height: 200px;
-      min-height: 22px;
+      min-height: 24px;
       line-height: 1.5;
-      padding: 5px 0;
+      padding: 6px 0;
     }
     #msg-input::placeholder { color: var(--text-muted); }
 
     .compose-btn.send-btn {
-      background: var(--blue);
+      background: var(--accent);
       color: #fff;
-      border-radius: 8px;
+      border-radius: 10px;
     }
-    .compose-btn.send-btn:hover { background: var(--blue-hover); }
-    .compose-btn.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .compose-btn.send-btn:hover { background: var(--accent-hover); }
+    .compose-btn.send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
     .input-hint {
       text-align: center;
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       color: var(--text-muted);
-      padding-top: 8px;
+      padding-top: 10px;
     }
 
     /* ==================== TOAST ==================== */
@@ -561,7 +615,8 @@ function chatPage(user) {
       transform: translateX(-50%) translateY(80px);
       padding: 10px 20px;
       border-radius: var(--radius-sm);
-      font-size: 0.85rem;
+      font-size: 0.88rem;
+      font-family: inherit;
       z-index: 200;
       opacity: 0;
       transition: transform 0.3s ease, opacity 0.3s ease;
@@ -569,14 +624,14 @@ function chatPage(user) {
     }
     .toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
     .toast-error { background: var(--danger); color: #fff; }
-    .toast-success { background: #22c55e; color: #fff; }
+    .toast-success { background: var(--success); color: #fff; }
 
     /* ==================== IMAGE LIGHTBOX ==================== */
     .lightbox {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.85);
+      background: rgba(10,10,30,0.9);
       z-index: 300;
       align-items: center;
       justify-content: center;
@@ -594,7 +649,7 @@ function chatPage(user) {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.5);
+      background: rgba(10,10,30,0.6);
       z-index: 40;
     }
     .sidebar-overlay.visible { display: block; }
@@ -610,8 +665,8 @@ function chatPage(user) {
       }
       .sidebar.open { transform: translateX(0); }
       .main-header { display: flex; }
-      .messages-inner { padding: 16px 14px 120px; }
-      .input-area { padding: 0 12px 12px; }
+      .messages-inner { padding: 20px 16px 130px; }
+      .input-area { padding: 0 12px 14px; }
       .msg-bubble { max-width: 90%; }
     }
   </style>
@@ -624,6 +679,10 @@ function chatPage(user) {
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <div class="sidebar-brand-icon">R</div>
+          <span class="sidebar-brand-name">Ruhi</span>
+        </div>
         <button class="btn-new-chat" onclick="newChat()">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
           New Chat
@@ -646,14 +705,15 @@ function chatPage(user) {
         <button class="hamburger" onclick="openSidebar()">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
-        <span id="header-title" style="font-size:0.9rem;color:var(--text-dim)">New Chat</span>
+        <span id="header-title" style="font-size:0.95rem;color:var(--text-dim)">New Chat</span>
       </div>
 
       <div class="messages" id="messages">
         <div class="messages-inner" id="messages-inner">
           <div class="welcome-screen" id="welcome">
-            <h2>iKawn OpenBrain</h2>
-            <p>Start a conversation below.</p>
+            <div class="welcome-icon">R</div>
+            <h2>Hi, I'm Ruhi</h2>
+            <p>Your intelligent commerce copilot. Ask me anything about your brand, business, or creative needs.</p>
           </div>
         </div>
       </div>
@@ -665,7 +725,7 @@ function chatPage(user) {
             <button class="compose-btn" onclick="triggerFileUpload()" title="Attach file">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/></svg>
             </button>
-            <textarea id="msg-input" rows="1" placeholder="Message iKawn OpenBrain..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
+            <textarea id="msg-input" rows="1" placeholder="Talk to Ruhi..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
             <button class="compose-btn model-toggle" id="model-toggle" onclick="toggleModel()" title="Toggle model"></button>
             <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -871,7 +931,7 @@ function chatPage(user) {
     /* ==================== MESSAGES ==================== */
     function clearMessages() {
       document.getElementById('messages-inner').innerHTML =
-        '<div class="welcome-screen" id="welcome"><h2>iKawn OpenBrain</h2><p>Start a conversation below.</p></div>';
+        '<div class="welcome-screen" id="welcome"><div class="welcome-icon">R</div><h2>Hi, I\\u2019m Ruhi</h2><p>Your intelligent commerce copilot. Ask me anything about your brand, business, or creative needs.</p></div>';
     }
 
     function renderMessages(messages) {
@@ -888,7 +948,7 @@ function chatPage(user) {
 
       if (role === 'assistant') {
         row.innerHTML =
-          '<div class="msg-avatar assistant-avatar">OB</div>'
+          '<div class="msg-avatar assistant-avatar">R</div>'
           + '<div class="msg-bubble">'
           + renderAttachments(attachments)
           + renderContent(role, content)
@@ -971,7 +1031,7 @@ function chatPage(user) {
       typingRow.className = 'typing-indicator visible';
       typingRow.id = 'typing';
       typingRow.innerHTML =
-        '<div class="msg-avatar assistant-avatar">OB</div>'
+        '<div class="msg-avatar assistant-avatar">R</div>'
         + '<div class="typing-dots"><span></span><span></span><span></span></div>';
       container.appendChild(typingRow);
       scrollToBottom();
@@ -1005,7 +1065,7 @@ function chatPage(user) {
         const assistantRow = document.createElement('div');
         assistantRow.className = 'msg-row assistant';
         assistantRow.innerHTML =
-          '<div class="msg-avatar assistant-avatar">OB</div>'
+          '<div class="msg-avatar assistant-avatar">R</div>'
           + '<div class="msg-bubble" id="streaming-bubble"></div>';
         container.appendChild(assistantRow);
 

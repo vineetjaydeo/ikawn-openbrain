@@ -1029,7 +1029,7 @@ function chatPage(user) {
       const row = document.createElement('div');
       row.className = 'msg-row ' + role;
 
-      const replyBtn = '<button class="msg-reply-btn" data-role="' + role + '" onclick="setReplyTo(this.dataset.role, this.closest(\'.msg-row\').querySelector(\'.msg-bubble\').textContent)">Reply</button>';
+      const replyBtn = '<button class="msg-reply-btn" data-role="' + role + '" onclick="setReplyTo(this.dataset.role, this.closest(&quot;.msg-row&quot;).querySelector(&quot;.msg-bubble&quot;).textContent)">Reply</button>';
 
       if (role === 'assistant') {
         row.innerHTML =
@@ -1135,7 +1135,7 @@ function chatPage(user) {
           body: JSON.stringify({
             conversation_id: activeConvId,
             content: replyToContent
-              ? '[Replying to ' + (replyToRole === 'assistant' ? 'Ruhi' : 'my previous message') + ': "' + replyToContent.slice(0, 200) + '"]\n\n' + content
+              ? '[Replying to ' + (replyToRole === 'assistant' ? 'Ruhi' : 'my previous message') + ': "' + replyToContent.slice(0, 200) + '"]\\n\\n' + content
               : content,
             attachments,
             use_secondary: useSecondaryModel,

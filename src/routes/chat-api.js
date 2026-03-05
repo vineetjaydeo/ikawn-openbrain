@@ -9,25 +9,41 @@ const { getEmbedding } = require('../embeddings');
 
 /**
  * RAG: search memories for relevant context.
- * Returns formatted string of top matches.
+ * Uses hybrid scoring: semantic similarity + recency boost.
+ * Recent memories get a significant boost so "latest" queries return fresh results.
  */
-async function searchMemories(query, limit = 5) {
+async function searchMemories(query, limit = 8) {
   try {
     const embedding = await getEmbedding(query);
+    // Fetch more candidates, then re-rank with recency
     const result = await pool.query(
-      `SELECT content, memory_type, source, project, created_at, cosine_similarity(embedding, $1) AS similarity
+      `SELECT content, memory_type, source, project, created_at,
+              cosine_similarity(embedding, $1) AS similarity
        FROM memories
        WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false)
        ORDER BY cosine_similarity(embedding, $1) DESC
-       LIMIT $2`,
-      [embedding, limit]
+       LIMIT 30`,
+      [embedding]
     );
     if (result.rows.length === 0) return '';
-    // Only include memories with decent similarity
-    const relevant = result.rows.filter(r => r.similarity > 0.25);
-    if (relevant.length === 0) return '';
-    return '\n\n=== YOUR MEMORY (retrieved context) ===\n' +
-      relevant.map((m, i) => {
+
+    const now = Date.now();
+    // Re-rank: 70% similarity + 30% recency (exponential decay over 7 days)
+    const scored = result.rows
+      .filter(r => r.similarity > 0.2)
+      .map(r => {
+        const ageMs = now - new Date(r.created_at).getTime();
+        const ageDays = ageMs / (1000 * 60 * 60 * 24);
+        const recencyScore = Math.exp(-ageDays / 7); // half-life ~5 days
+        const hybridScore = 0.7 * r.similarity + 0.3 * recencyScore;
+        return { ...r, hybridScore };
+      })
+      .sort((a, b) => b.hybridScore - a.hybridScore)
+      .slice(0, limit);
+
+    if (scored.length === 0) return '';
+    return '\n\n=== YOUR MEMORY (retrieved context — most relevant + recent) ===\n' +
+      scored.map((m, i) => {
         const date = new Date(m.created_at).toLocaleDateString();
         const src = m.source || 'unknown';
         const type = m.memory_type || 'note';

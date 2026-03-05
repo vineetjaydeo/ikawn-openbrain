@@ -44,14 +44,27 @@ router.post('/chat', async (req, res) => {
 
     const userEmail = user || 'vineet@ikawn.com';
 
-    // Validate user against ob_users
-    const userResult = await pool.query('SELECT * FROM ob_users WHERE email = $1', [userEmail]);
+    // Validate user against ob_users (try both login email and ob_users email)
+    let userResult = await pool.query('SELECT * FROM ob_users WHERE email = $1', [userEmail]);
+    if (userResult.rows.length === 0) {
+      // Fallback: match by name from session user
+      const sessionName = req.session?.user?.name;
+      if (sessionName) {
+        userResult = await pool.query('SELECT * FROM ob_users WHERE LOWER(name) = LOWER($1)', [sessionName]);
+      }
+    }
     const obUser = userResult.rows[0];
     if (!obUser) {
-      return res.status(403).json({ error: 'User not registered in OpenBrain' });
+      // Admin users get full access even without ob_users entry
+      const isAdmin = req.session?.user?.role === 'admin';
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'User not registered in OpenBrain' });
+      }
     }
 
-    const userAccessLevels = obUser.access_levels || ['public'];
+    const userAccessLevels = obUser?.access_levels || (req.session?.user?.role === 'admin'
+      ? ['private', 'management', 'internal', 'advisors', 'investors', 'public']
+      : ['public']);
 
     // Get or create conversation
     let convId = conversation_id;
@@ -59,7 +72,7 @@ router.post('/chat', async (req, res) => {
       const convResult = await pool.query(
         `INSERT INTO ob_conversations (title, group_id, access_level, created_by)
          VALUES ($1, $2, $3, $4) RETURNING id`,
-        ['New conversation', group_id || null, access_level || 'private', obUser.name.toLowerCase()]
+        ['New conversation', group_id || null, access_level || 'private', (obUser?.name || req.session?.user?.name || 'user').toLowerCase()]
       );
       convId = convResult.rows[0].id;
     }
@@ -83,7 +96,9 @@ router.post('/chat', async (req, res) => {
     }));
 
     // Build system prompt with Ruhi persona
-    const systemPrompt = buildSystemPrompt(obUser.name, obUser.role, memoryContext);
+    const userName = obUser?.name || req.session?.user?.name || 'User';
+    const userRole = obUser?.role || req.session?.user?.role || 'user';
+    const systemPrompt = buildSystemPrompt(userName, userRole, memoryContext);
 
     // Build OpenAI messages array
     const openaiMessages = [

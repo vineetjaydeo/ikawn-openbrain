@@ -5,6 +5,39 @@ const { streamChat, chatCompletion } = require('../utils/llm');
 const { searchWeb } = require('../utils/web-search');
 const { readLink } = require('../utils/link-reader');
 const { extractText } = require('../utils/doc-parser');
+const { getEmbedding } = require('../embeddings');
+
+/**
+ * RAG: search memories for relevant context.
+ * Returns formatted string of top matches.
+ */
+async function searchMemories(query, limit = 5) {
+  try {
+    const embedding = await getEmbedding(query);
+    const result = await pool.query(
+      `SELECT content, memory_type, source, project, created_at, cosine_similarity(embedding, $1) AS similarity
+       FROM memories
+       WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false)
+       ORDER BY cosine_similarity(embedding, $1) DESC
+       LIMIT $2`,
+      [embedding, limit]
+    );
+    if (result.rows.length === 0) return '';
+    // Only include memories with decent similarity
+    const relevant = result.rows.filter(r => r.similarity > 0.25);
+    if (relevant.length === 0) return '';
+    return '\n\n=== YOUR MEMORY (retrieved context) ===\n' +
+      relevant.map((m, i) => {
+        const date = new Date(m.created_at).toLocaleDateString();
+        const src = m.source || 'unknown';
+        const type = m.memory_type || 'note';
+        return `[${i + 1}] (${type}, ${src}, ${date}) ${m.content.slice(0, 600)}`;
+      }).join('\n\n');
+  } catch (err) {
+    console.error('Memory RAG error:', err.message);
+    return '';
+  }
+}
 
 // ── Helpers ──
 
@@ -191,6 +224,9 @@ router.post('/api/chat/send', async (req, res) => {
     );
     historyRows.reverse();
 
+    // RAG: search memories for context relevant to the user's message
+    const memoryContext = await searchMemories(content, 5);
+
     // Ruhi system prompt — loaded from knowledge base files at startup
     const kb = global.ruhiKnowledge || {};
     const systemPrompt = {
@@ -205,7 +241,7 @@ ${kb.memory || ''}
 
 === YOUR CAPABILITIES ===
 ${kb.tools || ''}
-
+${memoryContext}
 === CRITICAL RULES ===
 1. You ARE Ruhi. First person. "I can help with that" not "Ruhi can help with that."
 2. Never say "As an AI" or "As a language model." You are Ruhi.
@@ -215,7 +251,8 @@ ${kb.tools || ''}
 6. Use markdown when it helps readability. Don't overformat simple responses.
 7. When you don't know something, say so honestly. Then offer to help figure it out.
 8. Remember: everything discussed here feeds into your knowledge for iKawn OS. Treat every conversation as a learning opportunity about the user and their brand.
-9. You earn trust progressively. Start helpful. Become indispensable.`
+9. You earn trust progressively. Start helpful. Become indispensable.
+10. When you have retrieved memory context, use it naturally. Reference specific commits, decisions, or conversations when relevant. Don't say "according to my memory" — just know it.`
     };
 
     const openaiMessages = [systemPrompt, ...historyRows.map((msg) => {

@@ -31,10 +31,17 @@ async function capture(data) {
   if (!sessionCookie) await login();
   const res = await fetch(`${BASE_URL}/capture`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Cookie': sessionCookie },
+    headers: { 'Content-Type': 'application/json', 'Cookie': sessionCookie, 'Accept': 'application/json' },
     body: JSON.stringify(data),
+    redirect: 'manual',
   });
-  return res.json();
+  if (res.status === 401 || res.status === 302) {
+    sessionCookie = null;
+    await login();
+    return capture(data);
+  }
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { throw new Error(text.slice(0, 100)); }
 }
 
 async function searchExists(sourceRef) {
@@ -50,16 +57,10 @@ async function searchExists(sourceRef) {
 function getChunks() {
   try {
     const raw = execSync(
-      `sqlite3 "${SQLITE_PATH}" "SELECT path, text, updated_at FROM chunks ORDER BY updated_at DESC"`,
+      `sqlite3 -json "${SQLITE_PATH}" "SELECT path, text, updated_at FROM chunks ORDER BY updated_at DESC"`,
       { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
     );
-    return raw.trim().split('\n').filter(Boolean).map(line => {
-      const parts = line.split('|');
-      const updatedAt = parseInt(parts[parts.length - 1]);
-      const text = parts.slice(1, -1).join('|');
-      const filePath = parts[0];
-      return { path: filePath, text, updatedAt };
-    });
+    return JSON.parse(raw);
   } catch (err) {
     console.error('Failed to read SQLite:', err.message);
     return [];

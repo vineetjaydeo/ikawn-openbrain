@@ -23,7 +23,7 @@ function chatPage(user) {
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #0a0a0a;
+      --bg: #333;
       --bg-sidebar: #0a0a0a;
       --bg-input: #18181b;
       --bg-hover: #27272a;
@@ -340,14 +340,14 @@ function chatPage(user) {
     }
 
     .msg-bubble {
-      font-size: 1.05rem;
+      font-size: 1.365rem;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
     .msg-row.user .msg-bubble {
       max-width: 75%;
       padding: 12px 18px;
-      background: #444;
+      background: #111;
       color: var(--text);
       border-radius: 18px 18px 4px 18px;
       font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;

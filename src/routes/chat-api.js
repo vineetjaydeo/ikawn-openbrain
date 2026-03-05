@@ -336,8 +336,9 @@ ${memoryContext}
     const toolCheckResult = await chatCompletion(openaiMessages, { model, tools });
 
     if (toolCheckResult.tool_calls && toolCheckResult.tool_calls.length > 0) {
-      // Process tool calls
-      messagesForStream.push(toolCheckResult);
+      // Process tool calls — strip any leaked content/reasoning from tool call message
+      const toolMsg = { role: toolCheckResult.role || 'assistant', tool_calls: toolCheckResult.tool_calls };
+      messagesForStream.push(toolMsg);
 
       for (const toolCall of toolCheckResult.tool_calls) {
         if (toolCall.function.name === 'web_search') {

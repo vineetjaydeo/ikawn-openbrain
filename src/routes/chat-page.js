@@ -23,7 +23,7 @@ function chatPage(user) {
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #333;
+      --bg: #222;
       --bg-sidebar: #0a0a0a;
       --bg-input: #18181b;
       --bg-hover: #27272a;
@@ -1162,19 +1162,11 @@ function chatPage(user) {
           throw new Error(err.error || 'Request failed');
         }
 
-        // Remove typing indicator and add assistant bubble
-        const typing = document.getElementById('typing');
-        if (typing) typing.remove();
-
-        const assistantRow = document.createElement('div');
-        assistantRow.className = 'msg-row assistant';
-        assistantRow.innerHTML =
-          '<div class="msg-avatar assistant-avatar">R</div>'
-          + '<div class="msg-bubble" id="streaming-bubble"></div>';
-        container.appendChild(assistantRow);
-
-        const bubble = document.getElementById('streaming-bubble');
+        // Keep typing indicator until first chunk arrives
+        let assistantRow = null;
+        let bubble = null;
         let fullText = '';
+        let firstChunk = true;
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -1196,6 +1188,18 @@ function chatPage(user) {
             try {
               const evt = JSON.parse(data);
               if (evt.type === 'chunk' && evt.text) {
+                if (firstChunk) {
+                  firstChunk = false;
+                  const typing = document.getElementById('typing');
+                  if (typing) typing.remove();
+                  assistantRow = document.createElement('div');
+                  assistantRow.className = 'msg-row assistant';
+                  assistantRow.innerHTML =
+                    '<div class="msg-avatar assistant-avatar">R</div>'
+                    + '<div class="msg-bubble" id="streaming-bubble"></div>';
+                  container.appendChild(assistantRow);
+                  bubble = document.getElementById('streaming-bubble');
+                }
                 fullText += evt.text;
                 try { bubble.innerHTML = marked.parse(fullText); } catch { bubble.textContent = fullText; }
                 bubble.querySelectorAll('pre code').forEach(el => {
@@ -1214,7 +1218,8 @@ function chatPage(user) {
           }
         }
 
-        bubble.removeAttribute('id');
+        if (bubble) bubble.removeAttribute('id');
+        if (firstChunk) { const typing = document.getElementById('typing'); if (typing) typing.remove(); }
 
       } catch (err) {
         if (err.name === 'AbortError') {

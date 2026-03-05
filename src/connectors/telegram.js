@@ -185,31 +185,59 @@ async function flushConversation(chatId) {
 }
 
 /**
+ * Save a single message directly to the database as a memory.
+ * No in-memory buffering — survives machine restarts on Fly.io.
+ */
+async function saveMessageToDB(msg, entry) {
+  const sourceRef = `maxclaw-msg-${msg.message_id}`;
+
+  // Dedup by telegram message_id
+  const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [sourceRef]);
+  if (existing.rows.length > 0) return;
+
+  const date = new Date(msg.date * 1000);
+  const dateStr = date.toISOString().replace('T', ' ').slice(0, 16);
+
+  let content = `[MaxClaw] ${dateStr}\n${entry.sender}: ${entry.text}`;
+
+  for (const att of entry.attachments) {
+    if (att.type === 'image') content += `\n[Image: ${att.url}]`;
+    else if (att.type === 'document') {
+      content += `\n[Document: ${att.filename}] ${att.url}`;
+      if (att.extractedText) content += `\n[Extracted]: ${att.extractedText.slice(0, 1000)}`;
+    }
+    else if (att.type === 'voice') content += `\n[Voice: ${att.url}]`;
+    else if (att.type === 'video') content += `\n[Video: ${att.url}]`;
+  }
+
+  const embedding = await getEmbedding(content);
+  const hashtags = await suggestHashtags(content);
+
+  await pool.query(
+    `INSERT INTO memories (content, embedding, source, memory_type, source_ref, project, author, access_level, hashtags)
+     VALUES ($1, $2, 'maxclaw', 'discussion', $3, $4, $5, 'private', $6)`,
+    [content.slice(0, 8000), embedding, sourceRef, null, entry.sender.toLowerCase(), hashtags.length > 0 ? hashtags : null]
+  );
+
+  await pool.query(
+    `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('maxclaw', 'success', 1)`
+  );
+
+  console.log(`MaxClaw message saved: ${entry.sender} msg_id=${msg.message_id}`);
+}
+
+/**
  * Handle an incoming Telegram webhook update.
  */
 async function handleUpdate(update) {
   const msg = update.message || update.edited_message;
   if (!msg) return;
 
-  const chatId = msg.chat.id;
-  const now = Date.now();
-
-  // Check if we need to flush the previous conversation (gap > 30 min)
-  const buffer = conversationBuffers.get(chatId);
-  if (buffer && (now - buffer.lastMessageAt) > CONVERSATION_GAP_MS) {
-    await flushConversation(chatId);
-  }
-
-  // Process the message
+  // Process the message (download media, transcribe voice, etc.)
   const entry = await processMessage(msg);
 
-  // Add to buffer
-  if (!conversationBuffers.has(chatId)) {
-    conversationBuffers.set(chatId, { messages: [], lastMessageAt: now });
-  }
-  const conv = conversationBuffers.get(chatId);
-  conv.messages.push(entry);
-  conv.lastMessageAt = now;
+  // Save directly to DB — no buffering
+  await saveMessageToDB(msg, entry);
 }
 
 /**

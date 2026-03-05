@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "cookie-session": "^2.1.1",
     "express": "^4.21.0",
+    "google-auth-library": "^10.6.1",
     "openai": "^4.73.0",
     "pg": "^8.13.0"
   }

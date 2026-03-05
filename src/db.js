@@ -22,6 +22,25 @@ async function initSchema() {
       )
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT,
+        role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_login TIMESTAMPTZ
+      )
+    `);
+
+    // Seed admin user
+    await client.query(`
+      INSERT INTO users (email, name, role, status)
+      VALUES ('v@ikawn.com', 'Vineet', 'admin', 'active')
+      ON CONFLICT (email) DO NOTHING
+    `);
+
     // Create a helper function for cosine similarity
     await client.query(`
       CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[])

@@ -1,5 +1,10 @@
 const express = require('express');
+const cookieSession = require('cookie-session');
 const { initSchema } = require('./db');
+const { requireAuth } = require('./auth');
+const authRoutes = require('./routes/auth-routes');
+const adminApi = require('./routes/admin-api');
+const pages = require('./routes/pages');
 const captureRoute = require('./routes/capture');
 const searchRoute = require('./routes/search');
 const recentRoute = require('./routes/recent');
@@ -10,18 +15,41 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.json({ name: 'iKawn OpenBrain', status: 'running', endpoints: ['POST /capture', 'GET /search?q=', 'GET /recent', 'GET /stats', 'GET /health'] });
-});
+app.use(cookieSession({
+  name: 'ob_session',
+  keys: [process.env.SESSION_SECRET || 'openbrain-dev-secret-change-me'],
+  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  secure: process.env.NODE_ENV === 'production',
+  httpOnly: true,
+  sameSite: 'lax',
+}));
 
+// Health check — no auth
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.use(captureRoute);
-app.use(searchRoute);
-app.use(recentRoute);
-app.use(statsRoute);
+// Auth routes — no auth required
+app.use(authRoutes);
+
+// Login page — no auth required
+app.use(pages);
+
+// Everything below requires auth
+app.get('/', requireAuth, (req, res) => {
+  res.json({
+    name: 'iKawn OpenBrain',
+    status: 'running',
+    user: req.session.user.email,
+    endpoints: ['POST /capture', 'GET /search?q=', 'GET /recent', 'GET /stats', 'GET /health'],
+  });
+});
+
+app.use(requireAuth, captureRoute);
+app.use(requireAuth, searchRoute);
+app.use(requireAuth, recentRoute);
+app.use(requireAuth, statsRoute);
+app.use(adminApi);
 
 async function start() {
   try {

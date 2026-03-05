@@ -41,6 +41,84 @@ async function initSchema() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
     `);
 
+    // ── OpenBrain v2: Evolve memories table ──
+    await client.query(`
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_level TEXT DEFAULT 'private';
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS memory_type TEXT DEFAULT 'note';
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS author TEXT DEFAULT 'vineet';
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS signed_off_by TEXT;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS project TEXT;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS conversation_id UUID;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS group_id TEXT;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS hashtags TEXT[];
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_url TEXT;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_ref TEXT;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+    `);
+
+    // ── OpenBrain v2: New tables ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ob_users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE,
+        role TEXT NOT NULL,
+        access_levels TEXT[],
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ob_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        members TEXT[],
+        default_access_level TEXT DEFAULT 'private',
+        created_by TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ob_conversations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title TEXT,
+        group_id TEXT,
+        access_level TEXT DEFAULT 'private',
+        created_by TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_activity TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ob_decisions (
+        id SERIAL PRIMARY KEY,
+        decision TEXT NOT NULL,
+        context TEXT,
+        decided_by TEXT,
+        signed_off_by TEXT,
+        project TEXT,
+        access_level TEXT DEFAULT 'management',
+        hashtags TEXT[],
+        decided_at TIMESTAMPTZ DEFAULT NOW(),
+        memory_id INTEGER
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ob_ingestion_log (
+        id SERIAL PRIMARY KEY,
+        source TEXT NOT NULL,
+        status TEXT,
+        records_added INTEGER DEFAULT 0,
+        error_message TEXT,
+        ran_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     // Seed admin user with default password
     const adminHash = await bcrypt.hash('openbrain2024', 10);
     await client.query(`
@@ -78,6 +156,25 @@ async function initSchema() {
         value JSONB NOT NULL,
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+
+    // ── OpenBrain v2: Seed ob_users ──
+    await client.query(`
+      INSERT INTO ob_users (name, email, role, access_levels) VALUES
+        ('Vineet', 'vineet@ikawn.com', 'owner', ARRAY['private','management','internal','advisors','investors','public']),
+        ('Avinash', 'avinash@ikawn.com', 'c_suite', ARRAY['management','internal','public']),
+        ('Abhishek', 'abhishek@ikawn.com', 'management', ARRAY['internal','public'])
+      ON CONFLICT (email) DO NOTHING
+    `);
+
+    // ── OpenBrain v2: Seed ob_groups ──
+    await client.query(`
+      INSERT INTO ob_groups (id, name, description, members, default_access_level, created_by) VALUES
+        ('vineet_ruhi', 'Vineet & Ruhi', 'Private channel between Vineet and Ruhi', ARRAY['vineet@ikawn.com'], 'private', 'vineet'),
+        ('management', 'Management', 'C-suite and management discussions', ARRAY['vineet@ikawn.com','avinash@ikawn.com','abhishek@ikawn.com'], 'management', 'vineet'),
+        ('advisors', 'Advisors', 'Advisory board channel', ARRAY['vineet@ikawn.com'], 'advisors', 'vineet'),
+        ('investors', 'Investors', 'Investor updates channel', ARRAY['vineet@ikawn.com'], 'investors', 'vineet')
+      ON CONFLICT (id) DO NOTHING
     `);
 
     // Seed default model settings

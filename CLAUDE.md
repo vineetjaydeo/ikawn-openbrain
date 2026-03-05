@@ -109,6 +109,10 @@ CREATE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 ...
 - `BRAVE_SEARCH_API_KEY` — web search (optional, degrades gracefully)
 - `ANTHROPIC_API_KEY` — for Claude as secondary model (TODO)
 
+## Session Cookie Fix
+- Fly terminates TLS at proxy → Express sees HTTP → `secure: true` prevented cookie from being set
+- Fix: `app.set('trust proxy', 1)` + `secureProxy: true` (instead of `secure: true`)
+
 ## MCP Server
 
 - Runs as separate process: `node src/mcp/server.js`

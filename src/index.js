@@ -14,6 +14,10 @@ const captureRoute = require('./routes/capture');
 const searchRoute = require('./routes/search');
 const recentRoute = require('./routes/recent');
 const statsRoute = require('./routes/stats');
+const decisionsRoute = require('./routes/decisions');
+const ruhiChatRoute = require('./routes/ruhi-chat');
+const webhooksRoute = require('./routes/webhooks');
+const { startScheduler, triggerSync } = require('./scheduler');
 
 // Load Ruhi knowledge base at startup
 const docsDir = path.join(__dirname, '..', 'docs');
@@ -50,6 +54,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// GitHub webhook — no session auth (uses signature verification)
+app.use(webhooksRoute);
+
 // Auth routes — no auth required
 app.use(authRoutes);
 
@@ -69,14 +76,35 @@ app.use(requireAuth, searchRoute);
 app.use(requireAuth, recentRoute);
 app.use(requireAuth, statsRoute);
 
+// Decisions + Ruhi chat — requires auth
+app.use(requireAuth, decisionsRoute);
+app.use(requireAuth, ruhiChatRoute);
+
 // Admin API
 app.use(adminApi);
+
+// Admin sync endpoint — owner only
+app.post('/admin/sync/:source', requireAuth, async (req, res) => {
+  // Simple admin check
+  if (!req.session?.user || req.session.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  try {
+    const result = await triggerSync(req.params.source);
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error('Manual sync error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 async function start() {
   try {
     await initSchema();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`OpenBrain running on port ${PORT}`);
+      // Start ingestion scheduler
+      startScheduler();
     });
   } catch (err) {
     console.error('Failed to start:', err);

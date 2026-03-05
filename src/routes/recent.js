@@ -5,13 +5,26 @@ const router = Router();
 
 router.get('/recent', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const { limit, type, project } = req.query;
+    const recentLimit = Math.min(parseInt(limit) || 20, 100);
 
-    const result = await pool.query(
-      `SELECT id, content, source, tags, created_at FROM memories ORDER BY created_at DESC LIMIT $1`,
-      [limit]
-    );
+    let query = 'SELECT id, content, source, tags, memory_type, project, hashtags, author, access_level, created_at FROM memories WHERE (archived IS NULL OR archived = false)';
+    const params = [];
+    let paramIdx = 1;
 
+    if (type) {
+      query += ` AND memory_type = $${paramIdx++}`;
+      params.push(type);
+    }
+    if (project) {
+      query += ` AND project = $${paramIdx++}`;
+      params.push(project);
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${paramIdx++}`;
+    params.push(recentLimit);
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error('Recent error:', err);

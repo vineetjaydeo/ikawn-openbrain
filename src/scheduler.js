@@ -1,8 +1,11 @@
 const { syncAll: syncGitHub } = require('./connectors/github');
 const { syncCalendar } = require('./connectors/gcal');
+const { registerWebhook, startFlushTimer, stopFlushTimer } = require('./connectors/telegram');
 
 let githubInterval = null;
 let calendarInterval = null;
+
+const BASE_URL = process.env.BASE_URL || 'https://ikawn-openbrain.fly.dev';
 
 function startScheduler() {
   console.log('Starting ingestion scheduler...');
@@ -25,7 +28,11 @@ function startScheduler() {
     }
   }, 2 * 60 * 60 * 1000);
 
-  console.log('Scheduler started: GitHub every 30min, Calendar every 2hr');
+  // Register Telegram webhook + start conversation flush timer
+  registerWebhook(BASE_URL).catch(err => console.error('Telegram webhook setup failed:', err.message));
+  startFlushTimer();
+
+  console.log('Scheduler started: GitHub every 30min, Calendar every 2hr, Telegram webhook active');
 }
 
 async function triggerSync(source) {
@@ -46,6 +53,7 @@ async function triggerSync(source) {
 function stopScheduler() {
   if (githubInterval) clearInterval(githubInterval);
   if (calendarInterval) clearInterval(calendarInterval);
+  stopFlushTimer();
 }
 
 module.exports = { startScheduler, triggerSync, stopScheduler };

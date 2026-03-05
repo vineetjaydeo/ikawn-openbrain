@@ -2,6 +2,7 @@ const { Router } = require('express');
 const crypto = require('crypto');
 const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
+const { handleUpdate, handleSelfReport } = require('../connectors/telegram');
 
 const router = Router();
 
@@ -109,6 +110,39 @@ router.post('/webhooks/github', async (req, res) => {
   } catch (err) {
     console.error('GitHub webhook error:', err);
     res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// Telegram webhook — authenticated by bot token in URL path
+router.post('/webhooks/telegram/:token', async (req, res) => {
+  const expectedToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!expectedToken || req.params.token !== expectedToken) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  try {
+    await handleUpdate(req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Telegram webhook error:', err);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// MaxClaw self-report endpoint — API key auth
+router.post('/api/ingest/maxclaw', async (req, res) => {
+  const apiKey = process.env.MAXCLAW_API_KEY;
+  const provided = req.headers['x-api-key'];
+  if (!apiKey || provided !== apiKey) {
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+
+  try {
+    const result = await handleSelfReport(req.body);
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('MaxClaw ingest error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

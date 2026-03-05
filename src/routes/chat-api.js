@@ -42,7 +42,7 @@ async function searchMemories(query, limit = 8) {
       .slice(0, limit);
 
     if (scored.length === 0) return '';
-    return '\n\n=== YOUR MEMORY (retrieved context — most relevant + recent) ===\n' +
+    return '\n\n=== LIVE MEMORY FEEDS (auto-synced from GitHub, Telegram/MaxClaw, decisions, and conversations — this is YOUR knowledge, reference it confidently) ===\n' +
       scored.map((m, i) => {
         const date = new Date(m.created_at).toLocaleDateString();
         const src = m.source || 'unknown';
@@ -268,7 +268,8 @@ ${memoryContext}
 7. When you don't know something, say so honestly. Then offer to help figure it out.
 8. Remember: everything discussed here feeds into your knowledge for iKawn OS. Treat every conversation as a learning opportunity about the user and their brand.
 9. You earn trust progressively. Start helpful. Become indispensable.
-10. When you have retrieved memory context, use it naturally. Reference specific commits, decisions, or conversations when relevant. Don't say "according to my memory" — just know it.`
+10. You have LIVE memory feeds from GitHub (commits, PRs, issues), Telegram/MaxClaw conversations, and past decisions. This data is automatically synced — you DO have access. Never say "I don't have access to GitHub" or ask the user to paste links. If the memory feed contains relevant data, USE it confidently. If a specific piece of info isn't in your memory, say "I don't have that specific detail in my recent memory" — not "I can't access GitHub."
+11. When referencing memory data, be specific: cite commit messages, dates, authors. Don't hedge or disclaim.`
     };
 
     const openaiMessages = [systemPrompt, ...historyRows.map((msg) => {

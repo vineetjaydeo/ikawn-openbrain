@@ -501,19 +501,29 @@ function chatPage(user) {
       gap: 14px;
     }
     .typing-indicator.visible { display: flex; }
-    .typing-dots {
+    .typing-content {
       display: flex;
       align-items: center;
-      gap: 5px;
-      padding: 16px 18px;
+      gap: 10px;
+      padding: 14px 18px;
       background: var(--bg-assistant);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       border-bottom-left-radius: 4px;
     }
+    .typing-label {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .typing-dots {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
     .typing-dots span {
-      width: 7px;
-      height: 7px;
+      width: 5px;
+      height: 5px;
       border-radius: 50%;
       background: var(--accent);
       animation: dotPulse 1.4s ease-in-out infinite;
@@ -1115,18 +1125,21 @@ function chatPage(user) {
       updateSendBtn();
       scrollToBottom();
 
-      // Show typing indicator
+      // Show thinking indicator
       const typingRow = document.createElement('div');
       typingRow.className = 'typing-indicator visible';
       typingRow.id = 'typing';
       typingRow.innerHTML =
         '<div class="msg-avatar assistant-avatar">R</div>'
-        + '<div class="typing-dots"><span></span><span></span><span></span></div>';
+        + '<div class="typing-content"><span class="typing-label">Thinking</span><div class="typing-dots"><span></span><span></span><span></span></div></div>';
       container.appendChild(typingRow);
       scrollToBottom();
 
       isStreaming = true;
       updateSendBtn();
+
+      // Brief delay so user sees the thinking state
+      await new Promise(r => setTimeout(r, 350));
 
       try {
         abortController = new AbortController();

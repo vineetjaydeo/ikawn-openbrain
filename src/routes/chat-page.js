@@ -17,7 +17,7 @@ function chatPage(user) {
   <title>Ruhi</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark-dimmed.min.css">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -266,12 +266,12 @@ function chatPage(user) {
     .messages::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 
     .messages-inner {
-      max-width: 740px;
+      max-width: 860px;
       margin: 0 auto;
       padding: 32px 24px 130px;
       display: flex;
       flex-direction: column;
-      gap: 28px;
+      gap: 24px;
     }
 
     .welcome-screen {
@@ -315,49 +315,49 @@ function chatPage(user) {
     .msg-row {
       display: flex;
       gap: 14px;
-      line-height: 1.7;
+      line-height: 1.8;
     }
     .msg-row.user { justify-content: flex-end; }
 
     .msg-avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 600;
-      margin-top: 2px;
+      margin-top: 3px;
     }
     .msg-avatar.assistant-avatar {
       background: var(--accent);
       color: #0a0a0a;
     }
     .msg-avatar.user-avatar {
-      background: var(--border-light);
-      color: var(--text);
+      display: none;
     }
 
     .msg-bubble {
-      max-width: 78%;
-      padding: 14px 18px;
-      border-radius: var(--radius);
       font-size: 1.05rem;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
     .msg-row.user .msg-bubble {
-      background: var(--bg-user);
-      border: 1px solid var(--border);
+      max-width: 75%;
+      padding: 12px 18px;
+      background: #444;
       color: var(--text);
-      border-bottom-right-radius: 4px;
+      border-radius: 18px 18px 4px 18px;
+      font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     .msg-row.assistant .msg-bubble {
-      background: var(--bg-assistant);
-      border: 1px solid var(--border);
-      border-bottom-left-radius: 4px;
+      max-width: 100%;
+      padding: 4px 0;
+      background: transparent;
+      border: none;
+      font-family: 'Noto Serif', Georgia, serif;
     }
 
     /* ---------- Attachments in messages ---------- */
@@ -544,7 +544,7 @@ function chatPage(user) {
     }
 
     .input-area-inner {
-      max-width: 740px;
+      max-width: 860px;
       margin: 0 auto;
     }
 

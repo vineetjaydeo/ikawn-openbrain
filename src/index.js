@@ -16,13 +16,14 @@ const statsRoute = require('./routes/stats');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '15mb' }));
 
 app.use(cookieSession({
   name: 'ob_session',
   keys: [process.env.SESSION_SECRET || 'openbrain-dev-secret-change-me'],
   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  secure: process.env.NODE_ENV === 'production',
+  secureProxy: process.env.NODE_ENV === 'production',
   httpOnly: true,
   sameSite: 'lax',
 }));

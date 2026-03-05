@@ -5,6 +5,9 @@ const { requireAuth } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
 const adminApi = require('./routes/admin-api');
 const pages = require('./routes/pages');
+const chatPage = require('./routes/chat-page');
+const chatApi = require('./routes/chat-api');
+const uploadRoute = require('./routes/upload');
 const captureRoute = require('./routes/capture');
 const searchRoute = require('./routes/search');
 const recentRoute = require('./routes/recent');
@@ -13,7 +16,7 @@ const statsRoute = require('./routes/stats');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 
 app.use(cookieSession({
   name: 'ob_session',
@@ -32,23 +35,23 @@ app.get('/health', (req, res) => {
 // Auth routes — no auth required
 app.use(authRoutes);
 
-// Login page — no auth required
+// Login/admin/settings pages — no auth on login, auth on others
 app.use(pages);
 
-// Everything below requires auth
-app.get('/', requireAuth, (req, res) => {
-  res.json({
-    name: 'iKawn OpenBrain',
-    status: 'running',
-    user: req.session.user.email,
-    endpoints: ['POST /capture', 'GET /search?q=', 'GET /recent', 'GET /stats', 'GET /health'],
-  });
-});
+// Chat UI at / — requires auth
+app.use(chatPage);
 
+// Chat API + upload — requires auth
+app.use(requireAuth, chatApi);
+app.use(requireAuth, uploadRoute);
+
+// Memory API — requires auth
 app.use(requireAuth, captureRoute);
 app.use(requireAuth, searchRoute);
 app.use(requireAuth, recentRoute);
 app.use(requireAuth, statsRoute);
+
+// Admin API
 app.use(adminApi);
 
 async function start() {

@@ -1,4 +1,5 @@
 const { Router } = require('express');
+const bcrypt = require('bcryptjs');
 const { requireAdmin } = require('../auth');
 const { pool } = require('../db');
 
@@ -21,14 +22,18 @@ router.get('/admin/api/users', async (req, res) => {
 // Add a new user
 router.post('/admin/api/users', async (req, res) => {
   try {
-    const { email, name, role } = req.body;
+    const { email, name, role, password } = req.body;
     if (!email || !email.endsWith('@ikawn.com')) {
       return res.status(400).json({ error: 'Email must be @ikawn.com' });
     }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password required (min 6 characters)' });
+    }
     const userRole = role === 'admin' ? 'admin' : 'user';
+    const hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (email, name, role, status) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role, status, created_at',
-      [email, name || null, userRole, 'active']
+      'INSERT INTO users (email, name, role, status, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name, role, status, created_at',
+      [email, name || null, userRole, 'active', hash]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -68,6 +73,29 @@ router.put('/admin/api/users/:id', async (req, res) => {
   } catch (err) {
     console.error('Admin update user error:', err);
     res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Reset a user's password (admin)
+router.put('/admin/api/users/:id/password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    const hash = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, email',
+      [hash, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ ok: true, email: result.rows[0].email });
+  } catch (err) {
+    console.error('Admin reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

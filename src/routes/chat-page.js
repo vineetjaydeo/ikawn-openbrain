@@ -14,7 +14,7 @@ function chatPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OpenBrain</title>
+  <title>iKawn OpenBrain</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark-dimmed.min.css">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -652,7 +652,7 @@ function chatPage(user) {
       <div class="messages" id="messages">
         <div class="messages-inner" id="messages-inner">
           <div class="welcome-screen" id="welcome">
-            <h2>OpenBrain</h2>
+            <h2>iKawn OpenBrain</h2>
             <p>Start a conversation below.</p>
           </div>
         </div>
@@ -665,7 +665,7 @@ function chatPage(user) {
             <button class="compose-btn" onclick="triggerFileUpload()" title="Attach file">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/></svg>
             </button>
-            <textarea id="msg-input" rows="1" placeholder="Message OpenBrain..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
+            <textarea id="msg-input" rows="1" placeholder="Message iKawn OpenBrain..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
             <button class="compose-btn model-toggle" id="model-toggle" onclick="toggleModel()" title="Toggle model"></button>
             <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -871,7 +871,7 @@ function chatPage(user) {
     /* ==================== MESSAGES ==================== */
     function clearMessages() {
       document.getElementById('messages-inner').innerHTML =
-        '<div class="welcome-screen" id="welcome"><h2>OpenBrain</h2><p>Start a conversation below.</p></div>';
+        '<div class="welcome-screen" id="welcome"><h2>iKawn OpenBrain</h2><p>Start a conversation below.</p></div>';
     }
 
     function renderMessages(messages) {

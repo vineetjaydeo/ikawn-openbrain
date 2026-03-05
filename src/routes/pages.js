@@ -22,7 +22,7 @@ function loginPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain - Login</title>
+  <title>iKawn OpenBrain - Login</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -38,7 +38,7 @@ function loginPage() {
 </head>
 <body>
   <div class="container">
-    <h1>OpenBrain</h1>
+    <h1>iKawn OpenBrain</h1>
     <p>Sign in with your @ikawn.com account</p>
     <form onsubmit="login(event)">
       <input type="email" id="email" placeholder="you@ikawn.com" autofocus>
@@ -46,8 +46,52 @@ function loginPage() {
       <button type="submit">Sign In</button>
     </form>
     <p class="error" id="error"></p>
+    <div id="reset-section" style="display:none; margin-top: 20px; text-align: left;">
+      <p style="color: #888; margin-bottom: 12px; text-align: center;">Enter your email to receive a reset code</p>
+      <input type="email" id="reset-email" placeholder="you@ikawn.com">
+      <button onclick="requestReset()" style="margin-bottom: 12px;">Send Reset Code</button>
+      <input type="text" id="reset-code" placeholder="6-digit code" style="display:none;">
+      <input type="password" id="reset-newpw" placeholder="New password (min 6 chars)" style="display:none;">
+      <button id="reset-submit-btn" onclick="submitReset()" style="display:none;">Reset Password</button>
+      <p style="text-align:center;"><a href="#" onclick="toggleReset(false); return false;" style="color:#60a5fa; font-size:0.85rem;">Back to login</a></p>
+    </div>
+    <p style="margin-top: 16px;" id="forgot-link"><a href="#" onclick="toggleReset(true); return false;" style="color:#60a5fa; font-size:0.85rem;">Forgot password?</a></p>
   </div>
   <script>
+    function toggleReset(show) {
+      document.getElementById('reset-section').style.display = show ? 'block' : 'none';
+      document.querySelector('form').style.display = show ? 'none' : 'block';
+      document.getElementById('forgot-link').style.display = show ? 'none' : 'block';
+      document.getElementById('error').style.display = 'none';
+    }
+    async function requestReset() {
+      const email = document.getElementById('reset-email').value;
+      const errEl = document.getElementById('error');
+      errEl.style.display = 'none';
+      try {
+        const res = await fetch('/auth/request-reset', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email}) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        document.getElementById('reset-code').style.display = 'block';
+        document.getElementById('reset-newpw').style.display = 'block';
+        document.getElementById('reset-submit-btn').style.display = 'block';
+        errEl.textContent = 'Code sent! Check your email.'; errEl.style.display = 'block'; errEl.style.color = '#4ade80';
+      } catch(err) { errEl.textContent = err.message; errEl.style.display = 'block'; errEl.style.color = '#ef4444'; }
+    }
+    async function submitReset() {
+      const email = document.getElementById('reset-email').value;
+      const code = document.getElementById('reset-code').value;
+      const new_password = document.getElementById('reset-newpw').value;
+      const errEl = document.getElementById('error');
+      errEl.style.display = 'none';
+      try {
+        const res = await fetch('/auth/reset-password', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email, code, new_password}) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        errEl.textContent = 'Password reset! Redirecting to login...'; errEl.style.display = 'block'; errEl.style.color = '#4ade80';
+        setTimeout(() => { toggleReset(false); }, 2000);
+      } catch(err) { errEl.textContent = err.message; errEl.style.display = 'block'; errEl.style.color = '#ef4444'; }
+    }
     async function login(e) {
       e.preventDefault();
       const email = document.getElementById('email').value;
@@ -76,7 +120,7 @@ function adminPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain - Admin</title>
+  <title>iKawn OpenBrain - Admin</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 24px; max-width: 900px; margin: 0 auto; }
@@ -119,7 +163,7 @@ function adminPage(user) {
 <body>
   <div class="header">
     <div>
-      <h1>OpenBrain Admin</h1>
+      <h1>iKawn OpenBrain Admin</h1>
       <p class="subtitle">Manage users &mdash; ${user.email}</p>
     </div>
     <div class="header-right">
@@ -220,7 +264,7 @@ function settingsPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain - Settings</title>
+  <title>iKawn OpenBrain - Settings</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }

@@ -1,8 +1,19 @@
 const { Router } = require('express');
 const bcrypt = require('bcryptjs');
+const { Resend } = require('resend');
 const { pool } = require('../db');
 
 const router = Router();
+
+// In-memory reset codes (email -> {code, expires})
+const resetCodes = new Map();
+let resendClient = null;
+function getResend() {
+  if (!resendClient && process.env.RESEND_API_KEY) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
 
 router.post('/auth/login', async (req, res) => {
   try {
@@ -83,6 +94,70 @@ router.post('/auth/change-password', async (req, res) => {
   } catch (err) {
     console.error('Change password error:', err);
     res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Request password reset — sends 6-digit code via email
+router.post('/auth/request-reset', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.endsWith('@ikawn.com')) {
+      return res.status(400).json({ error: 'Valid @ikawn.com email required' });
+    }
+    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND status = $2', [email.toLowerCase(), 'active']);
+    if (result.rows.length === 0) {
+      // Don't reveal if user exists
+      return res.json({ ok: true });
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    resetCodes.set(email.toLowerCase(), { code, expires: Date.now() + 10 * 60 * 1000 });
+
+    const resend = getResend();
+    if (resend) {
+      await resend.emails.send({
+        from: 'iKawn <noreply@notifications.ikawn.com>',
+        to: email.toLowerCase(),
+        subject: 'iKawn OpenBrain — Password Reset Code',
+        html: `<p>Your password reset code is: <strong style="font-size:24px;letter-spacing:4px">${code}</strong></p><p>This code expires in 10 minutes.</p>`,
+      });
+    } else {
+      console.log(`[RESET CODE] ${email}: ${code}`);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Request reset error:', err);
+    res.status(500).json({ error: 'Failed to send reset code' });
+  }
+});
+
+// Verify code and reset password
+router.post('/auth/reset-password', async (req, res) => {
+  try {
+    const { email, code, new_password } = req.body;
+    if (!email || !code || !new_password) {
+      return res.status(400).json({ error: 'Email, code, and new password required' });
+    }
+    if (new_password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const stored = resetCodes.get(email.toLowerCase());
+    if (!stored || stored.code !== code || Date.now() > stored.expires) {
+      return res.status(400).json({ error: 'Invalid or expired code' });
+    }
+
+    resetCodes.delete(email.toLowerCase());
+
+    const hash = await bcrypt.hash(new_password, 10);
+    const result = await pool.query('UPDATE users SET password_hash = $1 WHERE email = $2 RETURNING id', [hash, email.toLowerCase()]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

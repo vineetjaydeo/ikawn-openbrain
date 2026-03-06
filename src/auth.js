@@ -22,4 +22,15 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdmin };
+function requireAuthOrApiKey(req, res, next) {
+  // Check API key first
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey && process.env.OPENBRAIN_API_KEY && apiKey === process.env.OPENBRAIN_API_KEY) {
+    req.apiClient = true;
+    return next();
+  }
+  // Fall through to session auth
+  return requireAuth(req, res, next);
+}
+
+module.exports = { requireAuth, requireAdmin, requireAuthOrApiKey };

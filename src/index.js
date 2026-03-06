@@ -3,7 +3,7 @@ const cookieSession = require('cookie-session');
 const fs = require('fs');
 const path = require('path');
 const { initSchema } = require('./db');
-const { requireAuth } = require('./auth');
+const { requireAuth, requireAuthOrApiKey } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
 const adminApi = require('./routes/admin-api');
 const pages = require('./routes/pages');
@@ -17,6 +17,7 @@ const statsRoute = require('./routes/stats');
 const decisionsRoute = require('./routes/decisions');
 const ruhiChatRoute = require('./routes/ruhi-chat');
 const webhooksRoute = require('./routes/webhooks');
+const notifyRoute = require('./routes/notify');
 const { startScheduler, triggerSync } = require('./scheduler');
 
 // Load Ruhi knowledge base at startup
@@ -70,14 +71,17 @@ app.use(chatPage);
 app.use(requireAuth, chatApi);
 app.use(requireAuth, uploadRoute);
 
-// Memory API — requires auth
-app.use(requireAuth, captureRoute);
-app.use(requireAuth, searchRoute);
-app.use(requireAuth, recentRoute);
-app.use(requireAuth, statsRoute);
+// Memory API — requires auth or API key
+app.use(requireAuthOrApiKey, captureRoute);
+app.use(requireAuthOrApiKey, searchRoute);
+app.use(requireAuthOrApiKey, recentRoute);
+app.use(requireAuthOrApiKey, statsRoute);
 
-// Decisions + Ruhi chat — requires auth
-app.use(requireAuth, decisionsRoute);
+// Decisions — requires auth or API key
+app.use(requireAuthOrApiKey, decisionsRoute);
+
+// Notify — requires auth or API key
+app.use(notifyRoute);
 app.use(requireAuth, ruhiChatRoute);
 
 // Admin API

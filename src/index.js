@@ -18,6 +18,7 @@ const decisionsRoute = require('./routes/decisions');
 const ruhiChatRoute = require('./routes/ruhi-chat');
 const webhooksRoute = require('./routes/webhooks');
 const notifyRoute = require('./routes/notify');
+const actionsRoute = require('./routes/actions');
 const { startScheduler, triggerSync } = require('./scheduler');
 
 // Load Ruhi knowledge base at startup
@@ -72,6 +73,7 @@ app.use(requireAuthOrApiKey, recentRoute);
 app.use(requireAuthOrApiKey, statsRoute);
 app.use(requireAuthOrApiKey, decisionsRoute);
 app.use(notifyRoute);
+app.use(actionsRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);

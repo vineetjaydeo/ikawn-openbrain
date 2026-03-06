@@ -55,6 +55,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+
 // GitHub webhook — no session auth (uses signature verification)
 app.use(webhooksRoute);
 
@@ -64,24 +65,20 @@ app.use(authRoutes);
 // Login/admin/settings pages — no auth on login, auth on others
 app.use(pages);
 
+// Memory API — requires auth or API key (MUST be before chatApi to avoid requireAuth interception)
+app.use(requireAuthOrApiKey, captureRoute);
+app.use(requireAuthOrApiKey, searchRoute);
+app.use(requireAuthOrApiKey, recentRoute);
+app.use(requireAuthOrApiKey, statsRoute);
+app.use(requireAuthOrApiKey, decisionsRoute);
+app.use(notifyRoute);
+
 // Chat UI at / — requires auth
 app.use(chatPage);
 
 // Chat API + upload — requires auth
 app.use(requireAuth, chatApi);
 app.use(requireAuth, uploadRoute);
-
-// Memory API — requires auth or API key
-app.use(requireAuthOrApiKey, captureRoute);
-app.use(requireAuthOrApiKey, searchRoute);
-app.use(requireAuthOrApiKey, recentRoute);
-app.use(requireAuthOrApiKey, statsRoute);
-
-// Decisions — requires auth or API key
-app.use(requireAuthOrApiKey, decisionsRoute);
-
-// Notify — requires auth or API key
-app.use(notifyRoute);
 app.use(requireAuth, ruhiChatRoute);
 
 // Admin API

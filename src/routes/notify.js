@@ -3,15 +3,19 @@ const { requireAuthOrApiKey } = require('../auth');
 
 const router = Router();
 
-const OPENCLAW_GATEWAY_URL = 'http://72.60.203.110:46533';
-const OPENCLAW_AUTH_TOKEN = 'gSDVB49ChsSZlDNJdkp9IWrJP18vxaS3';
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const DEFAULT_CHAT_ID = '534771402'; // @ivineets
 
 router.post('/api/notify/telegram', requireAuthOrApiKey, async (req, res) => {
   try {
-    const { message, urgency } = req.body;
+    const { message, urgency, chat_id } = req.body;
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required and must be a string' });
+    }
+
+    if (!BOT_TOKEN) {
+      return res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN not configured' });
     }
 
     const validUrgencies = ['low', 'normal', 'high'];
@@ -19,30 +23,27 @@ router.post('/api/notify/telegram', requireAuthOrApiKey, async (req, res) => {
       return res.status(400).json({ error: 'urgency must be one of: low, normal, high' });
     }
 
-    const response = await fetch(`${OPENCLAW_GATEWAY_URL}/v1/agent/send`, {
+    const prefix = urgency === 'high' ? '🔴 ' : urgency === 'low' ? '' : '';
+    const text = `${prefix}${message}`;
+
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENCLAW_AUTH_TOKEN}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message,
-        channel: 'telegram',
-        ...(urgency && { urgency }),
+        chat_id: chat_id || DEFAULT_CHAT_ID,
+        text,
+        parse_mode: 'Markdown',
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.error(`OpenClaw gateway error: ${response.status} ${errorText}`);
-      return res.status(502).json({
-        error: 'Failed to deliver message via OpenClaw gateway',
-        gateway_status: response.status,
-      });
+    const data = await response.json();
+
+    if (!data.ok) {
+      console.error('Telegram API error:', data);
+      return res.status(502).json({ error: 'Failed to send Telegram message', details: data.description });
     }
 
-    const data = await response.json().catch(() => ({}));
-    res.json({ success: true, gateway_response: data });
+    res.json({ success: true, message_id: data.result.message_id });
   } catch (err) {
     console.error('Notify telegram error:', err);
     res.status(500).json({ error: 'Failed to send notification' });

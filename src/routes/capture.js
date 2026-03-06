@@ -17,11 +17,23 @@ router.post('/capture', async (req, res) => {
       content, source, tags,
       memory_type, access_level, group_id,
       conversation_id, project, hashtags,
-      author, signed_off_by
+      author, signed_off_by, source_ref
     } = req.body;
 
     if (!content || typeof content !== 'string') {
       return res.status(400).json({ error: 'content is required and must be a string' });
+    }
+
+    if (source_ref) {
+      const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [source_ref]);
+      if (existing.rows.length > 0) {
+        const embedding = await getEmbedding(content);
+        const result = await pool.query(
+          'UPDATE memories SET content = $1, embedding = $2 WHERE source_ref = $3 RETURNING id, content, source, tags, memory_type, access_level, project, hashtags, author, created_at',
+          [content, embedding, source_ref]
+        );
+        return res.status(200).json(result.rows[0]);
+      }
     }
 
     const embedding = await getEmbedding(content);
@@ -38,8 +50,8 @@ router.post('/capture', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO memories (content, embedding, source, tags, memory_type, access_level, group_id, conversation_id, project, hashtags, author, signed_off_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO memories (content, embedding, source, tags, memory_type, access_level, group_id, conversation_id, project, hashtags, author, signed_off_by, source_ref)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id, content, source, tags, memory_type, access_level, project, hashtags, author, created_at`,
       [
         content,
@@ -54,6 +66,7 @@ router.post('/capture', async (req, res) => {
         allHashtags.length > 0 ? allHashtags : null,
         author || 'vineet',
         signed_off_by || null,
+        source_ref || null,
       ]
     );
 

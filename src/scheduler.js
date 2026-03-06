@@ -28,11 +28,11 @@ function startScheduler() {
     }
   }, 2 * 60 * 60 * 1000);
 
-  // Register Telegram webhook + start conversation flush timer
-  registerWebhook(BASE_URL).catch(err => console.error('Telegram webhook setup failed:', err.message));
-  startFlushTimer();
+  // Telegram webhook DISABLED — OpenClaw owns inbound Telegram via polling.
+  // OpenBrain only sends outbound via Bot API (notify route).
+  // startFlushTimer() also disabled — no inbound messages to buffer.
 
-  console.log('Scheduler started: GitHub every 30min, Calendar every 2hr, Telegram webhook active');
+  console.log('Scheduler started: GitHub every 30min, Calendar every 2hr');
 }
 
 async function triggerSync(source) {

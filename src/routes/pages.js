@@ -192,6 +192,8 @@ function adminPage(user) {
     </div>
     <div class="header-right">
       <a href="/">&larr; Back</a>
+      <a href="/admin/brain-health" class="btn btn-outline">Brain Health</a>
+      <a href="/admin/costs" class="btn btn-outline">Costs API</a>
       <button class="btn btn-primary" onclick="showAddModal()">Add User</button>
     </div>
   </div>

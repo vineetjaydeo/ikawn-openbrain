@@ -765,6 +765,7 @@ function chatPage(user) {
           ${isAdmin ? '<a href="/admin">Admin</a>' : ''}
           <a href="#" onclick="logout(); return false;">Logout</a>
         </div>
+        <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 4px;">v${require('../../package.json').version}</div>
       </div>
     </aside>
 

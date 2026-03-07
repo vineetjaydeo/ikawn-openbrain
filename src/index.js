@@ -52,8 +52,10 @@ app.use(cookieSession({
 }));
 
 // Health check — no auth
+const appVersion = require('../package.json').version;
+
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: appVersion, timestamp: new Date().toISOString() });
 });
 
 

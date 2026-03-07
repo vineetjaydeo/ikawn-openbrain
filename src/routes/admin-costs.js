@@ -42,7 +42,7 @@ async function fetchOpenAICosts() {
     const dailySpend = {};
     for (const bucket of (costs.data || [])) {
       const date = new Date(bucket.start_time * 1000).toISOString().slice(0, 10);
-      const usd = (bucket.results || []).reduce((sum, r) => sum + (r.amount?.value || 0), 0);
+      const usd = (bucket.results || []).reduce((sum, r) => sum + Number(r.amount?.value || 0), 0);
       dailySpend[date] = (dailySpend[date] || 0) + usd;
     }
 

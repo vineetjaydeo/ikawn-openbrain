@@ -769,7 +769,7 @@ function chatPage(user) {
         <div class="sidebar-footer-links">
           <a href="/settings">Settings</a>
           ${isAdmin ? '<a href="/admin">Admin</a><a href="/admin/brain-health">Health</a>' : ''}
-          <a href="#" onclick="logout(); return false;">Logout</a>
+          <a href="/auth/logout" onclick="logout(); return false;">Logout</a>
         </div>
         <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 4px;">v${require('../../package.json').version}</div>
       </div>
@@ -875,8 +875,8 @@ function chatPage(user) {
     /* ==================== CONVERSATIONS ==================== */
     async function loadConversations() {
       try {
-        const res = await fetch('/api/conversations');
-        if (res.status === 401) { window.location.href = '/login'; return; }
+        const res = await fetch('/api/conversations', { headers: { 'Accept': 'application/json' } });
+        if (res.status === 401 || res.redirected) { window.location.href = '/login'; return; }
         conversations = await res.json();
         renderConversationList();
       } catch (err) {

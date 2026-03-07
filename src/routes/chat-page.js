@@ -769,7 +769,7 @@ function chatPage(user) {
         <div class="sidebar-footer-links">
           <a href="/settings">Settings</a>
           ${isAdmin ? '<a href="/admin">Admin</a><a href="/admin/brain-health">Health</a>' : ''}
-          <a href="/auth/logout" onclick="logout(); return false;">Logout</a>
+          <a href="javascript:void(0)" onclick="logout()">Logout</a>
         </div>
         <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 4px;">v${require('../../package.json').version}</div>
       </div>

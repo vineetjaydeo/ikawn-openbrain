@@ -67,6 +67,8 @@ function chatPage(user) {
 
     /* ==================== SIDEBAR ==================== */
     .sidebar {
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
       width: var(--sidebar-w);
       min-width: var(--sidebar-w);
       background: var(--bg-sidebar);
@@ -234,7 +236,7 @@ function chatPage(user) {
 
     /* ==================== MAIN ==================== */
     .main {
-      flex: 1;
+      width: 100vw;
       display: flex;
       flex-direction: column;
       min-width: 0;

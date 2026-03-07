@@ -137,7 +137,7 @@ function brainHealthPage() {
     html { font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
     body { font-family: inherit; background: #0a0a0a; color: #fafafa; padding: 28px; max-width: 960px; margin: 0 auto; }
     a { color: #e5a819; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    a:hover { text-decoration: none; }
     h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 4px; }
     .subtitle { color: #a1a1aa; margin-bottom: 24px; font-size: 0.875rem; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
@@ -180,14 +180,14 @@ function brainHealthPage() {
 <body>
   <div class="header">
     <div style="display:flex;align-items:center;gap:12px;">
-      <a href="/" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:1.1rem;text-decoration:none;" title="Back to chat">&times;</a>
+      <a href="/" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:1.1rem;text-decoration:none;" title="Back to chat">&larr;</a>
       <div>
         <h1>Brain Health</h1>
         <p class="subtitle">OpenAI cost monitoring &amp; system health</p>
       </div>
     </div>
     <div class="header-right">
-      <a href="/admin" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;">Admin</a>
+      <a href="/admin" class="btn-outline" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;display:inline-block;">Admin</a>
     </div>
   </div>
 

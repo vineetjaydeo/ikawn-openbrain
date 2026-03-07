@@ -21,7 +21,7 @@ const BASE_STYLES = `
     html { font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
     body { font-family: inherit; background: #0a0a0a; color: #fafafa; }
     a { color: #e5a819; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    a:hover { text-decoration: none; }
 `;
 
 const GOOGLE_FONTS = `
@@ -187,7 +187,7 @@ function adminPage(user) {
 <body>
   <div class="header">
     <div style="display:flex;align-items:center;gap:12px;">
-      <a href="/" class="btn btn-outline" style="padding:8px 12px;font-size:1.1rem;line-height:1;" title="Back to chat">&times;</a>
+      <a href="/" class="btn btn-outline" style="padding:8px 12px;font-size:1.1rem;line-height:1;text-decoration:none;" title="Back to chat">&larr;</a>
       <div>
         <h1>Ruhi Admin</h1>
         <p class="subtitle">Manage users &mdash; ${user.email}</p>

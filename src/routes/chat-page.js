@@ -7,6 +7,10 @@ router.get('/', requireAuth, (req, res) => {
   res.send(chatPage(req.session.user));
 });
 
+router.get('/chat/:id', requireAuth, (req, res) => {
+  res.send(chatPage(req.session.user));
+});
+
 function chatPage(user) {
   const isAdmin = user.role === 'admin';
   return `<!DOCTYPE html>
@@ -837,7 +841,16 @@ function chatPage(user) {
     document.addEventListener('DOMContentLoaded', () => {
       initMarked();
       updateModelToggle();
-      loadConversations();
+      loadConversations().then(() => {
+        const match = window.location.pathname.match(/^\\/chat\\/(\\d+)$/);
+        if (match) loadConversation(parseInt(match[1]));
+      });
+
+      window.addEventListener('popstate', () => {
+        const match = window.location.pathname.match(/^\\/chat\\/(\\d+)$/);
+        if (match) loadConversation(parseInt(match[1]));
+        else { activeConvId = null; clearMessages(); renderConversationList(); }
+      });
 
       const input = document.getElementById('msg-input');
       input.addEventListener('paste', handlePaste);
@@ -921,6 +934,7 @@ function chatPage(user) {
         activeConvId = conv.id;
         clearMessages();
         document.getElementById('header-title').textContent = 'New Chat';
+        history.pushState(null, '', '/chat/' + conv.id);
         await loadConversations();
         closeSidebar();
         document.getElementById('msg-input').focus();
@@ -941,6 +955,9 @@ function chatPage(user) {
         activeConvId = id;
         renderMessages(data.messages || []);
         document.getElementById('header-title').textContent = data.title || 'New Chat';
+        if (window.location.pathname !== '/chat/' + id) {
+          history.pushState(null, '', '/chat/' + id);
+        }
         renderConversationList();
         closeSidebar();
         scrollToBottom();
@@ -956,6 +973,7 @@ function chatPage(user) {
         if (activeConvId === id) {
           activeConvId = null;
           clearMessages();
+          history.pushState(null, '', '/');
         }
         await loadConversations();
       } catch (err) {

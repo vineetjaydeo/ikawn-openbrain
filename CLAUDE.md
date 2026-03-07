@@ -81,6 +81,26 @@ CREATE TABLE settings (key TEXT PK, value JSONB, updated_at);
 CREATE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 ...
 ```
 
+## Tri-System Architecture (Deployed 2026-03-07)
+
+```
+Telegram (@ruhi_assistbot) → OpenClaw (VPS 72.60.203.110)
+                                ↕ REST API (X-Api-Key)
+                             OpenBrain (Fly.io, ikawn-openbrain.fly.dev)
+                                ↕ REST API (Bearer token)
+                             ikawn OS (Fly.io, os.ikawn.com)
+```
+
+**Flows:**
+- **Memory search**: OpenClaw → `GET /search` → vector results (BEFORE every response)
+- **Memory capture**: OpenClaw → `POST /capture` (AFTER every response, dedup via source_ref)
+- **Image generation**: OpenClaw → `POST /api/actions/trigger` → ikawn `/api/external/generate`
+- **Status polling**: `GET /api/actions/status/:id`
+
+**OpenClaw skills (VPS):** openbrain-bridge (always active), ikawn-shopify, ikawn-analytics, competitor-watcher
+**OpenBrain role:** Memory + RAG + knowledge persistence + action proxy to ikawn OS
+**ikawn OS role:** Visual generation agents (Genie, Remix, Prism, Lazarus) with credit-based billing
+
 ## Key Architecture Decisions
 
 - **No pgvector**: Fly Postgres doesn't include pgvector. Custom cosine_similarity PL/pgSQL function. Fine for <10K entries.
@@ -134,9 +154,26 @@ CREATE FUNCTION cosine_similarity(a float8[], b float8[]) RETURNS float8 ...
 - [x] PDF/document text extraction
 - [x] Admin model configuration (primary + secondary)
 - [x] Auto-generated conversation titles
+- [x] API key auth (`requireAuthOrApiKey`) for machine-to-machine calls
+- [x] Telegram notify endpoint (`POST /api/notify/telegram`)
+- [x] MaxClaw self-report endpoint (`POST /api/ingest/maxclaw`)
+- [x] GitHub connector (commits, issues, PRs — 30-min sync)
+- [x] Google Calendar connector (events — 2-hr sync)
+- [x] Telegram/MaxClaw connector (real-time webhook, conversation grouping)
+- [x] OpenClaw ↔ OpenBrain bridge (search + capture + actions)
+- [x] Actions proxy to ikawn OS (`/api/actions/trigger`, `/api/actions/status/:id`)
+- [x] Decision logging with dual-write (memories + ob_decisions)
 
 ## TODO
 
+### Next Up — Chat UI Improvements
+- [ ] Message font 15% smaller: `1.365rem` → `1.16rem`
+- [ ] Add privacy dropdown (access_level) and hashtag input to chat messages
+- [ ] URL routing: each conversation at `/{id}`, parse on page load
+- [ ] On first Ruhi response, seamlessly change browser URL to `/{id}` via `history.replaceState`
+- [ ] Add search bar in sidebar to filter/search conversations
+
+### Backlog
 - Add ANTHROPIC_API_KEY and Claude model support as secondary option
 - Set R2 + Brave Search + Resend secrets on Fly
 - Extend MCP server with chat tools

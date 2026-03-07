@@ -25,7 +25,7 @@ ikawn-v3 (Fly.io, os.ikawn.com) - Image/video generation
 ## Component 1: OpenBrain API Key Auth
 
 Add X-Api-Key header check to /capture, /search, /recent, /stats, /decisions.
-Reuse existing /api/ingest/maxclaw pattern. Single env var OPENBRAIN_API_KEY.
+Reuse existing /api/ingest/openclaw pattern. Single env var OPENBRAIN_API_KEY.
 
 ## Component 2: OpenBrain Telegram Notify
 

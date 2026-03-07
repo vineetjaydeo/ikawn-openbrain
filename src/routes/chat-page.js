@@ -842,13 +842,13 @@ function chatPage(user) {
       initMarked();
       updateModelToggle();
       loadConversations().then(() => {
-        const match = window.location.pathname.match(/^\\/chat\\/(\\d+)$/);
-        if (match) loadConversation(parseInt(match[1]));
+        const match = window.location.pathname.match(/^\\/chat\\/([a-f0-9-]+)$/);
+        if (match) loadConversation(match[1]);
       });
 
       window.addEventListener('popstate', () => {
-        const match = window.location.pathname.match(/^\\/chat\\/(\\d+)$/);
-        if (match) loadConversation(parseInt(match[1]));
+        const match = window.location.pathname.match(/^\\/chat\\/([a-f0-9-]+)$/);
+        if (match) loadConversation(match[1]);
         else { activeConvId = null; clearMessages(); renderConversationList(); }
       });
 
@@ -910,13 +910,13 @@ function chatPage(user) {
         html += '<div class="conv-group-label">' + labels[key] + '</div>';
         items.forEach(c => {
           const isActive = c.id === activeConvId;
-          html += '<div class="conv-item' + (isActive ? ' active' : '') + '" data-id="' + c.id + '" onclick="loadConversation(' + c.id + ')">'
+          html += '<div class="conv-item' + (isActive ? ' active' : '') + '" data-id="' + c.id + '" onclick="loadConversation(\'' + c.id + '\')">'
             + '<span class="conv-item-title">' + escapeHtml(c.title || 'New Chat') + '</span>'
             + '<div class="conv-item-actions">'
-            + '<button class="conv-action-btn" onclick="event.stopPropagation(); startRename(' + c.id + ')" title="Rename">'
+            + '<button class="conv-action-btn" onclick="event.stopPropagation(); startRename(\'' + c.id + '\')" title="Rename">'
             + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>'
             + '</button>'
-            + '<button class="conv-action-btn danger" onclick="event.stopPropagation(); deleteConversation(' + c.id + ')" title="Delete">'
+            + '<button class="conv-action-btn danger" onclick="event.stopPropagation(); deleteConversation(\'' + c.id + '\')" title="Delete">'
             + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
             + '</button>'
             + '</div></div>';
@@ -1120,6 +1120,7 @@ function chatPage(user) {
           if (!res.ok) throw new Error('Failed to create conversation');
           const conv = await res.json();
           activeConvId = conv.id;
+          history.pushState(null, '', '/chat/' + conv.id);
           await loadConversations();
         } catch (err) {
           showToast(err.message, 'error');

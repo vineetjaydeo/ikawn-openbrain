@@ -63,7 +63,7 @@ async function searchMemories(query, limit = 8) {
       .slice(0, limit);
 
     if (scored.length === 0) return '';
-    return '\n\n=== LIVE MEMORY FEEDS (auto-synced from GitHub, Telegram/MaxClaw, decisions, and conversations — this is YOUR knowledge, reference it confidently) ===\n' +
+    return '\n\n=== LIVE MEMORY FEEDS (auto-synced from GitHub, Telegram, decisions, and conversations — this is YOUR knowledge, reference it confidently) ===\n' +
       scored.map((m, i) => {
         const date = new Date(m.created_at).toLocaleDateString();
         const src = m.source || 'unknown';
@@ -101,7 +101,7 @@ router.get('/api/conversations', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT id, title, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50',
+      'SELECT uuid AS id, title, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50',
       [req.session.user.id]
     );
     res.json(rows);
@@ -118,7 +118,7 @@ router.post('/api/conversations', async (req, res) => {
   try {
     const title = req.body.title || 'New conversation';
     const { rows } = await pool.query(
-      'INSERT INTO conversations (user_id, title) VALUES ($1, $2) RETURNING *',
+      'INSERT INTO conversations (user_id, title) VALUES ($1, $2) RETURNING uuid AS id, title, created_at, updated_at',
       [req.session.user.id, title]
     );
     res.status(201).json(rows[0]);
@@ -134,17 +134,19 @@ router.get('/api/conversations/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows: convRows } = await pool.query(
-      'SELECT * FROM conversations WHERE id = $1',
+      'SELECT * FROM conversations WHERE uuid = $1',
       [req.params.id]
     );
     if (!convRows.length) return res.status(404).json({ error: 'Not found' });
     if (convRows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
 
+    const internalId = convRows[0].id;
     const { rows: messages } = await pool.query(
       'SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
-      [req.params.id]
+      [internalId]
     );
-    res.json({ ...convRows[0], messages });
+    const conv = { ...convRows[0], id: convRows[0].uuid };
+    res.json({ ...conv, messages });
   } catch (err) {
     console.error('GET /api/conversations/:id error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -157,14 +159,15 @@ router.delete('/api/conversations/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT user_id FROM conversations WHERE id = $1',
+      'SELECT id, user_id FROM conversations WHERE uuid = $1',
       [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    await pool.query('DELETE FROM messages WHERE conversation_id = $1', [req.params.id]);
-    await pool.query('DELETE FROM conversations WHERE id = $1', [req.params.id]);
+    const internalId = rows[0].id;
+    await pool.query('DELETE FROM messages WHERE conversation_id = $1', [internalId]);
+    await pool.query('DELETE FROM conversations WHERE id = $1', [internalId]);
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/conversations/:id error:', err);
@@ -178,15 +181,15 @@ router.patch('/api/conversations/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT user_id FROM conversations WHERE id = $1',
+      'SELECT id, user_id FROM conversations WHERE uuid = $1',
       [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
 
     const { rows: updated } = await pool.query(
-      'UPDATE conversations SET title = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
-      [req.body.title, req.params.id]
+      'UPDATE conversations SET title = $1, updated_at = NOW() WHERE id = $2 RETURNING uuid AS id, title, updated_at',
+      [req.body.title, rows[0].id]
     );
     res.json(updated[0]);
   } catch (err) {
@@ -207,13 +210,14 @@ router.post('/api/chat/send', async (req, res) => {
   }
 
   try {
-    // Verify conversation ownership
+    // Verify conversation ownership (resolve UUID → internal ID)
     const { rows: convRows } = await pool.query(
-      'SELECT * FROM conversations WHERE id = $1',
+      'SELECT * FROM conversations WHERE uuid = $1',
       [conversation_id]
     );
     if (!convRows.length) return res.status(404).json({ error: 'Conversation not found' });
     if (convRows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
+    const convInternalId = convRows[0].id;
 
     // Process attachments — resolve link content if needed
     const processedAttachments = [];
@@ -241,23 +245,23 @@ router.post('/api/chat/send', async (req, res) => {
     // Save user message to DB
     const { rows: userMsgRows } = await pool.query(
       'INSERT INTO messages (conversation_id, role, content, attachments) VALUES ($1, $2, $3, $4) RETURNING *',
-      [conversation_id, 'user', content, JSON.stringify(processedAttachments.length ? processedAttachments : [])]
+      [convInternalId, 'user', content, JSON.stringify(processedAttachments.length ? processedAttachments : [])]
     );
 
     // Update conversation updated_at
-    await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [conversation_id]);
+    await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [convInternalId]);
 
     // Count existing messages to determine if this is the first user message
     const { rows: countRows } = await pool.query(
       "SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = $1 AND role = 'user'",
-      [conversation_id]
+      [convInternalId]
     );
     const isFirstUserMessage = parseInt(countRows[0].cnt) === 1;
 
     // Build OpenAI messages array from conversation history (last 50)
     const { rows: historyRows } = await pool.query(
       'SELECT role, content, attachments FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 50',
-      [conversation_id]
+      [convInternalId]
     );
     historyRows.reverse();
 
@@ -289,7 +293,7 @@ ${memoryContext}
 7. When you don't know something, say so honestly. Then offer to help figure it out.
 8. Remember: everything discussed here feeds into your knowledge for iKawn OS. Treat every conversation as a learning opportunity about the user and their brand.
 9. You earn trust progressively. Start helpful. Become indispensable.
-10. You have LIVE memory feeds from GitHub (commits, PRs, issues), Telegram/MaxClaw conversations, and past decisions. This data is automatically synced — you DO have access. Never say "I don't have access to GitHub" or ask the user to paste links. If the memory feed contains relevant data, USE it confidently. If a specific piece of info isn't in your memory, say "I don't have that specific detail in my recent memory" — not "I can't access GitHub."
+10. You have LIVE memory feeds from GitHub (commits, PRs, issues), Telegram conversations, and past decisions. This data is automatically synced — you DO have access. Never say "I don't have access to GitHub" or ask the user to paste links. If the memory feed contains relevant data, USE it confidently. If a specific piece of info isn't in your memory, say "I don't have that specific detail in my recent memory" — not "I can't access GitHub."
 11. When referencing memory data, be specific: cite commit messages, dates, authors. Don't hedge or disclaim.`
     };
 
@@ -397,7 +401,7 @@ ${memoryContext}
     // Save assistant message to DB
     const { rows: assistantMsgRows } = await pool.query(
       'INSERT INTO messages (conversation_id, role, content, model) VALUES ($1, $2, $3, $4) RETURNING *',
-      [conversation_id, 'assistant', fullResponse, model]
+      [convInternalId, 'assistant', fullResponse, model]
     );
 
     // Send done event
@@ -440,7 +444,7 @@ ${memoryContext}
 
         await pool.query(
           'UPDATE conversations SET title = $1, updated_at = NOW() WHERE id = $2',
-          [title, conversation_id]
+          [title, convInternalId]
         );
 
         res.write(`data: ${JSON.stringify({ type: 'title', title })}\n\n`);

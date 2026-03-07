@@ -40,7 +40,7 @@ async function uploadTelegramFileToR2(fileId, prefix) {
   if (!file) return null;
 
   const ext = file.filePath.split('.').pop() || 'bin';
-  const key = `maxclaw/${prefix}/${Date.now()}.${ext}`;
+  const key = `openclaw/${prefix}/${Date.now()}.${ext}`;
   const url = await uploadToR2(key, file.buffer, file.mimeType);
   return { url, buffer: file.buffer, mimeType: file.mimeType, ext };
 }
@@ -70,7 +70,7 @@ async function transcribeAudio(buffer, ext) {
  */
 async function processMessage(msg) {
   const isBot = msg.from?.is_bot;
-  const sender = isBot ? 'MaxClaw' : (msg.from?.first_name || 'Vineet');
+  const sender = isBot ? 'Ruhi' : (msg.from?.first_name || 'Vineet');
   const entry = { sender, text: msg.text || msg.caption || '', attachments: [], timestamp: msg.date };
 
   try {
@@ -138,7 +138,7 @@ async function flushConversation(chatId) {
   const firstDate = new Date(messages[0].timestamp * 1000);
   const dateStr = firstDate.toISOString().replace('T', ' ').slice(0, 16);
 
-  const lines = [`[MaxClaw Conversation] ${dateStr}`, ''];
+  const lines = [`[Telegram Conversation] ${dateStr}`, ''];
   const allAttachmentUrls = [];
 
   for (const msg of messages) {
@@ -161,7 +161,7 @@ async function flushConversation(chatId) {
   const content = lines.join('\n').slice(0, 8000);
 
   // Dedup by first message timestamp + chatId
-  const sourceRef = `maxclaw-${chatId}-${messages[0].timestamp}`;
+  const sourceRef = `openclaw-${chatId}-${messages[0].timestamp}`;
   const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [sourceRef]);
   if (existing.rows.length > 0) return;
 
@@ -169,17 +169,17 @@ async function flushConversation(chatId) {
 
   await pool.query(
     `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
-     VALUES ($1, 'maxclaw', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
+     VALUES ($1, 'openclaw-telegram', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
      RETURNING id`,
     [content, sourceRef, null, 'vineet', hashtags.length > 0 ? hashtags : null]
   );
 
   // Log ingestion
   await pool.query(
-    `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('maxclaw', 'success', 1)`
+    `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('openclaw-telegram', 'success', 1)`
   );
 
-  console.log(`MaxClaw conversation flushed: ${messages.length} messages, ref=${sourceRef}`);
+  console.log(`Telegram conversation flushed: ${messages.length} messages, ref=${sourceRef}`);
 }
 
 /**
@@ -187,7 +187,7 @@ async function flushConversation(chatId) {
  * No in-memory buffering — survives machine restarts on Fly.io.
  */
 async function saveMessageToDB(msg, entry) {
-  const sourceRef = `maxclaw-msg-${msg.message_id}`;
+  const sourceRef = `openclaw-msg-${msg.message_id}`;
 
   // Dedup by telegram message_id
   const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [sourceRef]);
@@ -196,7 +196,7 @@ async function saveMessageToDB(msg, entry) {
   const date = new Date(msg.date * 1000);
   const dateStr = date.toISOString().replace('T', ' ').slice(0, 16);
 
-  let content = `[MaxClaw] ${dateStr}\n${entry.sender}: ${entry.text}`;
+  let content = `[Telegram] ${dateStr}\n${entry.sender}: ${entry.text}`;
 
   for (const att of entry.attachments) {
     if (att.type === 'image') content += `\n[Image: ${att.url}]`;
@@ -212,15 +212,15 @@ async function saveMessageToDB(msg, entry) {
 
   await pool.query(
     `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
-     VALUES ($1, 'maxclaw', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')`,
+     VALUES ($1, 'openclaw-telegram', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')`,
     [content.slice(0, 8000), sourceRef, null, entry.sender.toLowerCase(), hashtags.length > 0 ? hashtags : null]
   );
 
   await pool.query(
-    `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('maxclaw', 'success', 1)`
+    `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('openclaw-telegram', 'success', 1)`
   );
 
-  console.log(`MaxClaw message saved: ${entry.sender} msg_id=${msg.message_id}`);
+  console.log(`Telegram message saved: ${entry.sender} msg_id=${msg.message_id}`);
 }
 
 /**
@@ -287,25 +287,25 @@ function stopFlushTimer() {
 }
 
 /**
- * Handle a MaxClaw self-report (direct POST from MaxClaw).
+ * Handle an OpenClaw self-report (direct POST from OpenClaw).
  */
 async function handleSelfReport({ content, project, hashtags }) {
   if (!content || typeof content !== 'string') {
     throw new Error('content is required');
   }
 
-  const sourceRef = `maxclaw-report-${Date.now()}`;
+  const sourceRef = `openclaw-report-${Date.now()}`;
   const autoHashtags = hashtags || await suggestHashtags(content);
 
   const result = await pool.query(
     `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
-     VALUES ($1, 'maxclaw', 'note', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
+     VALUES ($1, 'openclaw', 'note', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
      RETURNING id, content, source, created_at`,
-    [content.slice(0, 8000), sourceRef, project || null, 'maxclaw', Array.isArray(autoHashtags) && autoHashtags.length > 0 ? autoHashtags : null]
+    [content.slice(0, 8000), sourceRef, project || null, 'openclaw', Array.isArray(autoHashtags) && autoHashtags.length > 0 ? autoHashtags : null]
   );
 
   await pool.query(
-    `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('maxclaw', 'success', 1)`
+    `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('openclaw', 'success', 1)`
   );
 
   return result.rows[0];

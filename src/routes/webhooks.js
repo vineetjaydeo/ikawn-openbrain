@@ -124,9 +124,9 @@ router.post('/webhooks/telegram/:token', async (req, res) => {
   }
 });
 
-// MaxClaw self-report endpoint — API key auth
-router.post('/api/ingest/maxclaw', async (req, res) => {
-  const apiKey = process.env.MAXCLAW_API_KEY;
+// OpenClaw self-report endpoint — API key auth
+router.post('/api/ingest/openclaw', async (req, res) => {
+  const apiKey = process.env.OPENBRAIN_API_KEY;
   const provided = req.headers['x-api-key'];
   if (!apiKey || provided !== apiKey) {
     return res.status(401).json({ error: 'Invalid API key' });
@@ -136,7 +136,7 @@ router.post('/api/ingest/maxclaw', async (req, res) => {
     const result = await handleSelfReport(req.body);
     res.status(201).json(result);
   } catch (err) {
-    console.error('MaxClaw ingest error:', err);
+    console.error('OpenClaw ingest error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -268,6 +268,13 @@ async function initSchema() {
       ALTER TABLE ob_decisions ADD COLUMN IF NOT EXISTS brand_id VARCHAR(100) DEFAULT 'ikawn';
     `);
 
+    // Add UUID column to conversations (P3: don't expose sequential IDs in URLs)
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();
+      UPDATE conversations SET uuid = gen_random_uuid() WHERE uuid IS NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_uuid ON conversations(uuid);
+    `);
+
     // ── OpenBrain v3: edit_deltas — highest priority training data ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS edit_deltas (

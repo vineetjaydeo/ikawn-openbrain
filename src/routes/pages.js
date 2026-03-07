@@ -36,7 +36,7 @@ function loginPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ruhi - Sign In</title>
+  <title>OpenBrain | Sign In</title>
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}
@@ -143,7 +143,7 @@ function adminPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ruhi - Admin</title>
+  <title>OpenBrain | Admin</title>
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}
@@ -291,7 +291,7 @@ function settingsPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ruhi - Settings</title>
+  <title>OpenBrain | Settings</title>
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}

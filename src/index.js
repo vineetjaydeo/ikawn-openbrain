@@ -24,6 +24,7 @@ const editDeltasRoute = require('./routes/edit-deltas');
 const generationsRoute = require('./routes/generations');
 const gdprRoute = require('./routes/gdpr');
 const brainHealthRoute = require('./routes/brain-health');
+const adminCostsRoute = require('./routes/admin-costs');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
@@ -106,6 +107,7 @@ app.use(requireAuth, ruhiChatRoute);
 
 // Admin API
 app.use(adminApi);
+app.use(adminCostsRoute);
 
 // Admin sync endpoint — owner only
 app.post('/admin/sync/:source', requireAuth, async (req, res) => {

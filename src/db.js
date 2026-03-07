@@ -309,9 +309,17 @@ async function initSchema() {
         memory_id INTEGER,
         ikawn_generation_id TEXT,
         callback_received BOOLEAN DEFAULT FALSE,
+        batch_size INT DEFAULT 4,
+        output_count INT DEFAULT 0,
         deleted_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+
+    // Add batch_size + output_count if missing (existing DBs)
+    await client.query(`
+      ALTER TABLE generations ADD COLUMN IF NOT EXISTS batch_size INT DEFAULT 4;
+      ALTER TABLE generations ADD COLUMN IF NOT EXISTS output_count INT DEFAULT 0;
     `);
 
     // ── OpenBrain v3: brand_context ──

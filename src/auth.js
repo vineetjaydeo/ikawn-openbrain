@@ -33,4 +33,10 @@ function requireAuthOrApiKey(req, res, next) {
   return requireAuth(req, res, next);
 }
 
-module.exports = { requireAuth, requireAdmin, requireAuthOrApiKey };
+function requireBrand(req, res, next) {
+  // Set brand_id from session, header, or default to 'ikawn'
+  req.brand_id = req.headers['x-brand-id'] || req.session?.brand_id || 'ikawn';
+  next();
+}
+
+module.exports = { requireAuth, requireAdmin, requireAuthOrApiKey, requireBrand };

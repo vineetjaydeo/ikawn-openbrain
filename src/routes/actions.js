@@ -1,5 +1,7 @@
 const { Router } = require('express');
 const { requireAuthOrApiKey } = require('../auth');
+const { pool } = require('../db');
+const { captureMessage } = require('../utils/capture');
 
 const router = Router();
 
@@ -77,6 +79,42 @@ router.get('/api/actions/status/:id', requireAuthOrApiKey, async (req, res) => {
   } catch (err) {
     console.error('Action status error:', err);
     res.status(500).json({ error: 'Failed to fetch action status' });
+  }
+});
+
+// POST /api/actions/complete — webhook from ikawn OS when generation finishes
+router.post('/api/actions/complete', requireAuthOrApiKey, async (req, res) => {
+  try {
+    const { generationId, status, urls, metadata } = req.body;
+
+    if (!generationId) {
+      return res.status(400).json({ error: 'generationId is required' });
+    }
+
+    await pool.query(`
+      UPDATE generations SET
+        status = $1,
+        output_urls = $2,
+        output_metadata = $3,
+        callback_received = true
+      WHERE ikawn_generation_id = $4
+    `, [status || 'completed', urls || [], JSON.stringify(metadata || {}), generationId]);
+
+    // Capture to memories so it's searchable
+    if (status === 'completed' && urls && urls.length > 0) {
+      captureMessage({
+        brand_id: 'ikawn',
+        channel: 'api',
+        direction: 'outbound',
+        content: `Generation completed. Agent: ${metadata?.agent || 'unknown'}. URLs: ${urls.join(', ')}`,
+        source_ref: `generation_complete_${generationId}`
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Actions] Complete error:', err);
+    res.status(500).json({ error: 'Failed to record generation completion' });
   }
 });
 

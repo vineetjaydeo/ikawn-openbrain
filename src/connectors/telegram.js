@@ -1,5 +1,4 @@
 const { pool } = require('../db');
-const { getEmbedding } = require('../embeddings');
 const { uploadToR2 } = require('../utils/storage');
 const { extractText } = require('../utils/doc-parser');
 const { suggestHashtags } = require('../utils/hashtags');
@@ -166,14 +165,13 @@ async function flushConversation(chatId) {
   const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [sourceRef]);
   if (existing.rows.length > 0) return;
 
-  const embedding = await getEmbedding(content);
   const hashtags = await suggestHashtags(content);
 
   await pool.query(
-    `INSERT INTO memories (content, embedding, source, memory_type, source_ref, project, author, access_level, hashtags)
-     VALUES ($1, $2, 'maxclaw', 'discussion', $3, $4, $5, 'private', $6)
+    `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
+     VALUES ($1, 'maxclaw', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
      RETURNING id`,
-    [content, embedding, sourceRef, null, 'vineet', hashtags.length > 0 ? hashtags : null]
+    [content, sourceRef, null, 'vineet', hashtags.length > 0 ? hashtags : null]
   );
 
   // Log ingestion
@@ -210,13 +208,12 @@ async function saveMessageToDB(msg, entry) {
     else if (att.type === 'video') content += `\n[Video: ${att.url}]`;
   }
 
-  const embedding = await getEmbedding(content);
   const hashtags = await suggestHashtags(content);
 
   await pool.query(
-    `INSERT INTO memories (content, embedding, source, memory_type, source_ref, project, author, access_level, hashtags)
-     VALUES ($1, $2, 'maxclaw', 'discussion', $3, $4, $5, 'private', $6)`,
-    [content.slice(0, 8000), embedding, sourceRef, null, entry.sender.toLowerCase(), hashtags.length > 0 ? hashtags : null]
+    `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
+     VALUES ($1, 'maxclaw', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')`,
+    [content.slice(0, 8000), sourceRef, null, entry.sender.toLowerCase(), hashtags.length > 0 ? hashtags : null]
   );
 
   await pool.query(
@@ -298,14 +295,13 @@ async function handleSelfReport({ content, project, hashtags }) {
   }
 
   const sourceRef = `maxclaw-report-${Date.now()}`;
-  const embedding = await getEmbedding(content);
   const autoHashtags = hashtags || await suggestHashtags(content);
 
   const result = await pool.query(
-    `INSERT INTO memories (content, embedding, source, memory_type, source_ref, project, author, access_level, hashtags)
-     VALUES ($1, $2, 'maxclaw', 'note', $3, $4, $5, 'private', $6)
+    `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
+     VALUES ($1, 'maxclaw', 'note', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
      RETURNING id, content, source, created_at`,
-    [content.slice(0, 8000), embedding, sourceRef, project || null, 'maxclaw', Array.isArray(autoHashtags) && autoHashtags.length > 0 ? autoHashtags : null]
+    [content.slice(0, 8000), sourceRef, project || null, 'maxclaw', Array.isArray(autoHashtags) && autoHashtags.length > 0 ? autoHashtags : null]
   );
 
   await pool.query(

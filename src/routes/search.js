@@ -6,20 +6,48 @@ const router = Router();
 
 router.get('/search', async (req, res) => {
   try {
-    const { q, type, project, hashtag, access_level, author, from, to, limit } = req.query;
+    const { q, type, project, hashtag, access_level, author, from, to, limit, brand_id } = req.query;
     if (!q) {
       return res.status(400).json({ error: 'q query parameter is required' });
     }
 
-    const embedding = await getEmbedding(q);
     const searchLimit = Math.min(parseInt(limit) || 10, 50);
 
-    let query = `SELECT id, content, source, tags, memory_type, project, hashtags, author, access_level, created_at, cosine_similarity(embedding, $1) AS similarity
-       FROM memories
-       WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false)`;
+    // Try vector search first
+    let embedding = null;
+    try {
+      embedding = await getEmbedding(q);
+    } catch (err) {
+      console.error('Embedding failed, falling back to text search:', err.message);
+    }
 
-    const params = [embedding];
-    let paramIdx = 2;
+    let query;
+    const params = [];
+    let paramIdx = 1;
+
+    if (embedding) {
+      // Vector search with cosine similarity
+      query = `SELECT id, content, source, tags, memory_type, project, hashtags, author, access_level, brand_id, created_at,
+                      cosine_similarity(embedding, $1) AS similarity
+               FROM memories
+               WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND deleted_at IS NULL`;
+      params.push(embedding);
+      paramIdx = 2;
+    } else {
+      // Fallback to ILIKE text search when embedding unavailable
+      query = `SELECT id, content, source, tags, memory_type, project, hashtags, author, access_level, brand_id, created_at,
+                      0.5 AS similarity
+               FROM memories
+               WHERE content ILIKE '%' || $1 || '%' AND (archived IS NULL OR archived = false) AND deleted_at IS NULL`;
+      params.push(q);
+      paramIdx = 2;
+    }
+
+    // Brand filter
+    if (brand_id) {
+      query += ` AND brand_id = $${paramIdx++}`;
+      params.push(brand_id);
+    }
 
     if (type) {
       query += ` AND memory_type = $${paramIdx++}`;
@@ -50,7 +78,11 @@ router.get('/search', async (req, res) => {
       params.push(to);
     }
 
-    query += ` ORDER BY cosine_similarity(embedding, $1) DESC LIMIT $${paramIdx++}`;
+    if (embedding) {
+      query += ` ORDER BY cosine_similarity(embedding, $1) DESC LIMIT $${paramIdx++}`;
+    } else {
+      query += ` ORDER BY created_at DESC LIMIT $${paramIdx++}`;
+    }
     params.push(searchLimit);
 
     const result = await pool.query(query, params);

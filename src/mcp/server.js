@@ -21,8 +21,6 @@ server.tool(
     access_level: z.string().optional(),
   },
   async ({ content, type, project, hashtags, access_level }) => {
-    const embedding = await getEmbedding(content);
-
     // Extract hashtags from content
     const extracted = (content.match(/#[a-zA-Z0-9_]+/g) || []).map(t => t.toLowerCase());
     let allHashtags = [...new Set([...(hashtags || []), ...extracted])];
@@ -32,9 +30,9 @@ server.tool(
     }
 
     const result = await pool.query(
-      `INSERT INTO memories (content, embedding, source, memory_type, project, hashtags, access_level, author)
-       VALUES ($1, $2, 'mcp', $3, $4, $5, $6, 'vineet') RETURNING id, content, memory_type, project, hashtags, created_at`,
-      [content, embedding, type || 'note', project || null, allHashtags.length > 0 ? allHashtags : null, access_level || 'private']
+      `INSERT INTO memories (content, source, memory_type, project, hashtags, access_level, author, brand_id, embedding_status)
+       VALUES ($1, 'mcp', $2, $3, $4, $5, 'vineet', 'ikawn', 'pending') RETURNING id, content, memory_type, project, hashtags, created_at`,
+      [content, type || 'note', project || null, allHashtags.length > 0 ? allHashtags : null, access_level || 'private']
     );
 
     return { content: [{ type: 'text', text: JSON.stringify(result.rows[0]) }] };
@@ -138,13 +136,10 @@ server.tool(
     hashtags: z.array(z.string()).optional(),
   },
   async ({ decision, context, project, signed_off_by, hashtags }) => {
-    const embeddingText = context ? `${decision} ${context}` : decision;
-    const embedding = await getEmbedding(embeddingText);
-
     const memoryResult = await pool.query(
-      `INSERT INTO memories (content, embedding, source, memory_type, project, author, signed_off_by, access_level, hashtags)
-       VALUES ($1, $2, 'decision', 'decision', $3, $4, $5, 'management', $6) RETURNING id`,
-      [context ? `${decision}\n\nContext: ${context}` : decision, embedding, project || null, signed_off_by || 'vineet', signed_off_by || null, hashtags || null]
+      `INSERT INTO memories (content, source, memory_type, project, author, signed_off_by, access_level, hashtags, brand_id, embedding_status)
+       VALUES ($1, 'decision', 'decision', $2, $3, $4, 'management', $5, 'ikawn', 'pending') RETURNING id`,
+      [context ? `${decision}\n\nContext: ${context}` : decision, project || null, signed_off_by || 'vineet', signed_off_by || null, hashtags || null]
     );
 
     const result = await pool.query(

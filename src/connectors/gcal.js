@@ -1,7 +1,5 @@
 const { google } = require('googleapis');
 const { pool } = require('../db');
-const { getEmbedding } = require('../embeddings');
-
 async function getCalendarClient() {
   const credsBase64 = process.env.GOOGLE_CALENDAR_CREDENTIALS;
   if (!credsBase64) return null;
@@ -57,13 +55,11 @@ async function syncCalendar() {
         event.hangoutLink ? `Meeting link: ${event.hangoutLink}` : '',
       ].filter(Boolean).join('\n');
 
-      const embedding = await getEmbedding(content);
       await pool.query(
-        `INSERT INTO memories (content, embedding, source, memory_type, source_ref, source_url, author, access_level)
-         VALUES ($1, $2, 'calendar', 'calendar_event', $3, $4, 'vineet', $5)`,
+        `INSERT INTO memories (content, source, memory_type, source_ref, source_url, author, access_level, brand_id, embedding_status)
+         VALUES ($1, 'calendar', 'calendar_event', $2, $3, 'vineet', $4, 'ikawn', 'pending')`,
         [
           content,
-          embedding,
           sourceRef,
           event.htmlLink || null,
           isTeamEvent ? 'management' : 'private',

@@ -206,7 +206,181 @@ async function initSchema() {
       $$ LANGUAGE plpgsql IMMUTABLE;
     `);
 
-    console.log('Database schema initialized');
+    // ── OpenBrain v3: Tenancy ──
+
+    // brands table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brands (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        tier VARCHAR(50) DEFAULT 'starter',
+        status VARCHAR(50) DEFAULT 'active',
+        gdpr_region VARCHAR(10) DEFAULT 'global',
+        data_retention_days INT DEFAULT 730,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      INSERT INTO brands (brand_id, name, tier) VALUES ('ikawn', 'iKawn Technologies', 'enterprise')
+      ON CONFLICT (brand_id) DO NOTHING
+    `);
+
+    // brand_users table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brand_users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL REFERENCES brands(brand_id),
+        user_id INTEGER REFERENCES users(id),
+        role VARCHAR(50) DEFAULT 'member',
+        channels TEXT[] DEFAULT '{}',
+        gdpr_consent BOOLEAN DEFAULT FALSE,
+        gdpr_consent_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── OpenBrain v3: Add brand_id + v3 columns to memories ──
+    await client.query(`
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS brand_id VARCHAR(100) DEFAULT 'ikawn';
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedding_status VARCHAR(20) DEFAULT 'pending';
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedding_model VARCHAR(100) DEFAULT 'text-embedding-3-small';
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedded_at TIMESTAMPTZ;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS moderation_score FLOAT;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS moderation_flags TEXT[] DEFAULT '{}';
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `);
+
+    // Backfill existing memories
+    await client.query(`
+      UPDATE memories SET embedding_status = 'done', brand_id = 'ikawn' WHERE embedding IS NOT NULL AND brand_id IS NULL;
+      UPDATE memories SET embedding_status = 'pending' WHERE embedding IS NULL AND embedding_status IS NULL;
+      UPDATE memories SET brand_id = 'ikawn' WHERE brand_id IS NULL;
+    `);
+
+    // Add brand_id to conversations, messages, ob_decisions
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS brand_id VARCHAR(100) DEFAULT 'ikawn';
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS brand_id VARCHAR(100) DEFAULT 'ikawn';
+      ALTER TABLE ob_decisions ADD COLUMN IF NOT EXISTS brand_id VARCHAR(100) DEFAULT 'ikawn';
+    `);
+
+    // ── OpenBrain v3: edit_deltas — highest priority training data ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS edit_deltas (
+        id BIGSERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        agent_name VARCHAR(100) NOT NULL,
+        generation_id UUID,
+        session_id UUID,
+        delta_type VARCHAR(50) NOT NULL,
+        original_prompt TEXT,
+        revised_prompt TEXT,
+        original_output TEXT,
+        edited_output TEXT,
+        selected_urls TEXT[] DEFAULT '{}',
+        rejected_urls TEXT[] DEFAULT '{}',
+        model_used VARCHAR(100),
+        user_signal VARCHAR(50) DEFAULT 'implicit',
+        promoted_to_mothership BOOLEAN DEFAULT FALSE,
+        anonymised BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── OpenBrain v3: generations ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS generations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        agent_name VARCHAR(100) NOT NULL,
+        prompt TEXT NOT NULL,
+        output_type VARCHAR(50) NOT NULL,
+        output_urls TEXT[] DEFAULT '{}',
+        output_metadata JSONB DEFAULT '{}',
+        model_used VARCHAR(100),
+        credits_consumed FLOAT DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'pending',
+        session_id UUID,
+        memory_id INTEGER,
+        ikawn_generation_id TEXT,
+        callback_received BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── OpenBrain v3: brand_context ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brand_context (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) UNIQUE NOT NULL,
+        industry VARCHAR(100),
+        tone_of_voice TEXT,
+        target_audience TEXT,
+        brand_guidelines JSONB DEFAULT '{}',
+        connected_platforms TEXT[] DEFAULT '{}',
+        preferences JSONB DEFAULT '{}',
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      INSERT INTO brand_context (brand_id, industry) VALUES ('ikawn', 'AI SaaS / Commerce Tech')
+      ON CONFLICT (brand_id) DO NOTHING
+    `);
+
+    // ── OpenBrain v3: brand_ratings ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brand_ratings (
+        id BIGSERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL,
+        rating SMALLINT CHECK (rating BETWEEN 1 AND 5),
+        abuse_flags INT DEFAULT 0,
+        inappropriate_content_count INT DEFAULT 0,
+        notes TEXT,
+        rated_by VARCHAR(255),
+        rated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── OpenBrain v3: mothership_log ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mothership_log (
+        id BIGSERIAL PRIMARY KEY,
+        source_brand_id VARCHAR(100),
+        data_type VARCHAR(100) NOT NULL,
+        anonymised_payload JSONB NOT NULL,
+        demographic_tags JSONB DEFAULT '{}',
+        signal_strength FLOAT,
+        promoted_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── OpenBrain v3: Indexes ──
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_memories_brand ON memories(brand_id);
+      -- idx_memories_source_ref replaced by unique index below
+      CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived) WHERE archived = false;
+      CREATE INDEX IF NOT EXISTS idx_memories_embedding_status ON memories(embedding_status) WHERE embedding_status = 'pending';
+      CREATE INDEX IF NOT EXISTS idx_edit_deltas_brand ON edit_deltas(brand_id);
+      CREATE INDEX IF NOT EXISTS idx_edit_deltas_agent ON edit_deltas(agent_name);
+      CREATE INDEX IF NOT EXISTS idx_edit_deltas_type ON edit_deltas(delta_type);
+      CREATE INDEX IF NOT EXISTS idx_generations_brand ON generations(brand_id);
+      CREATE INDEX IF NOT EXISTS idx_generations_agent ON generations(agent_name);
+    `);
+
+    // Make source_ref unique for ON CONFLICT to work (if not already)
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_source_ref_unique ON memories(source_ref) WHERE source_ref IS NOT NULL
+    `);
+
+    console.log('Database schema initialized (v3)');
   } finally {
     client.release();
   }

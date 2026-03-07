@@ -1,6 +1,4 @@
 const { pool } = require('../db');
-const { getEmbedding } = require('../embeddings');
-
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_ORG = process.env.GITHUB_ORG || 'ikawn-technologies';
 const GITHUB_REPOS = (process.env.GITHUB_REPOS || 'ikawn-v3,ikawn-openbrain').split(',').map(r => r.trim());
@@ -28,11 +26,10 @@ async function upsertMemory({ content, memory_type, source_ref, source_url, proj
   );
   if (existing.rows.length > 0) return null;
 
-  const embedding = await getEmbedding(content);
   const result = await pool.query(
-    `INSERT INTO memories (content, embedding, source, memory_type, source_ref, source_url, project, author, access_level)
-     VALUES ($1, $2, 'github', $3, $4, $5, $6, $7, $8) RETURNING id`,
-    [content, embedding, memory_type, source_ref, source_url, project, author || 'github', access_level || 'internal']
+    `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
+     VALUES ($1, 'github', $2, $3, $4, $5, $6, $7, 'ikawn', 'pending') RETURNING id`,
+    [content, memory_type, source_ref, source_url, project, author || 'github', access_level || 'internal']
   );
   return result.rows[0].id;
 }

@@ -1,5 +1,6 @@
 const express = require('express');
 const cookieSession = require('cookie-session');
+const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 const { initSchema } = require('./db');
@@ -19,7 +20,14 @@ const ruhiChatRoute = require('./routes/ruhi-chat');
 const webhooksRoute = require('./routes/webhooks');
 const notifyRoute = require('./routes/notify');
 const actionsRoute = require('./routes/actions');
+const editDeltasRoute = require('./routes/edit-deltas');
+const generationsRoute = require('./routes/generations');
+const gdprRoute = require('./routes/gdpr');
+const brainHealthRoute = require('./routes/brain-health');
 const { startScheduler, triggerSync } = require('./scheduler');
+const { startEmbeddingWorker } = require('./workers/embedding-worker');
+const { startModerationWorker } = require('./workers/moderation-worker');
+const { startMothershipWorker } = require('./workers/mothership-worker');
 
 // Load Ruhi knowledge base at startup
 const docsDir = path.join(__dirname, '..', 'docs');
@@ -51,6 +59,13 @@ app.use(cookieSession({
   sameSite: 'lax',
 }));
 
+// ── Rate Limiting ──
+app.use('/capture',             rateLimit({ windowMs: 60000, max: 60,  message: 'Capture rate limit exceeded' }));
+app.use('/search',              rateLimit({ windowMs: 60000, max: 120, message: 'Search rate limit exceeded' }));
+app.use('/api/chat',            rateLimit({ windowMs: 60000, max: 20,  message: 'Chat rate limit exceeded' }));
+app.use('/auth/login',          rateLimit({ windowMs: 60000, max: 5,   message: 'Too many login attempts', skipSuccessfulRequests: true }));
+app.use('/api/actions/trigger',  rateLimit({ windowMs: 60000, max: 10,  message: 'Generation rate limit exceeded' }));
+
 // Health check — no auth
 const appVersion = require('../package.json').version;
 
@@ -74,8 +89,12 @@ app.use(requireAuthOrApiKey, searchRoute);
 app.use(requireAuthOrApiKey, recentRoute);
 app.use(requireAuthOrApiKey, statsRoute);
 app.use(requireAuthOrApiKey, decisionsRoute);
+app.use(requireAuthOrApiKey, editDeltasRoute);
+app.use(requireAuthOrApiKey, generationsRoute);
 app.use(notifyRoute);
 app.use(actionsRoute);
+app.use(requireAuthOrApiKey, gdprRoute);
+app.use(requireAuthOrApiKey, brainHealthRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);
@@ -110,6 +129,10 @@ async function start() {
       console.log(`OpenBrain running on port ${PORT}`);
       // Start ingestion scheduler
       startScheduler();
+      // Start v3 workers
+      startEmbeddingWorker();
+      startModerationWorker();
+      startMothershipWorker();
     });
   } catch (err) {
     console.error('Failed to start:', err);

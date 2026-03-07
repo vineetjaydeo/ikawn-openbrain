@@ -1,9 +1,11 @@
 const { syncAll: syncGitHub } = require('./connectors/github');
 const { syncCalendar } = require('./connectors/gcal');
 const { registerWebhook, startFlushTimer, stopFlushTimer } = require('./connectors/telegram');
+const { pool } = require('./db');
 
 let githubInterval = null;
 let calendarInterval = null;
+let retentionInterval = null;
 
 const BASE_URL = process.env.BASE_URL || 'https://ikawn-openbrain.fly.dev';
 
@@ -32,7 +34,25 @@ function startScheduler() {
   // OpenBrain only sends outbound via Bot API (notify route).
   // startFlushTimer() also disabled — no inbound messages to buffer.
 
-  console.log('Scheduler started: GitHub every 30min, Calendar every 2hr');
+  // Data retention cron: daily — soft-delete expired memories
+  retentionInterval = setInterval(async () => {
+    try {
+      const result = await pool.query(`
+        UPDATE memories m SET deleted_at = NOW(), content = '[RETENTION EXPIRED]'
+        FROM brands b
+        WHERE m.brand_id = b.brand_id
+          AND m.deleted_at IS NULL
+          AND m.created_at < NOW() - INTERVAL '1 day' * b.data_retention_days
+      `);
+      if (result.rowCount > 0) {
+        console.log(`[Retention] Expired ${result.rowCount} memories`);
+      }
+    } catch (err) {
+      console.error('Retention cron failed:', err.message);
+    }
+  }, 24 * 60 * 60 * 1000);
+
+  console.log('Scheduler started: GitHub every 30min, Calendar every 2hr, Retention daily');
 }
 
 async function triggerSync(source) {
@@ -53,6 +73,7 @@ async function triggerSync(source) {
 function stopScheduler() {
   if (githubInterval) clearInterval(githubInterval);
   if (calendarInterval) clearInterval(calendarInterval);
+  if (retentionInterval) clearInterval(retentionInterval);
   stopFlushTimer();
 }
 

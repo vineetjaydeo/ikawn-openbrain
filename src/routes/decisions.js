@@ -1,7 +1,5 @@
 const { Router } = require('express');
 const { pool } = require('../db');
-const { getEmbedding } = require('../embeddings');
-
 const router = Router();
 
 router.post('/decisions', async (req, res) => {
@@ -11,17 +9,12 @@ router.post('/decisions', async (req, res) => {
       return res.status(400).json({ error: 'decision is required' });
     }
 
-    // Generate embedding from decision + context
-    const embeddingText = context ? `${decision} ${context}` : decision;
-    const embedding = await getEmbedding(embeddingText);
-
-    // Insert into memories
+    // Insert into memories — embedding handled async by worker
     const memoryResult = await pool.query(
-      `INSERT INTO memories (content, embedding, source, memory_type, project, author, signed_off_by, access_level, hashtags)
-       VALUES ($1, $2, 'decision', 'decision', $3, $4, $5, $6, $7) RETURNING id`,
+      `INSERT INTO memories (content, source, memory_type, project, author, signed_off_by, access_level, hashtags, brand_id, embedding_status)
+       VALUES ($1, 'decision', 'decision', $2, $3, $4, $5, $6, 'ikawn', 'pending') RETURNING id`,
       [
         context ? `${decision}\n\nContext: ${context}` : decision,
-        embedding,
         project || null,
         signed_off_by || 'vineet',
         signed_off_by || null,

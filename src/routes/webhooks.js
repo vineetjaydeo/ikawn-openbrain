@@ -1,7 +1,6 @@
 const { Router } = require('express');
 const crypto = require('crypto');
 const { pool } = require('../db');
-const { getEmbedding } = require('../embeddings');
 const { handleUpdate, handleSelfReport } = require('../connectors/telegram');
 
 const router = Router();
@@ -39,11 +38,10 @@ router.post('/webhooks/github', async (req, res) => {
 
         const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [commit.id]);
         if (existing.rows.length === 0) {
-          const embedding = await getEmbedding(content);
           await pool.query(
-            `INSERT INTO memories (content, embedding, source, memory_type, source_ref, source_url, project, author, access_level)
-             VALUES ($1, $2, 'github', 'github_commit', $3, $4, $5, $6, 'internal')`,
-            [content, embedding, commit.id, commit.url, payload.repository?.name || '', commit.author?.name || 'unknown']
+            `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
+             VALUES ($1, 'github', 'github_commit', $2, $3, $4, $5, 'internal', 'ikawn', 'pending')`,
+            [content, commit.id, commit.url, payload.repository?.name || '', commit.author?.name || 'unknown']
           );
         }
       }
@@ -62,18 +60,16 @@ router.post('/webhooks/github', async (req, res) => {
 
       const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [ref]);
       if (existing.rows.length === 0) {
-        const embedding = await getEmbedding(content);
         await pool.query(
-          `INSERT INTO memories (content, embedding, source, memory_type, source_ref, source_url, project, author, access_level)
-           VALUES ($1, $2, 'github', 'github_issue', $3, $4, $5, $6, 'internal')`,
-          [content, embedding, ref, issue.html_url, payload.repository?.name || '', issue.user?.login || 'unknown']
+          `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
+           VALUES ($1, 'github', 'github_issue', $2, $3, $4, $5, 'internal', 'ikawn', 'pending')`,
+          [content, ref, issue.html_url, payload.repository?.name || '', issue.user?.login || 'unknown']
         );
       } else {
-        // Update existing
-        const embedding = await getEmbedding(content);
+        // Update existing — re-queue for async embedding
         await pool.query(
-          'UPDATE memories SET content = $1, embedding = $2 WHERE source_ref = $3',
-          [content, embedding, ref]
+          'UPDATE memories SET content = $1, embedding_status = $2 WHERE source_ref = $3',
+          [content, 'pending', ref]
         );
       }
     }
@@ -91,17 +87,16 @@ router.post('/webhooks/github', async (req, res) => {
 
       const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [ref]);
       if (existing.rows.length === 0) {
-        const embedding = await getEmbedding(content);
         await pool.query(
-          `INSERT INTO memories (content, embedding, source, memory_type, source_ref, source_url, project, author, access_level)
-           VALUES ($1, $2, 'github', 'github_pr', $3, $4, $5, $6, 'internal')`,
-          [content, embedding, ref, pr.html_url, payload.repository?.name || '', pr.user?.login || 'unknown']
+          `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
+           VALUES ($1, 'github', 'github_pr', $2, $3, $4, $5, 'internal', 'ikawn', 'pending')`,
+          [content, ref, pr.html_url, payload.repository?.name || '', pr.user?.login || 'unknown']
         );
       } else {
-        const embedding = await getEmbedding(content);
+        // Update existing — re-queue for async embedding
         await pool.query(
-          'UPDATE memories SET content = $1, embedding = $2 WHERE source_ref = $3',
-          [content, embedding, ref]
+          'UPDATE memories SET content = $1, embedding_status = $2 WHERE source_ref = $3',
+          [content, 'pending', ref]
         );
       }
     }

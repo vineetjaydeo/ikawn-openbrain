@@ -6,6 +6,7 @@ const { searchWeb } = require('../utils/web-search');
 const { readLink } = require('../utils/link-reader');
 const { extractText } = require('../utils/doc-parser');
 const { getEmbedding } = require('../embeddings');
+const { captureMessage } = require('../utils/capture');
 
 /**
  * RAG: search memories for relevant context.
@@ -14,17 +15,37 @@ const { getEmbedding } = require('../embeddings');
  */
 async function searchMemories(query, limit = 8) {
   try {
-    const embedding = await getEmbedding(query);
-    // Fetch more candidates, then re-rank with recency
-    const result = await pool.query(
-      `SELECT content, memory_type, source, project, created_at,
-              cosine_similarity(embedding, $1) AS similarity
-       FROM memories
-       WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false)
-       ORDER BY cosine_similarity(embedding, $1) DESC
-       LIMIT 30`,
-      [embedding]
-    );
+    let embedding = null;
+    try {
+      embedding = await getEmbedding(query);
+    } catch (err) {
+      console.error('RAG embedding failed, falling back to text search:', err.message);
+    }
+
+    let result;
+    if (embedding) {
+      // Fetch more candidates, then re-rank with recency
+      result = await pool.query(
+        `SELECT content, memory_type, source, project, created_at,
+                cosine_similarity(embedding, $1) AS similarity
+         FROM memories
+         WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
+         ORDER BY cosine_similarity(embedding, $1) DESC
+         LIMIT 30`,
+        [embedding]
+      );
+    } else {
+      // Fallback to text search
+      result = await pool.query(
+        `SELECT content, memory_type, source, project, created_at,
+                0.5 AS similarity
+         FROM memories
+         WHERE content ILIKE '%' || $1 || '%' AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 30`,
+        [query]
+      );
+    }
     if (result.rows.length === 0) return '';
 
     const now = Date.now();
@@ -381,6 +402,26 @@ ${memoryContext}
 
     // Send done event
     res.write(`data: ${JSON.stringify({ type: 'done', message_id: assistantMsgRows[0].id })}\n\n`);
+
+    // Capture both sides to memories (fire-and-forget, never blocks)
+    const brandId = req.session?.brand_id || 'ikawn';
+    const msgId = assistantMsgRows[0].id;
+    captureMessage({
+      brand_id: brandId,
+      session_id: String(conversation_id),
+      channel: 'web',
+      direction: 'inbound',
+      content: content,
+      source_ref: `web_in_${conversation_id}_${userMsgRows[0].id}`
+    });
+    captureMessage({
+      brand_id: brandId,
+      session_id: String(conversation_id),
+      channel: 'web',
+      direction: 'outbound',
+      content: fullResponse,
+      source_ref: `web_out_${conversation_id}_${msgId}`
+    });
 
     // Auto-generate title for first user message
     if (isFirstUserMessage) {

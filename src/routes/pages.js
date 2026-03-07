@@ -186,14 +186,15 @@ function adminPage(user) {
 </head>
 <body>
   <div class="header">
-    <div>
-      <h1>Ruhi Admin</h1>
-      <p class="subtitle">Manage users &mdash; ${user.email}</p>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <a href="/" class="btn btn-outline" style="padding:8px 12px;font-size:1.1rem;line-height:1;" title="Back to chat">&times;</a>
+      <div>
+        <h1>Ruhi Admin</h1>
+        <p class="subtitle">Manage users &mdash; ${user.email}</p>
+      </div>
     </div>
     <div class="header-right">
-      <a href="/">&larr; Back</a>
       <a href="/admin/brain-health" class="btn btn-outline">Brain Health</a>
-      <a href="/admin/costs" class="btn btn-outline">Costs API</a>
       <button class="btn btn-primary" onclick="showAddModal()">Add User</button>
     </div>
   </div>

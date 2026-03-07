@@ -179,13 +179,15 @@ function brainHealthPage() {
 </head>
 <body>
   <div class="header">
-    <div>
-      <h1>Brain Health</h1>
-      <p class="subtitle">OpenAI cost monitoring &amp; system health</p>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <a href="/" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:1.1rem;text-decoration:none;" title="Back to chat">&times;</a>
+      <div>
+        <h1>Brain Health</h1>
+        <p class="subtitle">OpenAI cost monitoring &amp; system health</p>
+      </div>
     </div>
     <div class="header-right">
-      <a href="/">&larr; Back</a>
-      <a href="/admin">Admin</a>
+      <a href="/admin" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;">Admin</a>
     </div>
   </div>
 

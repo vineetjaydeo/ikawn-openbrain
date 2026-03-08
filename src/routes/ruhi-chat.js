@@ -3,6 +3,7 @@ const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
 const { streamChat } = require('../utils/llm');
 const { buildSystemPrompt } = require('../ruhi/persona');
+const { captureMessage } = require('../utils/capture');
 
 const router = Router();
 
@@ -127,19 +128,24 @@ router.post('/chat', async (req, res) => {
       },
     });
 
-    // Save user message to memories — embedding handled async by worker
-    await pool.query(
-      `INSERT INTO memories (content, source, memory_type, access_level, group_id, conversation_id, author, brand_id, embedding_status)
-       VALUES ($1, 'chat', 'discussion', $2, $3, $4, $5, 'ikawn', 'pending')`,
-      [message, access_level || 'private', group_id || null, convId, obUser.name.toLowerCase()]
-    );
-
-    // Save Ruhi's response to memories — embedding handled async by worker
-    await pool.query(
-      `INSERT INTO memories (content, source, memory_type, access_level, group_id, conversation_id, author, brand_id, embedding_status)
-       VALUES ($1, 'chat', 'discussion', $2, $3, $4, 'ruhi', 'ikawn', 'pending')`,
-      [fullResponse, access_level || 'private', group_id || null, convId]
-    );
+    // Save both sides to memories via captureMessage (idempotent, proper metadata)
+    const authorName = (obUser?.name || req.session?.user?.name || 'user').toLowerCase();
+    captureMessage({
+      brand_id: 'ikawn',
+      channel: 'ruhi-chat',
+      direction: 'inbound',
+      content: message,
+      source_ref: `ruhi_in_${convId}_${Date.now()}`,
+      metadata: { project: 'ruhi-chat' }
+    });
+    captureMessage({
+      brand_id: 'ikawn',
+      channel: 'ruhi-chat',
+      direction: 'outbound',
+      content: fullResponse,
+      source_ref: `ruhi_out_${convId}_${Date.now()}`,
+      metadata: { project: 'ruhi-chat' }
+    });
 
     // Update conversation last_activity
     await pool.query(

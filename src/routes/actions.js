@@ -115,16 +115,17 @@ router.post('/api/actions/complete', requireAuthOrApiKey, async (req, res) => {
       WHERE ikawn_generation_id = $4
     `, [status || 'completed', outputUrls, JSON.stringify(metadata || {}), generationId, outputUrls.length]);
 
-    // Capture to memories so it's searchable
-    if (status === 'completed' && urls && urls.length > 0) {
-      captureMessage({
-        brand_id: 'ikawn',
-        channel: 'api',
-        direction: 'outbound',
-        content: `Generation completed. Agent: ${metadata?.agent || 'unknown'}. URLs: ${urls.join(', ')}`,
-        source_ref: `generation_complete_${generationId}`
-      });
-    }
+    // Capture ALL generation outcomes to memories (success, error, empty)
+    const agent = metadata?.agent || 'unknown';
+    const genStatus = status || 'completed';
+    const urlList = outputUrls.length > 0 ? ` URLs: ${outputUrls.join(', ')}` : '';
+    captureMessage({
+      brand_id: 'ikawn',
+      channel: 'api',
+      direction: 'outbound',
+      content: `Generation ${genStatus}. Agent: ${agent}.${urlList}`,
+      source_ref: `generation_${genStatus}_${generationId}`
+    });
 
     res.json({ ok: true, urls: outputUrls, output_count: outputUrls.length });
   } catch (err) {

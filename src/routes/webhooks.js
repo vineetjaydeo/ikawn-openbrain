@@ -131,7 +131,7 @@ router.post('/webhooks/telegram/:token', async (req, res) => {
   const openclawWebhookSecret = process.env.OPENCLAW_WEBHOOK_SECRET;
   if (openclawWebhookUrl) {
     try {
-      const forwardUrl = `${openclawWebhookUrl}/telegram-webhook`;
+      const forwardUrl = openclawWebhookUrl;
       const headers = { 'Content-Type': 'application/json' };
       if (openclawWebhookSecret) {
         headers['X-Telegram-Bot-Api-Secret-Token'] = openclawWebhookSecret;

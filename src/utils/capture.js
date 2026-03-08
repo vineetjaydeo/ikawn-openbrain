@@ -23,7 +23,7 @@ async function captureMessage({
         source_ref, tags, author, project,
         embedding_status
       ) VALUES ($1, $2, $3, 'conversation', $4, $5, $6, $7, 'pending')
-      ON CONFLICT (source_ref) DO UPDATE SET
+      ON CONFLICT (source_ref) WHERE source_ref IS NOT NULL DO UPDATE SET
         content = EXCLUDED.content,
         updated_at = NOW()
       RETURNING id

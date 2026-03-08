@@ -109,39 +109,31 @@ router.post('/webhooks/github', async (req, res) => {
 });
 
 // Telegram webhook — authenticated by bot token in URL path
-// Captures message to OpenBrain DB, then forwards raw update to OpenClaw for response
+// Forwards to OpenClaw first (user-facing), then captures to OpenBrain DB
 router.post('/webhooks/telegram/:token', async (req, res) => {
   const expectedToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!expectedToken || req.params.token !== expectedToken) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 
-  // Respond to Telegram immediately — processing happens async
-  res.json({ ok: true });
+  const body = req.body;
 
-  try {
-    // Capture message to OpenBrain DB (real-time sync)
-    await handleUpdate(req.body);
-  } catch (err) {
-    console.error('Telegram webhook capture error:', err);
-  }
-
-  // Forward raw update to OpenClaw webhook listener for LLM processing + response
+  // Forward to OpenClaw FIRST — this is the critical path for user response.
+  // Must happen before res.json() to avoid Fly.io killing async continuation.
   const openclawWebhookUrl = process.env.OPENCLAW_WEBHOOK_URL;
   const openclawWebhookSecret = process.env.OPENCLAW_WEBHOOK_SECRET;
   if (openclawWebhookUrl) {
     try {
-      const forwardUrl = openclawWebhookUrl;
       const headers = { 'Content-Type': 'application/json' };
       if (openclawWebhookSecret) {
         headers['X-Telegram-Bot-Api-Secret-Token'] = openclawWebhookSecret;
       }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      await fetch(forwardUrl, {
+      await fetch(openclawWebhookUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify(req.body),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -149,6 +141,18 @@ router.post('/webhooks/telegram/:token', async (req, res) => {
     } catch (err) {
       console.error('[Telegram] Failed to forward to OpenClaw:', err.message);
     }
+  } else {
+    console.warn('[Telegram] OPENCLAW_WEBHOOK_URL not set, skipping forward');
+  }
+
+  // Respond to Telegram — forwarding is done, capture can happen async
+  res.json({ ok: true });
+
+  // Capture message to OpenBrain DB (async, non-blocking for user)
+  try {
+    await handleUpdate(body);
+  } catch (err) {
+    console.error('Telegram webhook capture error:', err);
   }
 });
 

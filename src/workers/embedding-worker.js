@@ -24,24 +24,28 @@ async function processPendingEmbeddings() {
     });
 
     for (let i = 0; i < rows.length; i++) {
+      // Postgres float8[] expects array parameter, not JSON string
       await pool.query(`
         UPDATE memories
-        SET embedding = $1,
+        SET embedding = $1::float8[],
             embedding_status = 'done',
             embedding_model = 'text-embedding-3-small',
             embedded_at = NOW()
         WHERE id = $2
-      `, [JSON.stringify(response.data[i].embedding), rows[i].id]);
+      `, [`{${response.data[i].embedding.join(',')}}`, rows[i].id]);
     }
 
     console.log(`[EmbeddingWorker] Processed ${rows.length} memories`);
   } catch (err) {
-    // Try to mark as failed
+    // Try to mark as failed so they don't retry forever
     try {
       await pool.query(`
         UPDATE memories SET embedding_status = 'failed'
-        WHERE embedding_status = 'pending' AND deleted_at IS NULL
-        ORDER BY created_at ASC LIMIT $1
+        WHERE id IN (
+          SELECT id FROM memories
+          WHERE embedding_status = 'pending' AND deleted_at IS NULL
+          ORDER BY created_at ASC LIMIT $1
+        )
       `, [BATCH_SIZE]);
     } catch (_) {}
     console.error('[EmbeddingWorker] Batch failed:', err.message);

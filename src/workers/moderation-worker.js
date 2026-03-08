@@ -4,6 +4,23 @@ const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const INTERVAL_MS = 30000;
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const VINEET_CHAT_ID = '534771402';
+
+async function notifyTelegram(memoryId, score, flags, content) {
+  if (!BOT_TOKEN) return;
+  try {
+    const preview = content.length > 200 ? content.slice(0, 200) + '...' : content;
+    const text = `🔴 *SEVERE content detected*\n\nMemory ID: ${memoryId}\nScore: ${score.toFixed(3)}\nFlags: ${flags.join(', ')}\n\nPreview:\n\`${preview}\``;
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: VINEET_CHAT_ID, text, parse_mode: 'Markdown' }),
+    });
+  } catch (err) {
+    console.error('[Moderation] Telegram notify failed:', err.message);
+  }
+}
 
 async function moderateUnscored() {
   try {
@@ -45,6 +62,7 @@ async function moderateUnscored() {
 
         if (maxScore > 0.9) {
           console.error(`[Moderation] SEVERE content detected in memory ${row.id}. Manual review required.`);
+          await notifyTelegram(row.id, maxScore, flags, row.content);
         }
       } catch (err) {
         console.error('[Moderation] Failed for memory', row.id, err.message);

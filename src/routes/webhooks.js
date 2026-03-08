@@ -126,15 +126,21 @@ router.post('/webhooks/telegram/:token', async (req, res) => {
     console.error('Telegram webhook capture error:', err);
   }
 
-  // Forward raw update to OpenClaw for LLM processing + response
+  // Forward raw update to OpenClaw webhook listener for LLM processing + response
   const openclawWebhookUrl = process.env.OPENCLAW_WEBHOOK_URL;
+  const openclawWebhookSecret = process.env.OPENCLAW_WEBHOOK_SECRET;
   if (openclawWebhookUrl) {
     try {
+      const forwardUrl = `${openclawWebhookUrl}/telegram-webhook`;
+      const headers = { 'Content-Type': 'application/json' };
+      if (openclawWebhookSecret) {
+        headers['X-Telegram-Bot-Api-Secret-Token'] = openclawWebhookSecret;
+      }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      await fetch(openclawWebhookUrl, {
+      await fetch(forwardUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(req.body),
         signal: controller.signal,
       });

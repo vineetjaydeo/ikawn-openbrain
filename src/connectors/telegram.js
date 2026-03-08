@@ -295,13 +295,15 @@ async function handleSelfReport({ content, project, hashtags }) {
   }
 
   const sourceRef = `openclaw-report-${Date.now()}`;
-  const autoHashtags = hashtags || await suggestHashtags(content);
+  const autoHashtags = Array.isArray(hashtags) && hashtags.length > 0
+    ? hashtags
+    : await suggestHashtags(content);
 
   const result = await pool.query(
     `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
      VALUES ($1, 'openclaw', 'note', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
      RETURNING id, content, source, created_at`,
-    [content.slice(0, 8000), sourceRef, project || null, 'openclaw', Array.isArray(autoHashtags) && autoHashtags.length > 0 ? autoHashtags : null]
+    [content.slice(0, 8000), sourceRef, project || null, 'openclaw', autoHashtags.length > 0 ? autoHashtags : null]
   );
 
   await pool.query(

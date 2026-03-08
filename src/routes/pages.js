@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { requireAuth, requireAdmin } = require('../auth');
+const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
 
 const router = Router();
 
@@ -37,6 +38,7 @@ function loginPage() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenBrain | Sign In</title>
+  ${RUHI_FAVICON_LINK}
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}
@@ -46,8 +48,11 @@ function loginPage() {
       width: 56px; height: 56px; border-radius: 14px;
       background: #e5a819;
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.3rem; font-weight: 700; color: #0a0a0a;
+      padding: 8px;
       margin: 0 auto 16px;
+    }
+    .brand-icon img {
+      width: 100%; height: 100%; object-fit: contain;
     }
     h1 { font-size: 1.8rem; margin-bottom: 6px; color: #fafafa; font-weight: 600; letter-spacing: -0.02em; }
     p { color: #a1a1aa; margin-bottom: 28px; font-size: 0.95rem; }
@@ -60,7 +65,7 @@ function loginPage() {
 </head>
 <body>
   <div class="container">
-    <div class="brand-icon">R</div>
+    <div class="brand-icon"><img src="${RUHI_ICON_URL}" alt="Ruhi"></div>
     <h1>Ruhi</h1>
     <p>Sign in with your @ikawn.com account</p>
     <form onsubmit="login(event)">
@@ -144,6 +149,7 @@ function adminPage(user) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenBrain | Admin</title>
+  ${RUHI_FAVICON_LINK}
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}
@@ -292,6 +298,7 @@ function settingsPage(user) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenBrain | Settings</title>
+  ${RUHI_FAVICON_LINK}
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}

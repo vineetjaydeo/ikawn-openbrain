@@ -430,14 +430,11 @@ ${memoryContext}
     // Auto-generate title for first user message
     if (isFirstUserMessage) {
       try {
-        const primaryModelRow = await pool.query("SELECT value FROM settings WHERE key = 'primary_model'");
-        const primaryModel = primaryModelRow.rows.length ? primaryModelRow.rows[0].value : undefined;
-
         const titleResult = await chatCompletion(
           [
             { role: 'user', content: `Generate a 3-5 word title for this conversation. Respond with only the title, no quotes or punctuation.\n\nUser message: ${content}` }
           ],
-          { model: primaryModel }
+          { model: 'gpt-4o-mini' }
         );
 
         const title = (titleResult.content || titleResult).toString().trim().slice(0, 100);

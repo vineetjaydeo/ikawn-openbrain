@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { requireAuth } = require('../auth');
+const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
 
 const router = Router();
 
@@ -19,6 +20,7 @@ function chatPage(user) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OpenBrain | Ruhi by iKawn</title>
+  ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
@@ -99,9 +101,12 @@ function chatPage(user) {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: #0a0a0a;
+      padding: 4px;
+    }
+    .sidebar-brand-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
     }
 
     .sidebar-brand-name {
@@ -755,7 +760,7 @@ function chatPage(user) {
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-brand">
-          <div class="sidebar-brand-icon">R</div>
+          <div class="sidebar-brand-icon"><img src="${RUHI_ICON_URL}" alt="Ruhi"></div>
           <span class="sidebar-brand-name">Ruhi</span>
         </div>
         <button class="btn-new-chat" onclick="newChat()">

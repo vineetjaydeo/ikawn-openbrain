@@ -200,6 +200,7 @@ function adminPage(user) {
       </div>
     </div>
     <div class="header-right">
+      <a href="/admin/api-keys" class="btn btn-outline">API Keys</a>
       <a href="/admin/brain-health" class="btn btn-outline">Brain Health</a>
       <button class="btn btn-primary" onclick="showAddModal()">Add User</button>
     </div>

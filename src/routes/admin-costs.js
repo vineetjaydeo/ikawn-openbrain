@@ -190,6 +190,7 @@ function brainHealthPage() {
     </div>
     <div class="header-right">
       <a href="/admin" class="btn-outline" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;display:inline-block;">Admin</a>
+      <a href="/admin/api-keys" class="btn-outline" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;display:inline-block;">API Keys</a>
     </div>
   </div>
 

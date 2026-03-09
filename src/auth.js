@@ -1,3 +1,6 @@
+const crypto = require('crypto');
+const { pool } = require('./db');
+
 function requireAuth(req, res, next) {
   if (req.session && req.session.user) {
     if (req.session.user.status === 'suspended') {
@@ -23,14 +26,52 @@ function requireAdmin(req, res, next) {
 }
 
 function requireAuthOrApiKey(req, res, next) {
-  // Check API key first
   const apiKey = req.headers['x-api-key'];
-  if (apiKey && process.env.OPENBRAIN_API_KEY && apiKey === process.env.OPENBRAIN_API_KEY) {
+  if (!apiKey) {
+    return requireAuth(req, res, next);
+  }
+
+  // 1. Check legacy env var first (backward compat)
+  if (process.env.OPENBRAIN_API_KEY && apiKey === process.env.OPENBRAIN_API_KEY) {
     req.apiClient = true;
     return next();
   }
-  // Fall through to session auth
-  return requireAuth(req, res, next);
+
+  // 2. Check DB-managed keys
+  const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+  pool.query(
+    `SELECT id, name, expires_at, revoked_at FROM api_keys WHERE key_hash = $1`,
+    [keyHash]
+  ).then(result => {
+    const key = result.rows[0];
+    if (!key) {
+      // No match in env or DB
+      return requireAuth(req, res, next);
+    }
+    if (key.revoked_at) {
+      return res.status(401).json({ error: 'API key has been revoked' });
+    }
+    if (key.expires_at && new Date(key.expires_at) < new Date()) {
+      return res.status(401).json({ error: 'API key has expired' });
+    }
+
+    req.apiClient = true;
+    req.apiKeyId = key.id;
+    req.apiKeyName = key.name;
+
+    // Update last_used_at + log usage (fire-and-forget)
+    pool.query(`UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, [key.id]).catch(() => {});
+    pool.query(
+      `INSERT INTO api_key_usage (api_key_id, endpoint, method, ip_address) VALUES ($1, $2, $3, $4)`,
+      [key.id, req.path, req.method, req.ip]
+    ).catch(() => {});
+
+    return next();
+  }).catch(err => {
+    console.error('API key DB lookup error:', err.message);
+    // Fallback to session auth on DB error
+    return requireAuth(req, res, next);
+  });
 }
 
 function requireBrand(req, res, next) {

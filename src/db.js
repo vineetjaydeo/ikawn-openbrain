@@ -376,6 +376,43 @@ async function initSchema() {
       )
     `);
 
+    // ── OpenBrain v4: API Keys Management ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id SERIAL PRIMARY KEY,
+        key_hash TEXT NOT NULL UNIQUE,
+        key_prefix VARCHAR(16) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        created_by INTEGER REFERENCES users(id),
+        expires_at TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ,
+        last_used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS api_key_usage (
+        id BIGSERIAL PRIMARY KEY,
+        api_key_id INTEGER NOT NULL REFERENCES api_keys(id),
+        endpoint TEXT NOT NULL,
+        method VARCHAR(10) NOT NULL,
+        status_code INTEGER,
+        ip_address TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Index for fast hash lookups during auth
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash) WHERE revoked_at IS NULL
+    `);
+
+    // Index for usage log queries (by key + time)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_api_key_usage_key_id ON api_key_usage(api_key_id, created_at DESC)
+    `);
+
     // ── OpenBrain v3: Indexes ──
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_brand ON memories(brand_id);

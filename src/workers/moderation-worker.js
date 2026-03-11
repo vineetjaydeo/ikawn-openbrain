@@ -4,8 +4,12 @@ const OpenAI = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const INTERVAL_MS = 30000;
+const DELAY_BETWEEN_CALLS_MS = 1000; // 1s between API calls to avoid 429s
+const BACKOFF_MS = 5 * 60 * 1000; // 5 min backoff on rate limit
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const VINEET_CHAT_ID = '534771402';
+
+let rateLimitedUntil = 0; // timestamp when backoff expires
 
 async function notifyTelegram(memoryId, score, flags, content) {
   if (!BOT_TOKEN) return;
@@ -22,14 +26,23 @@ async function notifyTelegram(memoryId, score, flags, content) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function moderateUnscored() {
+  // Skip if we're in backoff period
+  if (Date.now() < rateLimitedUntil) {
+    return;
+  }
+
   try {
     const { rows } = await pool.query(`
       SELECT id, content FROM memories
       WHERE moderation_score IS NULL
         AND deleted_at IS NULL
       ORDER BY created_at ASC
-      LIMIT 20
+      LIMIT 10
     `);
 
     if (rows.length === 0) return;
@@ -49,7 +62,6 @@ async function moderateUnscored() {
         `, [maxScore, flags, row.id]);
 
         if (maxScore > 0.7) {
-          // Increment abuse counter on brand_ratings
           const mem = await pool.query('SELECT brand_id FROM memories WHERE id = $1', [row.id]);
           if (mem.rows.length > 0 && mem.rows[0].brand_id) {
             await pool.query(`
@@ -64,7 +76,15 @@ async function moderateUnscored() {
           console.error(`[Moderation] SEVERE content detected in memory ${row.id}. Manual review required.`);
           await notifyTelegram(row.id, maxScore, flags, row.content);
         }
+
+        // Delay between calls to stay under rate limits
+        await sleep(DELAY_BETWEEN_CALLS_MS);
       } catch (err) {
+        if (err.status === 429 || (err.message && err.message.includes('429'))) {
+          console.warn(`[Moderation] Rate limited. Backing off for 5 minutes.`);
+          rateLimitedUntil = Date.now() + BACKOFF_MS;
+          return; // Stop processing this batch entirely
+        }
         console.error('[Moderation] Failed for memory', row.id, err.message);
       }
     }
@@ -76,7 +96,7 @@ async function moderateUnscored() {
 let interval = null;
 
 function startModerationWorker() {
-  console.log('[ModerationWorker] Starting (30s interval)');
+  console.log('[ModerationWorker] Starting (30s interval, 1s between calls, 5min backoff on 429)');
   moderateUnscored();
   interval = setInterval(moderateUnscored, INTERVAL_MS);
 }

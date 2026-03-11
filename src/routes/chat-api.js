@@ -146,7 +146,7 @@ router.get('/api/conversations/:id', async (req, res) => {
       [internalId]
     );
     const conv = { ...convRows[0], id: convRows[0].uuid };
-    res.json({ ...conv, messages });
+    res.json({ ...conv, messages, share_token: convRows[0].share_token || null });
   } catch (err) {
     console.error('GET /api/conversations/:id error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -460,6 +460,90 @@ ${memoryContext}
     } else {
       res.status(500).json({ error: 'Internal server error' });
     }
+  }
+});
+
+// ── 6b. Create/get share link ──
+
+router.post('/api/conversations/:id/share', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, user_id, share_token FROM conversations WHERE uuid = $1',
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    if (rows[0].share_token) {
+      return res.json({ share_token: rows[0].share_token });
+    }
+
+    const { rows: updated } = await pool.query(
+      'UPDATE conversations SET share_token = gen_random_uuid(), shared_at = NOW() WHERE id = $1 RETURNING share_token',
+      [rows[0].id]
+    );
+    res.json({ share_token: updated[0].share_token });
+  } catch (err) {
+    console.error('POST /api/conversations/:id/share error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 6c. Revoke share link ──
+
+router.delete('/api/conversations/:id/share', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, user_id FROM conversations WHERE uuid = $1',
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    await pool.query(
+      'UPDATE conversations SET share_token = NULL, shared_at = NULL WHERE id = $1',
+      [rows[0].id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/conversations/:id/share error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 6d. Get conversation as markdown ──
+
+router.get('/api/conversations/:id/markdown', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { rows: convRows } = await pool.query(
+      'SELECT * FROM conversations WHERE uuid = $1',
+      [req.params.id]
+    );
+    if (!convRows.length) return res.status(404).json({ error: 'Not found' });
+    if (convRows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const { rows: messages } = await pool.query(
+      'SELECT role, content, created_at FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      [convRows[0].id]
+    );
+
+    const title = convRows[0].title || 'Conversation';
+    const date = new Date(convRows[0].created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    let md = `# ${title}\n\n*${date}*\n\n---\n\n`;
+
+    for (const msg of messages) {
+      const speaker = msg.role === 'assistant' ? '**Ruhi**' : '**You**';
+      const time = new Date(msg.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      md += `### ${speaker} *${time}*\n\n${msg.content || ''}\n\n---\n\n`;
+    }
+
+    res.json({ markdown: md, title });
+  } catch (err) {
+    console.error('GET /api/conversations/:id/markdown error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

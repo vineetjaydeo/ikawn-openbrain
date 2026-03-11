@@ -19,37 +19,38 @@ function chatPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="robots" content="noindex, nofollow">
   <title>OpenBrain | Ruhi by iKawn</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,500;0,600;1,400&family=Parkinsans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark-dimmed.min.css">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #222;
-      --bg-sidebar: #0a0a0a;
-      --bg-input: #18181b;
-      --bg-hover: #27272a;
-      --bg-assistant: #111113;
+      --bg: #0A0F2E;
+      --bg-sidebar: #070B22;
+      --bg-input: #111738;
+      --bg-hover: #171E45;
+      --bg-assistant: transparent;
       --bg-user: #1c1c1e;
-      --border: #27272a;
-      --border-light: #3f3f46;
-      --text: #fafafa;
-      --text-dim: #a1a1aa;
-      --text-muted: #52525b;
-      --accent: #e5a819;
-      --accent-hover: #d19a15;
-      --accent-glow: #e5a81920;
-      --accent-soft: #e5a81910;
+      --border: #1C2452;
+      --border-light: #252D5E;
+      --text: #E8EAF0;
+      --text-dim: #9498B0;
+      --text-muted: #5C6185;
+      --accent: #FFC01C;
+      --accent-hover: #F5B000;
+      --accent-glow: #FFC01C25;
+      --accent-soft: #FFC01C12;
       --danger: #ef4444;
       --success: #22c55e;
       --warm: #f0c878;
       --sidebar-w: 260px;
-      --radius: 12px;
-      --radius-sm: 8px;
+      --radius: 16px;
+      --radius-sm: 12px;
     }
 
     html, body {
@@ -77,7 +78,7 @@ function chatPage(user) {
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      transition: transform 0.25s ease;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 50;
     }
 
@@ -113,7 +114,8 @@ function chatPage(user) {
       font-size: 1.05rem;
       font-weight: 600;
       color: var(--text);
-      letter-spacing: -0.01em;
+      letter-spacing: -0.02em;
+      font-family: 'Parkinsans', 'Google Sans', sans-serif;
     }
 
     .btn-new-chat {
@@ -121,19 +123,21 @@ function chatPage(user) {
       padding: 10px 14px;
       background: var(--accent-soft);
       border: 1px solid var(--border-light);
-      border-radius: var(--radius-sm);
+      border-radius: 100px;
       color: var(--text);
-      font-size: 0.875rem;
+      font-size: 0.84rem;
       font-family: inherit;
+      font-weight: 500;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 8px;
-      transition: background 0.15s, border-color 0.15s;
+      transition: all 0.2s ease;
     }
     .btn-new-chat:hover {
-      background: var(--bg-hover);
+      background: var(--accent-glow);
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
     .btn-new-chat svg { flex-shrink: 0; }
 
@@ -157,16 +161,16 @@ function chatPage(user) {
     .conv-item {
       display: flex;
       align-items: center;
-      padding: 9px 10px;
-      border-radius: var(--radius-sm);
+      padding: 9px 12px;
+      border-radius: 10px;
       cursor: pointer;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: var(--text-dim);
-      transition: background 0.12s, color 0.12s;
+      transition: all 0.15s ease;
       position: relative;
     }
     .conv-item:hover { background: var(--bg-hover); color: var(--text); }
-    .conv-item.active { background: var(--bg-hover); color: var(--text); }
+    .conv-item.active { background: var(--accent-soft); color: var(--text); border: 1px solid var(--accent-glow); }
 
     .conv-item-title {
       flex: 1;
@@ -271,7 +275,6 @@ function chatPage(user) {
       flex: 1;
       overflow-y: auto;
       padding: 0;
-      scroll-behavior: smooth;
     }
     .messages::-webkit-scrollbar { width: 6px; }
     .messages::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
@@ -309,10 +312,11 @@ function chatPage(user) {
       margin-bottom: 4px;
     }
     .welcome-screen h2 {
-      font-size: 1.6rem;
+      font-size: 1.5rem;
       font-weight: 600;
       color: var(--text);
       letter-spacing: -0.02em;
+      font-family: 'Parkinsans', 'Google Sans', sans-serif;
     }
     .welcome-screen p {
       font-size: 1rem;
@@ -351,17 +355,20 @@ function chatPage(user) {
     }
 
     .msg-bubble {
-      font-size: 1.365rem;
+      font-size: 0.94rem;
+      line-height: 1.7;
       word-wrap: break-word;
       overflow-wrap: break-word;
     }
     .msg-row.user .msg-bubble {
       max-width: 75%;
-      padding: 12px 18px;
-      background: #111;
-      color: var(--text);
-      border-radius: 18px 18px 4px 18px;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #FFC01C, #F59E0B);
+      color: #0A0F2E;
+      border-radius: 20px 20px 6px 20px;
       font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 500;
+      box-shadow: 0 2px 12px rgba(255, 192, 28, 0.15);
     }
     .msg-row.assistant .msg-bubble {
       max-width: 100%;
@@ -369,7 +376,14 @@ function chatPage(user) {
       background: transparent;
       border: none;
       font-family: 'Noto Serif', Georgia, serif;
+      color: var(--text);
     }
+
+    /* ---------- Markdown heading type scale ---------- */
+    .msg-bubble h1 { font-size: 1.25rem; font-weight: 700; margin: 1em 0 0.4em; font-family: 'Parkinsans', 'Google Sans', sans-serif; color: var(--text); letter-spacing: -0.02em; }
+    .msg-bubble h2 { font-size: 1.1rem; font-weight: 600; margin: 0.9em 0 0.35em; font-family: 'Parkinsans', 'Google Sans', sans-serif; color: var(--text); letter-spacing: -0.01em; }
+    .msg-bubble h3 { font-size: 1rem; font-weight: 600; margin: 0.8em 0 0.3em; font-family: 'Google Sans', sans-serif; color: var(--text); }
+    .msg-bubble h4, .msg-bubble h5, .msg-bubble h6 { font-size: 0.94rem; font-weight: 600; margin: 0.7em 0 0.25em; font-family: 'Google Sans', sans-serif; color: var(--text-dim); }
 
     /* ---------- Attachments in messages ---------- */
     .msg-attachments {
@@ -617,13 +631,14 @@ function chatPage(user) {
       gap: 8px;
       background: var(--bg-input);
       border: 1px solid var(--border-light);
-      border-radius: var(--radius);
-      padding: 10px 14px;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      border-radius: 24px;
+      padding: 10px 16px;
+      transition: all 0.25s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
     .compose:focus-within {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-glow);
+      box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 16px rgba(0,0,0,0.2);
     }
 
     .compose-btn {
@@ -673,12 +688,13 @@ function chatPage(user) {
     #msg-input::placeholder { color: var(--text-muted); }
 
     .compose-btn.send-btn {
-      background: var(--accent);
-      color: #fff;
-      border-radius: 10px;
+      background: linear-gradient(135deg, #FFC01C, #F59E0B);
+      color: #0A0F2E;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(255, 192, 28, 0.25);
     }
-    .compose-btn.send-btn:hover { background: var(--accent-hover); }
-    .compose-btn.send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .compose-btn.send-btn:hover { background: linear-gradient(135deg, #F5B000, #E8920A); box-shadow: 0 4px 12px rgba(255, 192, 28, 0.35); }
+    .compose-btn.send-btn:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
 
     .input-hint {
       text-align: center;
@@ -723,6 +739,78 @@ function chatPage(user) {
       max-height: 90vh;
       border-radius: var(--radius-sm);
     }
+
+    /* ==================== SHARE DROPDOWN ==================== */
+    .share-wrapper {
+      position: absolute;
+      right: 16px;
+      top: 12px;
+      z-index: 30;
+    }
+    @media (max-width: 768px) {
+      .share-wrapper {
+        position: relative;
+        right: auto;
+        top: auto;
+        margin-left: auto;
+      }
+    }
+    .share-btn {
+      background: none;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      color: var(--text-dim);
+      cursor: pointer;
+      padding: 6px 12px;
+      font-size: 0.78rem;
+      font-family: inherit;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .share-btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--accent); }
+    .share-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      min-width: 240px;
+      padding: 6px;
+      z-index: 100;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .share-dropdown.visible { display: block; }
+    .share-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: none;
+      background: none;
+      color: var(--text-dim);
+      font-size: 0.82rem;
+      font-family: inherit;
+      cursor: pointer;
+      border-radius: 8px;
+      width: 100%;
+      text-align: left;
+      transition: background 0.12s, color 0.12s;
+    }
+    .share-dropdown-item:hover { background: var(--bg-hover); color: var(--text); }
+    .share-dropdown-item svg { flex-shrink: 0; }
+    .share-dropdown-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 8px;
+    }
+    .share-dropdown-item.active { color: var(--accent); }
+    .share-dropdown-item.danger { color: var(--danger); }
+    .share-dropdown-item.danger:hover { background: rgba(239,68,68,0.1); }
 
     /* ==================== SIDEBAR OVERLAY (mobile) ==================== */
     .sidebar-overlay {
@@ -787,6 +875,27 @@ function chatPage(user) {
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <span id="header-title" style="font-size:0.95rem;color:var(--text-dim)">New Chat</span>
+        <div class="share-wrapper" id="share-wrapper" style="display:none">
+          <button class="share-btn" onclick="toggleShareMenu(event)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Share
+          </button>
+          <div class="share-dropdown" id="share-dropdown">
+            <button class="share-dropdown-item" onclick="copyConversation()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy as Markdown
+            </button>
+            <button class="share-dropdown-item" onclick="downloadConversation()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download .md
+            </button>
+            <div class="share-dropdown-divider"></div>
+            <button class="share-dropdown-item" id="share-link-btn" onclick="toggleShareLink()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <span id="share-link-text">Create Shareable Link</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="messages" id="messages">
@@ -939,10 +1048,12 @@ function chatPage(user) {
         if (!res.ok) throw new Error('Failed to create conversation');
         const conv = await res.json();
         activeConvId = conv.id;
+        currentShareToken = null;
         clearMessages();
         document.getElementById('header-title').textContent = 'New Chat';
         history.pushState(null, '', '/chat/' + conv.id);
         await loadConversations();
+        updateShareUI();
         closeSidebar();
         document.getElementById('msg-input').focus();
       } catch (err) {
@@ -960,14 +1071,16 @@ function chatPage(user) {
         if (!res.ok) throw new Error('Failed to load conversation');
         const data = await res.json();
         activeConvId = id;
+        currentShareToken = data.share_token || null;
         renderMessages(data.messages || []);
         document.getElementById('header-title').textContent = data.title || 'New Chat';
         if (window.location.pathname !== '/chat/' + id) {
           history.pushState(null, '', '/chat/' + id);
         }
         renderConversationList();
+        updateShareUI();
         closeSidebar();
-        scrollToBottom();
+        scrollToBottom(true);
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -1026,8 +1139,15 @@ function chatPage(user) {
 
     /* ==================== MESSAGES ==================== */
     function clearMessages() {
-      document.getElementById('messages-inner').innerHTML =
-        '<div class="welcome-screen" id="welcome"><div class="welcome-icon">R</div><h2>Hi, I\\u2019m Ruhi</h2><p>Your intelligent commerce copilot. Ask me anything about your brand, business, or creative needs.</p></div>';
+      const container = document.getElementById('messages-inner');
+      container.textContent = '';
+      const welcome = document.createElement('div');
+      welcome.className = 'welcome-screen';
+      welcome.id = 'welcome';
+      welcome.innerHTML = '<div class="welcome-icon">R</div><h2>Hi, I\u2019m Ruhi</h2><p>Your intelligent commerce copilot. Ask me anything about your brand, business, or creative needs.</p>';
+      container.appendChild(welcome);
+      currentShareToken = null;
+      updateShareUI();
     }
 
     function renderMessages(messages) {
@@ -1150,7 +1270,7 @@ function chatPage(user) {
       clearPendingAttachments();
       clearReplyTo();
       updateSendBtn();
-      scrollToBottom();
+      scrollToBottom(true);
 
       // Show thinking indicator
       const typingRow = document.createElement('div');
@@ -1160,7 +1280,7 @@ function chatPage(user) {
         '<div class="msg-avatar assistant-avatar">R</div>'
         + '<div class="typing-content"><span class="typing-label">Thinking</span><div class="typing-dots"><span></span><span></span><span></span></div></div>';
       container.appendChild(typingRow);
-      scrollToBottom();
+      scrollToBottom(true);
 
       isStreaming = true;
       updateSendBtn();
@@ -1232,7 +1352,7 @@ function chatPage(user) {
                 bubble.querySelectorAll('pre code').forEach(el => {
                   if (!el.dataset.highlighted) { hljs.highlightElement(el); el.dataset.highlighted = 'true'; }
                 });
-                scrollToBottom();
+                scrollToBottom(false);
               } else if (evt.type === 'title' && evt.title) {
                 document.getElementById('header-title').textContent = evt.title;
                 // Update sidebar
@@ -1435,6 +1555,123 @@ function chatPage(user) {
       document.getElementById('lightbox-img').src = '';
     }
 
+    /* ==================== SHARE ==================== */
+    let currentShareToken = null;
+
+    function toggleShareMenu(e) {
+      e.stopPropagation();
+      const dd = document.getElementById('share-dropdown');
+      dd.classList.toggle('visible');
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+      const dd = document.getElementById('share-dropdown');
+      if (dd && !e.target.closest('.share-wrapper')) {
+        dd.classList.remove('visible');
+      }
+    });
+
+    function updateShareUI() {
+      const wrapper = document.getElementById('share-wrapper');
+      wrapper.style.display = activeConvId ? '' : 'none';
+
+      const linkBtn = document.getElementById('share-link-btn');
+      const linkText = document.getElementById('share-link-text');
+      if (currentShareToken) {
+        linkText.textContent = 'Copy Shared Link';
+        linkBtn.className = 'share-dropdown-item active';
+      } else {
+        linkText.textContent = 'Create Shareable Link';
+        linkBtn.className = 'share-dropdown-item';
+      }
+    }
+
+    async function copyConversation() {
+      if (!activeConvId) return;
+      try {
+        const res = await fetch('/api/conversations/' + activeConvId + '/markdown');
+        if (!res.ok) throw new Error('Failed to export');
+        const data = await res.json();
+        await navigator.clipboard.writeText(data.markdown);
+        showToast('Copied to clipboard', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+      document.getElementById('share-dropdown').classList.remove('visible');
+    }
+
+    async function downloadConversation() {
+      if (!activeConvId) return;
+      try {
+        const res = await fetch('/api/conversations/' + activeConvId + '/markdown');
+        if (!res.ok) throw new Error('Failed to export');
+        const data = await res.json();
+        const blob = new Blob([data.markdown], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (data.title || 'conversation').replace(/[^a-zA-Z0-9 _-]/g, '') + '.md';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Downloaded', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+      document.getElementById('share-dropdown').classList.remove('visible');
+    }
+
+    async function toggleShareLink() {
+      if (!activeConvId) return;
+      try {
+        if (currentShareToken) {
+          // Copy existing link
+          const url = window.location.origin + '/shared/' + currentShareToken;
+          await navigator.clipboard.writeText(url);
+          showToast('Link copied to clipboard', 'success');
+          document.getElementById('share-dropdown').classList.remove('visible');
+
+          // Show revoke option briefly
+          const linkBtn = document.getElementById('share-link-btn');
+          const linkText = document.getElementById('share-link-text');
+          linkText.textContent = 'Revoke Shared Link';
+          linkBtn.className = 'share-dropdown-item danger';
+          linkBtn.onclick = revokeShareLink;
+          return;
+        }
+
+        const res = await fetch('/api/conversations/' + activeConvId + '/share', { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to create link');
+        const data = await res.json();
+        currentShareToken = data.share_token;
+
+        const url = window.location.origin + '/shared/' + currentShareToken;
+        await navigator.clipboard.writeText(url);
+        showToast('Shareable link created & copied', 'success');
+        updateShareUI();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+      document.getElementById('share-dropdown').classList.remove('visible');
+    }
+
+    async function revokeShareLink() {
+      if (!activeConvId) return;
+      try {
+        const res = await fetch('/api/conversations/' + activeConvId + '/share', { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to revoke');
+        currentShareToken = null;
+        showToast('Shared link revoked', 'success');
+        updateShareUI();
+        // Reset button
+        const linkBtn = document.getElementById('share-link-btn');
+        linkBtn.onclick = toggleShareLink;
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+      document.getElementById('share-dropdown').classList.remove('visible');
+    }
+
     /* ==================== AUTH ==================== */
     async function logout() {
       await fetch('/auth/logout', { method: 'POST' });
@@ -1442,7 +1679,13 @@ function chatPage(user) {
     }
 
     /* ==================== UTILS ==================== */
-    function scrollToBottom() {
+    function isNearBottom() {
+      const el = document.getElementById('messages');
+      return el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    }
+
+    function scrollToBottom(force) {
+      if (!force && !isNearBottom()) return;
       const el = document.getElementById('messages');
       requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
     }

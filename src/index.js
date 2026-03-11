@@ -26,6 +26,7 @@ const gdprRoute = require('./routes/gdpr');
 const brainHealthRoute = require('./routes/brain-health');
 const adminCostsRoute = require('./routes/admin-costs');
 const adminApiKeysRoute = require('./routes/admin-api-keys');
+const sharedRoute = require('./routes/shared');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
@@ -61,12 +62,18 @@ app.use(cookieSession({
   sameSite: 'lax',
 }));
 
-// ── Rate Limiting ──
-app.use('/capture',             rateLimit({ windowMs: 60000, max: 60,  message: 'Capture rate limit exceeded' }));
-app.use('/search',              rateLimit({ windowMs: 60000, max: 120, message: 'Search rate limit exceeded' }));
+// ── Rate Limiting (skip for API key authenticated requests) ──
+const skipIfApiKey = (req) => !!req.headers['x-api-key'];
+app.use('/capture',             rateLimit({ windowMs: 60000, max: 60,  message: 'Capture rate limit exceeded', skip: skipIfApiKey }));
+app.use('/search',              rateLimit({ windowMs: 60000, max: 120, message: 'Search rate limit exceeded', skip: skipIfApiKey }));
 app.use('/api/chat',            rateLimit({ windowMs: 60000, max: 20,  message: 'Chat rate limit exceeded' }));
 app.use('/auth/login',          rateLimit({ windowMs: 60000, max: 5,   message: 'Too many login attempts', skipSuccessfulRequests: true }));
-app.use('/api/actions/trigger',  rateLimit({ windowMs: 60000, max: 10,  message: 'Generation rate limit exceeded' }));
+app.use('/api/actions/trigger',  rateLimit({ windowMs: 60000, max: 10,  message: 'Generation rate limit exceeded', skip: skipIfApiKey }));
+
+// robots.txt — block all crawlers from the entire site
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send('User-agent: *\nDisallow: /\n');
+});
 
 // Health check — no auth
 const appVersion = require('../package.json').version;
@@ -74,6 +81,9 @@ const appVersion = require('../package.json').version;
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: appVersion, timestamp: new Date().toISOString() });
 });
+
+// Public shared conversations — no auth required
+app.use(sharedRoute);
 
 
 // GitHub webhook — no session auth (uses signature verification)

@@ -275,6 +275,13 @@ async function initSchema() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_uuid ON conversations(uuid);
     `);
 
+    // Shareable conversations
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS share_token UUID;
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS shared_at TIMESTAMPTZ;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_share_token ON conversations(share_token) WHERE share_token IS NOT NULL;
+    `);
+
     // ── OpenBrain v3: edit_deltas — highest priority training data ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS edit_deltas (

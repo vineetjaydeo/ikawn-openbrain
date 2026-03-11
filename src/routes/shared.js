@@ -6,6 +6,12 @@ const router = Router();
 
 // Public shared conversation — no auth required
 router.get('/shared/:token', async (req, res) => {
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(req.params.token)) {
+    return res.status(404).send(notFoundPage());
+  }
+
   try {
     const { rows: convRows } = await pool.query(
       'SELECT * FROM conversations WHERE share_token = $1',

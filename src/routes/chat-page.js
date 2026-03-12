@@ -363,12 +363,13 @@ function chatPage(user) {
     .msg-row.user .msg-bubble {
       max-width: 75%;
       padding: 12px 20px;
-      background: linear-gradient(135deg, #FFC01C, #F59E0B);
-      color: #0A0F2E;
+      background: linear-gradient(135deg, rgba(255, 192, 28, 0.18), rgba(245, 158, 11, 0.14));
+      color: #e8e0d0;
       border-radius: 20px 20px 6px 20px;
+      border: 1px solid rgba(255, 192, 28, 0.25);
       font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       font-weight: 500;
-      box-shadow: 0 2px 12px rgba(255, 192, 28, 0.15);
+      box-shadow: 0 2px 12px rgba(255, 192, 28, 0.06);
     }
     .msg-row.assistant .msg-bubble {
       max-width: 100%;

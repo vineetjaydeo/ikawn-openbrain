@@ -110,8 +110,8 @@ flyctl secrets set KEY=value --app ikawn-v3
 
 ### ikawn-openbrain (OpenBrain)
 ```bash
-# Deploy (--no-cache is mandatory — Depot builder caches stale src layers)
-~/.fly/bin/flyctl deploy --app ikawn-openbrain --remote-only --no-cache
+# Deploy (--depot=false is mandatory — Depot builder caches stale src layers, --no-cache alone doesn't work)
+~/.fly/bin/flyctl deploy --app ikawn-openbrain --remote-only --depot=false
 
 # Logs
 ~/.fly/bin/flyctl logs --app ikawn-openbrain --no-tail

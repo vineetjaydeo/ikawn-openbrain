@@ -203,11 +203,13 @@ router.patch('/api/conversations/:id', async (req, res) => {
 router.post('/api/chat/send', async (req, res) => {
   if (!requireAuth(req, res)) return;
 
-  const { conversation_id, content, attachments, use_secondary } = req.body;
+  const { conversation_id, content: rawContent, attachments, use_secondary } = req.body;
 
-  if (!conversation_id || !content) {
-    return res.status(400).json({ error: 'conversation_id and content are required' });
+  const hasAttachments = attachments && Array.isArray(attachments) && attachments.length > 0;
+  if (!conversation_id || (!rawContent && !hasAttachments)) {
+    return res.status(400).json({ error: 'conversation_id and content (or attachments) are required' });
   }
+  const content = rawContent || '';
 
   try {
     // Verify conversation ownership (resolve UUID → internal ID)
@@ -266,7 +268,7 @@ router.post('/api/chat/send', async (req, res) => {
     historyRows.reverse();
 
     // RAG: search memories for context relevant to the user's message
-    const memoryContext = await searchMemories(content, 5);
+    const memoryContext = content ? await searchMemories(content, 5) : '';
 
     // Ruhi system prompt — loaded from knowledge base files at startup
     const kb = global.ruhiKnowledge || {};
@@ -415,7 +417,7 @@ ${memoryContext}
       session_id: String(conversation_id),
       channel: 'web',
       direction: 'inbound',
-      content: content,
+      content: content || '[Image shared]',
       source_ref: `web_in_${conversation_id}_${userMsgRows[0].id}`
     });
     captureMessage({
@@ -432,7 +434,7 @@ ${memoryContext}
       try {
         const titleResult = await chatCompletion(
           [
-            { role: 'user', content: `Generate a 3-5 word title for this conversation. Respond with only the title, no quotes or punctuation.\n\nUser message: ${content}` }
+            { role: 'user', content: `Generate a 3-5 word title for this conversation. Respond with only the title, no quotes or punctuation.\n\nUser message: ${content || '[User shared an image]'}` }
           ],
           { model: 'gpt-4o-mini' }
         );

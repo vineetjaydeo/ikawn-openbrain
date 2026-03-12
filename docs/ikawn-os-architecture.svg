@@ -1,0 +1,450 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0A0F2E"/>
+      <stop offset="100%" style="stop-color:#0D1117"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FFC01C"/>
+      <stop offset="100%" style="stop-color:#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="goldGradV" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFC01C"/>
+      <stop offset="100%" style="stop-color:#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#06B6D4"/>
+      <stop offset="100%" style="stop-color:#0EA5E9"/>
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8B5CF6"/>
+      <stop offset="100%" style="stop-color:#A78BFA"/>
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#10B981"/>
+      <stop offset="100%" style="stop-color:#34D399"/>
+    </linearGradient>
+    <linearGradient id="roseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F43F5E"/>
+      <stop offset="100%" style="stop-color:#FB7185"/>
+    </linearGradient>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F59E0B"/>
+      <stop offset="100%" style="stop-color:#FBBF24"/>
+    </linearGradient>
+
+    <!-- Glow filters -->
+    <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+      <feFlood flood-color="#FFC01C" flood-opacity="0.15" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="subtleGlow" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+      <feFlood flood-color="#FFC01C" flood-opacity="0.08" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge>
+        <feMergeNode in="shadow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Arrow marker -->
+    <marker id="arrowGold" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#FFC01C" opacity="0.7"/>
+    </marker>
+    <marker id="arrowCyan" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#06B6D4" opacity="0.7"/>
+    </marker>
+    <marker id="arrowWhite" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94A3B8" opacity="0.5"/>
+    </marker>
+    <marker id="arrowEmerald" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#10B981" opacity="0.7"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.03">
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(120,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(240,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(360,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(480,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(600,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(720,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(840,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(960,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(1080,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(1200,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(1320,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(1440,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(1560,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(1680,0)"/>
+    <line x1="0" y1="0" x2="0" y2="1080" stroke="#FFC01C" stroke-width="0.5" transform="translate(1800,0)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,120)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,240)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,360)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,480)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,600)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,720)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,840)"/>
+    <line x1="0" y1="0" x2="1920" y2="0" stroke="#FFC01C" stroke-width="0.5" transform="translate(0,960)"/>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- TITLE -->
+  <!-- ============================================ -->
+  <text x="960" y="52" text-anchor="middle" fill="url(#goldGrad)" font-family="system-ui, -apple-system, sans-serif" font-size="36" font-weight="700" filter="url(#goldGlow)">iKawn OS</text>
+  <text x="960" y="78" text-anchor="middle" fill="#94A3B8" font-family="system-ui, -apple-system, sans-serif" font-size="14" letter-spacing="4" text-transform="uppercase">How Ruhi's Brain Works</text>
+
+  <!-- ============================================ -->
+  <!-- LEFT SIDE: DATA SOURCES / CONNECTORS -->
+  <!-- ============================================ -->
+
+  <!-- Connector Registry Header -->
+  <rect x="40" y="120" width="280" height="36" rx="6" fill="none" stroke="url(#cyanGrad)" stroke-width="1" opacity="0.6"/>
+  <text x="180" y="143" text-anchor="middle" fill="#06B6D4" font-family="system-ui, sans-serif" font-size="13" font-weight="600" letter-spacing="2">CONNECTOR REGISTRY</text>
+  <text x="180" y="175" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="11" font-style="italic">The Nervous System</text>
+
+  <!-- Data source boxes -->
+  <g transform="translate(40, 195)">
+    <!-- Shopify -->
+    <rect x="0" y="0" width="130" height="44" rx="8" fill="#1A1F3D" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="20" cy="22" r="6" fill="#96BF48" opacity="0.8"/>
+    <text x="34" y="26" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="12" font-weight="500">Shopify</text>
+
+    <!-- GA4 -->
+    <rect x="140" y="0" width="130" height="44" rx="8" fill="#1A1F3D" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="160" cy="22" r="6" fill="#E37400" opacity="0.8"/>
+    <text x="174" y="26" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="12" font-weight="500">Google Analytics</text>
+
+    <!-- Meta Ads -->
+    <rect x="0" y="54" width="130" height="44" rx="8" fill="#1A1F3D" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="20" cy="76" r="6" fill="#1877F2" opacity="0.8"/>
+    <text x="34" y="80" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="12" font-weight="500">Meta Ads</text>
+
+    <!-- Klaviyo -->
+    <rect x="140" y="54" width="130" height="44" rx="8" fill="#1A1F3D" stroke="#334155" stroke-width="0.5"/>
+    <circle cx="160" cy="76" r="6" fill="#2AD47B" opacity="0.8"/>
+    <text x="174" y="80" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="12" font-weight="500">Klaviyo</text>
+
+    <!-- MCP Passthrough -->
+    <rect x="0" y="108" width="270" height="44" rx="8" fill="#1A1F3D" stroke="#FFC01C" stroke-width="0.5" opacity="0.8"/>
+    <circle cx="20" cy="130" r="6" fill="#FFC01C" opacity="0.8"/>
+    <text x="34" y="127" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="12" font-weight="500">MCP Passthrough</text>
+    <text x="34" y="140" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Any platform with an MCP endpoint</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- SIGNAL LAYER (below connectors) -->
+  <!-- ============================================ -->
+  <rect x="40" y="420" width="280" height="90" rx="10" fill="#1A1F3D" stroke="url(#cyanGrad)" stroke-width="1" opacity="0.5"/>
+  <text x="180" y="447" text-anchor="middle" fill="#06B6D4" font-family="system-ui, sans-serif" font-size="13" font-weight="600" letter-spacing="1">SIGNAL LAYER</text>
+  <text x="180" y="466" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Normalized Intelligence</text>
+  <text x="180" y="485" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Every connector produces the same format.</text>
+  <text x="180" y="498" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Ruhi never sees raw platform data.</text>
+
+  <!-- Arrows from connectors to signal layer -->
+  <line x1="180" y1="350" x2="180" y2="418" stroke="#06B6D4" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowCyan)" opacity="0.4"/>
+
+  <!-- ============================================ -->
+  <!-- CENTER: RUHI'S BRAIN (The Core) -->
+  <!-- ============================================ -->
+
+  <!-- Outer glow ring for Ruhi -->
+  <ellipse cx="960" cy="440" rx="340" ry="260" fill="none" stroke="#FFC01C" stroke-width="0.5" opacity="0.08"/>
+  <ellipse cx="960" cy="440" rx="320" ry="245" fill="none" stroke="#FFC01C" stroke-width="0.3" opacity="0.05"/>
+
+  <!-- Main Ruhi container -->
+  <rect x="550" y="120" width="820" height="640" rx="20" fill="#0F1429" stroke="url(#goldGrad)" stroke-width="1.5" opacity="0.95" filter="url(#softGlow)"/>
+
+  <!-- Ruhi label -->
+  <text x="960" y="155" text-anchor="middle" fill="url(#goldGrad)" font-family="system-ui, sans-serif" font-size="22" font-weight="700" letter-spacing="3">RUHI</text>
+  <text x="960" y="175" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="11" letter-spacing="1">Commerce Intelligence Copilot</text>
+
+  <!-- ============================================ -->
+  <!-- SENSE Phase -->
+  <!-- ============================================ -->
+  <rect x="590" y="200" width="180" height="100" rx="12" fill="#111833" stroke="#06B6D4" stroke-width="1" opacity="0.8"/>
+  <text x="680" y="228" text-anchor="middle" fill="#06B6D4" font-family="system-ui, sans-serif" font-size="14" font-weight="700">SENSE</text>
+  <line x1="640" y1="238" x2="720" y2="238" stroke="#06B6D4" stroke-width="0.5" opacity="0.3"/>
+  <text x="680" y="258" text-anchor="middle" fill="#CBD5E1" font-family="system-ui, sans-serif" font-size="10">Signal Analyst</text>
+  <text x="680" y="274" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Reads all connected</text>
+  <text x="680" y="287" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">sources, produces report</text>
+
+  <!-- ============================================ -->
+  <!-- DECIDE Phase -->
+  <!-- ============================================ -->
+  <rect x="590" y="320" width="180" height="100" rx="12" fill="#111833" stroke="url(#purpleGrad)" stroke-width="1" opacity="0.8"/>
+  <text x="680" y="348" text-anchor="middle" fill="#A78BFA" font-family="system-ui, sans-serif" font-size="14" font-weight="700">DECIDE</text>
+  <line x1="640" y1="358" x2="720" y2="358" stroke="#8B5CF6" stroke-width="0.5" opacity="0.3"/>
+  <text x="680" y="378" text-anchor="middle" fill="#CBD5E1" font-family="system-ui, sans-serif" font-size="10">Orchestrator (LLM)</text>
+  <text x="680" y="394" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Reasons over signals,</text>
+  <text x="680" y="407" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">proposes strategy</text>
+
+  <!-- Arrow Sense -> Decide -->
+  <line x1="680" y1="302" x2="680" y2="318" stroke="#94A3B8" stroke-width="1" marker-end="url(#arrowWhite)" opacity="0.5"/>
+
+  <!-- ============================================ -->
+  <!-- GATE 1 -->
+  <!-- ============================================ -->
+  <rect x="590" y="440" width="180" height="56" rx="8" fill="#1C1917" stroke="#F59E0B" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="680" y="464" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="1">GATE 1</text>
+  <text x="680" y="482" text-anchor="middle" fill="#FBBF24" font-family="system-ui, sans-serif" font-size="9">Human confirms direction</text>
+
+  <!-- Arrow Decide -> Gate 1 -->
+  <line x1="680" y1="422" x2="680" y2="438" stroke="#94A3B8" stroke-width="1" marker-end="url(#arrowWhite)" opacity="0.5"/>
+
+  <!-- ============================================ -->
+  <!-- ORCHESTRATE Phase (center-right area) -->
+  <!-- ============================================ -->
+  <rect x="820" y="200" width="510" height="300" rx="14" fill="#0D1225" stroke="url(#emeraldGrad)" stroke-width="1" opacity="0.7"/>
+  <text x="1075" y="228" text-anchor="middle" fill="#34D399" font-family="system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="1">ORCHESTRATE</text>
+  <text x="1075" y="246" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="10">Parallel Execution via Subagents</text>
+
+  <!-- Subagent: Catalog Analyst -->
+  <rect x="840" y="262" width="145" height="56" rx="8" fill="#111833" stroke="#10B981" stroke-width="0.7"/>
+  <text x="912" y="284" text-anchor="middle" fill="#34D399" font-family="system-ui, sans-serif" font-size="10" font-weight="600">Catalog Analyst</text>
+  <text x="912" y="307" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Selects best SKUs</text>
+
+  <!-- Subagent: Visual Director -->
+  <rect x="1000" y="262" width="145" height="56" rx="8" fill="#111833" stroke="#10B981" stroke-width="0.7"/>
+  <text x="1072" y="284" text-anchor="middle" fill="#34D399" font-family="system-ui, sans-serif" font-size="10" font-weight="600">Visual Director</text>
+  <text x="1072" y="307" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Generates images</text>
+
+  <!-- Subagent: Video Producer -->
+  <rect x="1160" y="262" width="145" height="56" rx="8" fill="#111833" stroke="#10B981" stroke-width="0.7"/>
+  <text x="1232" y="284" text-anchor="middle" fill="#34D399" font-family="system-ui, sans-serif" font-size="10" font-weight="600">Video Producer</text>
+  <text x="1232" y="307" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Animates products</text>
+
+  <!-- Subagent: Copy Writer -->
+  <rect x="920" y="330" width="145" height="56" rx="8" fill="#111833" stroke="#10B981" stroke-width="0.7"/>
+  <text x="992" y="352" text-anchor="middle" fill="#34D399" font-family="system-ui, sans-serif" font-size="10" font-weight="600">Copy Writer</text>
+  <text x="992" y="375" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Brand voice captions</text>
+
+  <!-- Subagent: QA Agent -->
+  <rect x="1080" y="330" width="145" height="56" rx="8" fill="#111833" stroke="#10B981" stroke-width="0.7"/>
+  <text x="1152" y="352" text-anchor="middle" fill="#34D399" font-family="system-ui, sans-serif" font-size="10" font-weight="600">QA Agent</text>
+  <text x="1152" y="375" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Scores every asset</text>
+
+  <!-- Creative Agents Row inside Orchestrate -->
+  <text x="1075" y="415" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="9" letter-spacing="1">CREATIVE ENGINES</text>
+
+  <!-- Mini agent pills -->
+  <rect x="845" y="428" width="75" height="28" rx="14" fill="#1A1F3D" stroke="#FFC01C" stroke-width="0.5" opacity="0.7"/>
+  <text x="882" y="446" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Genie</text>
+
+  <rect x="930" y="428" width="75" height="28" rx="14" fill="#1A1F3D" stroke="#FFC01C" stroke-width="0.5" opacity="0.7"/>
+  <text x="967" y="446" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Remix</text>
+
+  <rect x="1015" y="428" width="75" height="28" rx="14" fill="#1A1F3D" stroke="#FFC01C" stroke-width="0.5" opacity="0.7"/>
+  <text x="1052" y="446" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Prism</text>
+
+  <rect x="1100" y="428" width="75" height="28" rx="14" fill="#1A1F3D" stroke="#FFC01C" stroke-width="0.5" opacity="0.7"/>
+  <text x="1137" y="446" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Lazarus</text>
+
+  <rect x="1185" y="428" width="75" height="28" rx="14" fill="#1A1F3D" stroke="#FFC01C" stroke-width="0.5" opacity="0.7"/>
+  <text x="1222" y="446" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="500">Muse</text>
+
+  <!-- Arrow from Gate1 to Orchestrate -->
+  <path d="M 770 468 Q 810 468 820 400" stroke="#FFC01C" stroke-width="1.2" fill="none" marker-end="url(#arrowGold)" opacity="0.4" stroke-dasharray="4,3"/>
+
+  <!-- ============================================ -->
+  <!-- GATE 2 -->
+  <!-- ============================================ -->
+  <rect x="820" y="520" width="510" height="56" rx="8" fill="#1C1917" stroke="#F59E0B" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="1075" y="544" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="11" font-weight="700" letter-spacing="1">GATE 2</text>
+  <text x="1075" y="562" text-anchor="middle" fill="#FBBF24" font-family="system-ui, sans-serif" font-size="9">Human reviews campaign, edits captions, approves</text>
+
+  <!-- Arrow Orchestrate -> Gate 2 -->
+  <line x1="1075" y1="502" x2="1075" y2="518" stroke="#94A3B8" stroke-width="1" marker-end="url(#arrowWhite)" opacity="0.5"/>
+
+  <!-- ============================================ -->
+  <!-- OUTCOME Phase -->
+  <!-- ============================================ -->
+  <rect x="590" y="600" width="760" height="76" rx="12" fill="#111833" stroke="url(#emeraldGrad)" stroke-width="1" opacity="0.6"/>
+  <text x="970" y="628" text-anchor="middle" fill="#34D399" font-family="system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="1">OUTCOME</text>
+  <text x="970" y="650" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Campaign published  |  Signals marked as acted  |  editDelta captured  |  Brand voice updated</text>
+  <text x="970" y="666" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Every session compounds. Every edit teaches.</text>
+
+  <!-- Arrow Gate 2 -> Outcome -->
+  <line x1="1075" y1="578" x2="1075" y2="598" stroke="#94A3B8" stroke-width="1" marker-end="url(#arrowWhite)" opacity="0.5"/>
+
+  <!-- ============================================ -->
+  <!-- HOTL Label -->
+  <!-- ============================================ -->
+  <rect x="590" y="515" width="180" height="56" rx="10" fill="none" stroke="#F59E0B" stroke-width="0.5" opacity="0.3"/>
+  <text x="680" y="538" text-anchor="middle" fill="#F59E0B" font-family="system-ui, sans-serif" font-size="10" font-weight="600" letter-spacing="1">HOTL PHILOSOPHY</text>
+  <text x="680" y="555" text-anchor="middle" fill="#FBBF24" font-family="system-ui, sans-serif" font-size="8">Human ON the Loop</text>
+  <text x="680" y="566" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="8">Machine speed. Human intent.</text>
+
+  <!-- ============================================ -->
+  <!-- RIGHT SIDE: MEMORY & INTELLIGENCE LAYER -->
+  <!-- ============================================ -->
+
+  <!-- Memory Layer Header -->
+  <rect x="1600" y="120" width="280" height="36" rx="6" fill="none" stroke="url(#purpleGrad)" stroke-width="1" opacity="0.6"/>
+  <text x="1740" y="143" text-anchor="middle" fill="#A78BFA" font-family="system-ui, sans-serif" font-size="13" font-weight="600" letter-spacing="2">INTELLIGENCE LAYER</text>
+  <text x="1740" y="175" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="11" font-style="italic">Memory + Context + Learning</text>
+
+  <!-- Memory boxes -->
+  <g transform="translate(1600, 195)">
+    <!-- Vector Memory -->
+    <rect x="0" y="0" width="280" height="52" rx="8" fill="#1A1F3D" stroke="#8B5CF6" stroke-width="0.5"/>
+    <circle cx="20" cy="26" r="6" fill="#8B5CF6" opacity="0.6"/>
+    <text x="34" y="22" fill="#C4B5FD" font-family="system-ui, sans-serif" font-size="11" font-weight="500">Semantic Memory (Vector Search)</text>
+    <text x="34" y="38" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Thoughts, notes, knowledge base</text>
+
+    <!-- Brand Context -->
+    <rect x="0" y="62" width="280" height="52" rx="8" fill="#1A1F3D" stroke="#8B5CF6" stroke-width="0.5"/>
+    <circle cx="20" cy="88" r="6" fill="#A78BFA" opacity="0.6"/>
+    <text x="34" y="84" fill="#C4B5FD" font-family="system-ui, sans-serif" font-size="11" font-weight="500">Brand Context</text>
+    <text x="34" y="100" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Colors, fonts, style, asset library</text>
+
+    <!-- Edit Deltas -->
+    <rect x="0" y="124" width="280" height="52" rx="8" fill="#1A1F3D" stroke="#FFC01C" stroke-width="0.5"/>
+    <circle cx="20" cy="150" r="6" fill="#FFC01C" opacity="0.6"/>
+    <text x="34" y="146" fill="#FBBF24" font-family="system-ui, sans-serif" font-size="11" font-weight="500">Edit Deltas (Brand Voice IP)</text>
+    <text x="34" y="162" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Caption edits teach brand voice</text>
+
+    <!-- Campaign History -->
+    <rect x="0" y="186" width="280" height="52" rx="8" fill="#1A1F3D" stroke="#8B5CF6" stroke-width="0.5"/>
+    <circle cx="20" cy="212" r="6" fill="#8B5CF6" opacity="0.6"/>
+    <text x="34" y="208" fill="#C4B5FD" font-family="system-ui, sans-serif" font-size="11" font-weight="500">Campaign History</text>
+    <text x="34" y="224" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Past strategies inform future decisions</text>
+
+    <!-- Conversation Memory -->
+    <rect x="0" y="248" width="280" height="52" rx="8" fill="#1A1F3D" stroke="#8B5CF6" stroke-width="0.5"/>
+    <circle cx="20" cy="274" r="6" fill="#8B5CF6" opacity="0.6"/>
+    <text x="34" y="270" fill="#C4B5FD" font-family="system-ui, sans-serif" font-size="11" font-weight="500">Conversation Memory</text>
+    <text x="34" y="286" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Persistent per-user context</text>
+  </g>
+
+  <!-- Arrow from Ruhi brain to Memory -->
+  <line x1="1370" y1="350" x2="1598" y2="350" stroke="#8B5CF6" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrowWhite)" opacity="0.3"/>
+  <line x1="1598" y1="350" x2="1370" y2="350" stroke="#8B5CF6" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.3"/>
+
+  <!-- Arrow from Signal Layer to Sense -->
+  <line x1="320" y1="465" x2="588" y2="260" stroke="#06B6D4" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrowCyan)" opacity="0.4"/>
+
+  <!-- ============================================ -->
+  <!-- BRAND VOICE FLYWHEEL (bottom right) -->
+  <!-- ============================================ -->
+  <rect x="1600" y="530" width="280" height="190" rx="12" fill="#111833" stroke="url(#goldGrad)" stroke-width="1" opacity="0.5"/>
+  <text x="1740" y="558" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="13" font-weight="700" letter-spacing="1">BRAND VOICE FLYWHEEL</text>
+  <text x="1740" y="578" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="9">Progressive Trust Model</text>
+
+  <!-- Flywheel steps -->
+  <text x="1620" y="602" fill="#CBD5E1" font-family="system-ui, sans-serif" font-size="10">Session 1</text>
+  <text x="1700" y="602" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Ruhi writes, brand edits 3</text>
+
+  <text x="1620" y="622" fill="#CBD5E1" font-family="system-ui, sans-serif" font-size="10">Session 2</text>
+  <text x="1700" y="622" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Reads editDeltas, brand edits 1</text>
+
+  <text x="1620" y="642" fill="#CBD5E1" font-family="system-ui, sans-serif" font-size="10">Session 5</text>
+  <text x="1700" y="642" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Matches voice, brand edits 0</text>
+
+  <text x="1620" y="662" fill="#FBBF24" font-family="system-ui, sans-serif" font-size="10" font-weight="600">Session 10+</text>
+  <text x="1715" y="662" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9">Auto-approval earned</text>
+
+  <!-- Circular arrow (flywheel visual) -->
+  <path d="M 1710 685 A 30 30 0 1 1 1770 685" stroke="url(#goldGrad)" stroke-width="1.5" fill="none" marker-end="url(#arrowGold)" opacity="0.5"/>
+  <text x="1740" y="710" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="8">Every edit teaches</text>
+
+  <!-- Arrow from Outcome to Flywheel -->
+  <path d="M 1352 660 Q 1470 660 1598 600" stroke="#FFC01C" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowGold)" opacity="0.3"/>
+
+  <!-- ============================================ -->
+  <!-- BOTTOM: USER INTERFACES -->
+  <!-- ============================================ -->
+
+  <!-- Orchestration Layer -->
+  <rect x="40" y="560" width="280" height="80" rx="10" fill="#111833" stroke="url(#roseGrad)" stroke-width="1" opacity="0.6"/>
+  <text x="180" y="588" text-anchor="middle" fill="#FB7185" font-family="system-ui, sans-serif" font-size="13" font-weight="600" letter-spacing="1">ORCHESTRATION LAYER</text>
+  <text x="180" y="606" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Background Tasks</text>
+  <text x="180" y="622" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Telegram, Scheduling, Cron Jobs</text>
+
+  <!-- Arrow from Orchestration to Ruhi -->
+  <path d="M 320 590 Q 420 540 548 500" stroke="#FB7185" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowWhite)" opacity="0.3"/>
+
+  <!-- ============================================ -->
+  <!-- BOTTOM BAR: User Surfaces -->
+  <!-- ============================================ -->
+  <rect x="40" y="780" width="1840" height="4" rx="2" fill="url(#goldGrad)" opacity="0.1"/>
+
+  <text x="960" y="820" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="12" letter-spacing="3">USER SURFACES</text>
+
+  <!-- Surface: Ruhi Chat -->
+  <rect x="120" y="845" width="260" height="90" rx="12" fill="#1A1F3D" stroke="url(#goldGrad)" stroke-width="1" opacity="0.7"/>
+  <text x="250" y="872" text-anchor="middle" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="13" font-weight="600">Ruhi Chat</text>
+  <text x="250" y="892" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Full-page conversational interface</text>
+  <text x="250" y="908" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Campaign planning, reviews, decisions</text>
+
+  <!-- Surface: Side Panel -->
+  <rect x="420" y="845" width="260" height="90" rx="12" fill="#1A1F3D" stroke="url(#goldGrad)" stroke-width="0.7" opacity="0.5"/>
+  <text x="550" y="872" text-anchor="middle" fill="#FBBF24" font-family="system-ui, sans-serif" font-size="13" font-weight="600">Side Panel</text>
+  <text x="550" y="892" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Ambient copilot on every page</text>
+  <text x="550" y="908" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Quick questions, suggestions, help</text>
+
+  <!-- Surface: Direct Agent Access -->
+  <rect x="720" y="845" width="260" height="90" rx="12" fill="#1A1F3D" stroke="#334155" stroke-width="0.7" opacity="0.5"/>
+  <text x="850" y="872" text-anchor="middle" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="13" font-weight="600">Direct Agent Access</text>
+  <text x="850" y="892" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Granular hands-on control</text>
+  <text x="850" y="908" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Genie, Remix, Prism, Lazarus, Muse</text>
+
+  <!-- Surface: Shopkeeper -->
+  <rect x="1020" y="845" width="260" height="90" rx="12" fill="#1A1F3D" stroke="#334155" stroke-width="0.7" opacity="0.5"/>
+  <text x="1150" y="872" text-anchor="middle" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="13" font-weight="600">Shopkeeper</text>
+  <text x="1150" y="892" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">AI Store Manager</text>
+  <text x="1150" y="908" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Products, inventory, creative assets</text>
+
+  <!-- Surface: Telegram -->
+  <rect x="1320" y="845" width="260" height="90" rx="12" fill="#1A1F3D" stroke="#334155" stroke-width="0.7" opacity="0.5"/>
+  <text x="1450" y="872" text-anchor="middle" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="13" font-weight="600">Telegram</text>
+  <text x="1450" y="892" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Chat-based access</text>
+  <text x="1450" y="908" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Mobile-first, on the go</text>
+
+  <!-- Surface: API -->
+  <rect x="1620" y="845" width="220" height="90" rx="12" fill="#1A1F3D" stroke="#334155" stroke-width="0.7" opacity="0.5"/>
+  <text x="1730" y="872" text-anchor="middle" fill="#E2E8F0" font-family="system-ui, sans-serif" font-size="13" font-weight="600">API / MCP</text>
+  <text x="1730" y="892" text-anchor="middle" fill="#94A3B8" font-family="system-ui, sans-serif" font-size="10">Programmatic access</text>
+  <text x="1730" y="908" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="9">Claude Desktop, integrations</text>
+
+  <!-- ============================================ -->
+  <!-- FLOW ARROWS (main pipeline on left) -->
+  <!-- ============================================ -->
+
+  <!-- Big flow labels on left side -->
+  <text x="565" y="254" text-anchor="end" fill="#06B6D4" font-family="system-ui, sans-serif" font-size="9" font-weight="600" opacity="0.6">1</text>
+  <text x="565" y="374" text-anchor="end" fill="#A78BFA" font-family="system-ui, sans-serif" font-size="9" font-weight="600" opacity="0.6">2</text>
+  <text x="565" y="470" text-anchor="end" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="600" opacity="0.6">3</text>
+  <text x="565" y="548" text-anchor="end" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="600" opacity="0.6">5</text>
+  <text x="805" y="354" text-anchor="end" fill="#10B981" font-family="system-ui, sans-serif" font-size="9" font-weight="600" opacity="0.6">4</text>
+  <text x="805" y="548" text-anchor="end" fill="#FFC01C" font-family="system-ui, sans-serif" font-size="9" font-weight="600" opacity="0.6">6</text>
+  <text x="565" y="642" text-anchor="end" fill="#10B981" font-family="system-ui, sans-serif" font-size="9" font-weight="600" opacity="0.6">7</text>
+
+  <!-- ============================================ -->
+  <!-- BOTTOM-LEFT: Thesis -->
+  <!-- ============================================ -->
+  <text x="960" y="975" text-anchor="middle" fill="url(#goldGrad)" font-family="system-ui, sans-serif" font-size="16" font-weight="600" letter-spacing="2" filter="url(#goldGlow)" opacity="0.8">Sense  &#x2192;  Decide  &#x2192;  Orchestrate  &#x2192;  Outcome</text>
+  <text x="960" y="1000" text-anchor="middle" fill="#64748B" font-family="system-ui, sans-serif" font-size="11" font-style="italic">Every session compounds. Every edit teaches.</text>
+
+  <!-- Footer -->
+  <text x="960" y="1060" text-anchor="middle" fill="#334155" font-family="system-ui, sans-serif" font-size="10">iKawn  |  Commerce Intelligence for Brands</text>
+
+</svg>

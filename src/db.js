@@ -439,7 +439,86 @@ async function initSchema() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_source_ref_unique ON memories(source_ref) WHERE source_ref IS NOT NULL
     `);
 
-    console.log('Database schema initialized (v3)');
+    // ── OpenBrain v5: Intelligence Layer ──
+
+    // memory_events — raw event inbox (append-only)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS memory_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        event_type TEXT NOT NULL,
+        payload JSONB NOT NULL,
+        processed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_memory_events_brand_type_created
+        ON memory_events (brand_id, event_type, created_at);
+      CREATE INDEX IF NOT EXISTS idx_memory_events_unprocessed
+        ON memory_events (created_at) WHERE processed_at IS NULL;
+    `);
+
+    // distilled_memory — learned knowledge with reasoning and embeddings
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS distilled_memory (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        memory_type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        confidence FLOAT NOT NULL DEFAULT 0.5,
+        source_event_ids UUID[] DEFAULT '{}',
+        reasoning TEXT,
+        superseded_by UUID REFERENCES distilled_memory(id),
+        embedding float8[],
+        embedding_status VARCHAR(20) DEFAULT 'pending',
+        last_used TIMESTAMPTZ,
+        last_updated TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_distilled_brand_type
+        ON distilled_memory (brand_id, memory_type);
+      CREATE INDEX IF NOT EXISTS idx_distilled_active_brand
+        ON distilled_memory (brand_id)
+        WHERE superseded_by IS NULL;
+    `);
+
+    // session_summaries — compressed conversation history
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS session_summaries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id UUID NOT NULL UNIQUE,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        summary TEXT NOT NULL,
+        key_decisions JSONB DEFAULT '[]',
+        open_threads JSONB DEFAULT '[]',
+        embedding float8[],
+        embedding_status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // learning_velocity — metrics tracking improvement over time
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS learning_velocity (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        metric_type TEXT NOT NULL,
+        metric_value FLOAT NOT NULL,
+        measured_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_velocity_brand
+        ON learning_velocity (brand_id, metric_type, measured_at);
+    `);
+
+    console.log('Database schema initialized (v5)');
   } finally {
     client.release();
   }

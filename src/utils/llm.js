@@ -184,6 +184,52 @@ function parseJSONSafe(text) {
 }
 
 /**
+ * Streaming chat completion via Anthropic Claude.
+ * Converts OpenAI-style messages to Anthropic format.
+ * @param {Array} messages - OpenAI-style messages array (system extracted automatically)
+ * @param {object} opts - { model, maxTokens, onChunk, onDone }
+ * @returns {Promise<string>} Full response text
+ */
+async function streamChatAnthropic(messages, opts = {}) {
+  const client = getAnthropicClient();
+  const model = opts.model || 'claude-sonnet-4-6';
+  const maxTokens = opts.maxTokens || 4096;
+  const onChunk = opts.onChunk;
+  const onDone = opts.onDone;
+
+  // Extract system message
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const systemPrompt = systemMessages.map(m => m.content).join('\n\n') || undefined;
+  const chatMessages = messages.filter(m => m.role !== 'system');
+
+  let fullText = '';
+
+  try {
+    const stream = await client.messages.stream({
+      model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: chatMessages,
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+        const text = event.delta.text;
+        fullText += text;
+        if (onChunk) onChunk(text);
+      }
+    }
+
+    if (onDone) onDone(fullText);
+    return fullText;
+  } catch (err) {
+    const status = err.status || err.statusCode;
+    const msg = err.message || 'Unknown Anthropic error';
+    throw new Error(`Anthropic streaming request failed (model: ${model}, status: ${status}): ${msg}`);
+  }
+}
+
+/**
  * Rough token estimate (~4 chars per token).
  */
 function estimateTokens(text) {
@@ -192,6 +238,7 @@ function estimateTokens(text) {
 
 module.exports = {
   streamChat,
+  streamChatAnthropic,
   chatCompletion,
   callReflectionLLM,
   parseJSONSafe,

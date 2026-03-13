@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
-const { streamChat } = require('../utils/llm');
+const { streamChatAnthropic } = require('../utils/llm');
 const { buildSystemPrompt } = require('../ruhi/persona');
 const { captureMessage } = require('../utils/capture');
 
@@ -108,10 +108,6 @@ router.post('/chat', async (req, res) => {
       { role: 'user', content: message },
     ];
 
-    // Get model from settings (use secondary/powerful model for Ruhi)
-    const { rows: settingsRows } = await pool.query("SELECT value FROM settings WHERE key = 'secondary_model'");
-    const model = settingsRows.length ? settingsRows[0].value : 'gpt-4o';
-
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -120,8 +116,8 @@ router.post('/chat', async (req, res) => {
 
     let fullResponse = '';
 
-    await streamChat(openaiMessages, {
-      model,
+    await streamChatAnthropic(openaiMessages, {
+      model: 'claude-sonnet-4-6',
       onChunk: (chunk) => {
         fullResponse += chunk;
         res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);

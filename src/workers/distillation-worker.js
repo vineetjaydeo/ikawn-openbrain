@@ -7,6 +7,8 @@ const { callReflectionLLM, parseJSONSafe } = require('../utils/llm');
 const { createWorkerGuard } = require('../utils/worker-guards');
 const { isPersonalMemory } = require('../utils/memory-types');
 
+const { resetExpiredBudgets, expireStaleActions } = require('../utils/governance');
+
 const guard = createWorkerGuard('distillation');
 
 /** Minimum events needed before distillation runs for a group */
@@ -35,6 +37,14 @@ async function runDistillation() {
 
     // Pass 2: General event distillation (all other event types)
     await distillGeneralEvents();
+
+    // Governance maintenance — budget resets + stale action expiration
+    try {
+      await resetExpiredBudgets();
+      await expireStaleActions();
+    } catch (govErr) {
+      console.error('[DistillationWorker] Governance maintenance failed:', govErr.message);
+    }
 
     console.log('[DistillationWorker] Run complete');
   } catch (err) {

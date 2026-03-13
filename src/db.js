@@ -535,7 +535,127 @@ async function initSchema() {
         ON learning_velocity (brand_id, metric_type, measured_at);
     `);
 
-    console.log('Database schema initialized (v5)');
+    // ── OpenBrain v6: Governance Layer ──
+
+    // brand_budgets — per-brand credit budgets with atomic enforcement
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brand_budgets (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL UNIQUE,
+        budget_monthly_credits INTEGER NOT NULL DEFAULT 0,
+        spent_monthly_credits INTEGER NOT NULL DEFAULT 0,
+        budget_reset_day INTEGER NOT NULL DEFAULT 1,
+        auto_pause_at_percent INTEGER NOT NULL DEFAULT 100,
+        warn_at_percent INTEGER NOT NULL DEFAULT 80,
+        auto_approve_above FLOAT NOT NULL DEFAULT 0.8,
+        human_required_below FLOAT NOT NULL DEFAULT 0.6,
+        status TEXT NOT NULL DEFAULT 'active',
+        current_period_start TIMESTAMPTZ NOT NULL DEFAULT date_trunc('month', NOW()),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // action_queue — approval state machine
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS action_queue (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL,
+        user_id VARCHAR(100),
+        action_type TEXT NOT NULL,
+        sub_type TEXT,
+        payload JSONB NOT NULL,
+        estimated_cost_credits INTEGER NOT NULL DEFAULT 0,
+        confidence FLOAT NOT NULL,
+        reasoning TEXT NOT NULL,
+        memories_used UUID[] DEFAULT '{}',
+        governance_result TEXT NOT NULL DEFAULT 'pending',
+        governance_reason TEXT,
+        reviewed_by VARCHAR(100),
+        feedback TEXT,
+        reviewed_at TIMESTAMPTZ,
+        executed_at TIMESTAMPTZ,
+        expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_action_queue_pending
+        ON action_queue (brand_id, governance_result, created_at)
+        WHERE governance_result IN ('pending', 'awaiting_human');
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_action_queue_brand_time
+        ON action_queue (brand_id, created_at)
+    `);
+
+    // action_log — immutable audit trail with real costs
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS action_log (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        action_queue_id UUID NOT NULL,
+        brand_id VARCHAR(100) NOT NULL,
+        user_id VARCHAR(100),
+        action_type TEXT NOT NULL,
+        actual_cost_credits INTEGER NOT NULL DEFAULT 0,
+        cost_breakdown JSONB DEFAULT '{}',
+        outcome_status TEXT NOT NULL DEFAULT 'success',
+        outcome_details JSONB DEFAULT '{}',
+        executed_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_action_log_brand
+        ON action_log (brand_id, executed_at)
+    `);
+
+    // cost_catalog — what things cost (versioned, effective dates)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS cost_catalog (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        action_type TEXT NOT NULL,
+        sub_type TEXT,
+        cost_credits INTEGER NOT NULL,
+        description TEXT,
+        effective_from TIMESTAMPTZ DEFAULT NOW(),
+        effective_until TIMESTAMPTZ
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_cost_catalog_lookup
+        ON cost_catalog (action_type, sub_type)
+        WHERE effective_until IS NULL
+    `);
+
+    // Seed cost catalog (only if empty)
+    const { rows: existingCosts } = await client.query('SELECT COUNT(*)::int as count FROM cost_catalog');
+    if (existingCosts[0].count === 0) {
+      const seeds = [
+        ['generate_content', 'genie', 1, 'Text-to-image (1 credit)'],
+        ['generate_content', 'remix_standard', 2, 'Remix standard'],
+        ['generate_content', 'remix_hd', 6, 'HD Remix'],
+        ['generate_content', 'prism', 15, 'Prism creative shot'],
+        ['generate_content', 'lazarus', 20, 'Image-to-video'],
+        ['generate_content', 'muse', 40, 'Marketing video'],
+        ['post_instagram', null, 0, 'Post to Instagram (API only)'],
+        ['llm_reflection', null, 1, 'Per reflection LLM call'],
+        ['llm_generation', null, 2, 'Per content generation LLM call'],
+        ['brave_search', null, 0, 'Search query (free tier)'],
+      ];
+      for (const [action_type, sub_type, cost, desc] of seeds) {
+        await client.query(
+          'INSERT INTO cost_catalog (action_type, sub_type, cost_credits, description) VALUES ($1, $2, $3, $4)',
+          [action_type, sub_type, cost, desc]
+        );
+      }
+      console.log('[Schema] Cost catalog seeded');
+    }
+
+    console.log('Database schema initialized (v6)');
   } finally {
     client.release();
   }

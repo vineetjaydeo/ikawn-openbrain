@@ -410,6 +410,9 @@ async function initSchema() {
       )
     `);
 
+    // user_id on api_keys (Wave 1: user-scoped intelligence)
+    await client.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`);
+
     // Index for fast hash lookups during auth
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash) WHERE revoked_at IS NULL
@@ -453,11 +456,16 @@ async function initSchema() {
       )
     `);
 
+    // user_id on memory_events (Wave 1: user-scoped intelligence)
+    await client.query(`ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`);
+
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_memory_events_brand_type_created
         ON memory_events (brand_id, event_type, created_at);
       CREATE INDEX IF NOT EXISTS idx_memory_events_unprocessed
         ON memory_events (created_at) WHERE processed_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_memory_events_user
+        ON memory_events (brand_id, user_id, event_type, created_at);
     `);
 
     // distilled_memory — learned knowledge with reasoning and embeddings
@@ -479,11 +487,17 @@ async function initSchema() {
       )
     `);
 
+    // user_id on distilled_memory (Wave 1: user-scoped intelligence)
+    await client.query(`ALTER TABLE distilled_memory ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`);
+
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_distilled_brand_type
         ON distilled_memory (brand_id, memory_type);
       CREATE INDEX IF NOT EXISTS idx_distilled_active_brand
         ON distilled_memory (brand_id)
+        WHERE superseded_by IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_distilled_user_brand
+        ON distilled_memory (brand_id, user_id, memory_type)
         WHERE superseded_by IS NULL;
     `);
 
@@ -501,6 +515,9 @@ async function initSchema() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+
+    // user_id on session_summaries (Wave 1: user-scoped intelligence)
+    await client.query(`ALTER TABLE session_summaries ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`);
 
     // learning_velocity — metrics tracking improvement over time
     await client.query(`

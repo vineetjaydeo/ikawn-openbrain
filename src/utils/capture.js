@@ -84,12 +84,13 @@ async function captureEditDelta(data) {
   try {
     const eventType = EVENT_TYPE_MAP[data.delta_type] || 'signal';
     await pool.query(`
-      INSERT INTO memory_events (brand_id, event_type, payload)
-      VALUES ($1, $2, $3)
+      INSERT INTO memory_events (brand_id, event_type, payload, user_id)
+      VALUES ($1, $2, $3, $4)
     `, [
       data.brand_id || 'ikawn',
       eventType,
-      JSON.stringify(data)
+      JSON.stringify(data),
+      data.user_id || null
     ]);
   } catch (err) {
     console.error('[EditDelta] memory_events write failed:', err.message);
@@ -103,13 +104,14 @@ async function captureEditDelta(data) {
 async function captureEvent(data) {
   try {
     const result = await pool.query(`
-      INSERT INTO memory_events (brand_id, event_type, payload)
-      VALUES ($1, $2, $3)
+      INSERT INTO memory_events (brand_id, event_type, payload, user_id)
+      VALUES ($1, $2, $3, $4)
       RETURNING id
     `, [
       data.brand_id || 'ikawn',
       data.event_type,
-      JSON.stringify(data.payload)
+      JSON.stringify(data.payload),
+      data.user_id || null
     ]);
     return result.rows[0].id;
   } catch (err) {

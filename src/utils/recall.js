@@ -8,6 +8,7 @@ const { getEmbedding } = require('../embeddings');
  * @typedef {Object} RecallParams
  * @property {string} brandId
  * @property {string} query - Natural language query to search for
+ * @property {string} [userId] - Scope personal memories to this user (shared memories always included)
  * @property {string[]} [memoryTypes] - Filter by memory types (e.g. ['BRAND_VOICE_RULE', 'CREATIVE_PATTERN'])
  * @property {'both' | 'memories_only' | 'distilled_only'} [source='both'] - Which tables to query
  * @property {number} [limit=10] - Max results
@@ -37,6 +38,7 @@ async function recall(params) {
   const {
     brandId,
     query,
+    userId,
     memoryTypes,
     source = 'both',
     limit = 10,
@@ -63,6 +65,15 @@ async function recall(params) {
         AND superseded_by IS NULL
         AND embedding IS NOT NULL
     `;
+
+    // User scoping: return personal memories for THIS user + shared (user_id IS NULL)
+    if (userId) {
+      distilledWhere += ` AND (user_id = $${paramIdx} OR user_id IS NULL)`;
+      distilledParams.push(userId);
+      paramIdx++;
+    } else {
+      distilledWhere += ` AND user_id IS NULL`;
+    }
 
     if (memoryTypes && memoryTypes.length > 0) {
       distilledWhere += ` AND memory_type = ANY($${paramIdx++})`;
@@ -164,19 +175,30 @@ async function recall(params) {
  * @returns {Promise<{ memories: RecalledMemory[] }>}
  */
 async function recallTextFallback(params) {
-  const { brandId, query, limit = 10 } = params;
+  const { brandId, query, userId, limit = 10 } = params;
   const results = [];
 
-  // Search distilled_memory by ILIKE
+  // Search distilled_memory by ILIKE (user-scoped)
+  const distilledParams = [brandId, query];
+  let userClause;
+  if (userId) {
+    userClause = `AND (user_id = $4 OR user_id IS NULL)`;
+    distilledParams.push(limit, userId);
+  } else {
+    userClause = `AND user_id IS NULL`;
+    distilledParams.push(limit);
+  }
+
   const { rows: distilled } = await pool.query(`
     SELECT id, memory_type, content, confidence, reasoning, last_updated, created_at
     FROM distilled_memory
     WHERE brand_id = $1
       AND superseded_by IS NULL
       AND content ILIKE '%' || $2 || '%'
+      ${userClause}
     ORDER BY confidence DESC, last_updated DESC
     LIMIT $3
-  `, [brandId, query, limit]);
+  `, distilledParams);
 
   for (const row of distilled) {
     results.push({

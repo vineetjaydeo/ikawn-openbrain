@@ -7,6 +7,7 @@ const { callReflectionLLM } = require('./llm');
 /**
  * @typedef {Object} GenerateWithMemoryParams
  * @property {string} brandId
+ * @property {string} [userId] - Scope personal memories to this user
  * @property {string} task - What to generate (e.g. "write instagram caption for product X")
  * @property {object} [context] - Additional context for generation
  * @property {string[]} [memoryTypes] - Filter recalled memories by type
@@ -30,6 +31,7 @@ const { callReflectionLLM } = require('./llm');
 async function generateWithMemory(params) {
   const {
     brandId,
+    userId,
     task,
     context,
     memoryTypes,
@@ -37,9 +39,10 @@ async function generateWithMemory(params) {
     systemPromptOverride,
   } = params;
 
-  // 1. Recall relevant memories
+  // 1. Recall relevant memories (scoped to userId if provided)
   const recalled = await recall({
     brandId,
+    userId,
     query: task,
     memoryTypes,
     source: 'both',

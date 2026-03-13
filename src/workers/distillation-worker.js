@@ -5,6 +5,7 @@ const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
 const { callReflectionLLM, parseJSONSafe } = require('../utils/llm');
 const { createWorkerGuard } = require('../utils/worker-guards');
+const { isPersonalMemory } = require('../utils/memory-types');
 
 const guard = createWorkerGuard('distillation');
 
@@ -49,7 +50,7 @@ async function runDistillation() {
  */
 async function distillEditDeltas() {
   const { rows: events } = await pool.query(`
-    SELECT id, brand_id, payload, created_at
+    SELECT id, brand_id, user_id, payload, created_at
     FROM memory_events
     WHERE event_type = 'caption_edit'
       AND processed_at IS NULL
@@ -59,16 +60,18 @@ async function distillEditDeltas() {
 
   if (events.length === 0) return;
 
-  // Group by brand_id
+  // Group by brand_id + user_id
   /** @type {Map<string, typeof events>} */
   const grouped = new Map();
   for (const evt of events) {
-    const key = evt.brand_id;
+    const key = `${evt.brand_id}::${evt.user_id || '_system'}`;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(evt);
   }
 
-  for (const [brandId, brandEvents] of grouped) {
+  for (const [, brandEvents] of grouped) {
+    const brandId = brandEvents[0].brand_id;
+    const userId = brandEvents[0].user_id || null;
     if (brandEvents.length < MIN_EVENTS_FOR_DISTILLATION) {
       continue; // Not enough data yet
     }
@@ -125,7 +128,7 @@ If no clear patterns exist, return an empty array [].`;
 
         for (const rule of rules) {
           if (!rule.content || !rule.memory_type) continue;
-          await upsertDistilledMemory(brandId, rule, chunk.map(e => e.id));
+          await upsertDistilledMemory(brandId, userId, rule, chunk.map(e => e.id));
         }
 
         // Mark events as processed
@@ -152,7 +155,7 @@ If no clear patterns exist, return an empty array [].`;
  */
 async function distillGeneralEvents() {
   const { rows: events } = await pool.query(`
-    SELECT id, brand_id, event_type, payload, created_at
+    SELECT id, brand_id, user_id, event_type, payload, created_at
     FROM memory_events
     WHERE event_type != 'caption_edit'
       AND processed_at IS NULL
@@ -162,16 +165,17 @@ async function distillGeneralEvents() {
 
   if (events.length === 0) return;
 
-  // Group by (brand_id, event_type)
+  // Group by (brand_id, user_id, event_type)
   /** @type {Map<string, typeof events>} */
   const grouped = new Map();
   for (const evt of events) {
-    const key = `${evt.brand_id}::${evt.event_type}`;
+    const key = `${evt.brand_id}::${evt.user_id || '_system'}::${evt.event_type}`;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(evt);
   }
 
   for (const [, groupEvents] of grouped) {
+    const userId = groupEvents[0].user_id || null;
     if (groupEvents.length < MIN_EVENTS_FOR_DISTILLATION) continue;
 
     for (let i = 0; i < groupEvents.length; i += MAX_EVENTS_PER_CALL) {
@@ -223,7 +227,7 @@ Rules:
 
         for (const insight of insights) {
           if (!insight.content || !insight.memory_type) continue;
-          await upsertDistilledMemory(chunk[0].brand_id, insight, chunk.map(e => e.id));
+          await upsertDistilledMemory(chunk[0].brand_id, userId, insight, chunk.map(e => e.id));
         }
 
         const eventIds = chunk.map(e => e.id);
@@ -249,38 +253,52 @@ Rules:
  *   - Content contradicts → supersede old, insert new
  * Otherwise → insert new.
  *
+ * CRITICAL: Personal memory types are scoped to user_id. Shared types use user_id = NULL.
+ * Supersession must NEVER cross users.
+ *
  * @param {string} brandId
+ * @param {string|null} userId
  * @param {{ memory_type: string, content: string, confidence: number, reasoning: string }} insight
  * @param {string[]} sourceEventIds
  */
-async function upsertDistilledMemory(brandId, insight, sourceEventIds) {
+async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
+  // Personal memory types get the user_id; shared types always store NULL
+  const effectiveUserId = isPersonalMemory(insight.memory_type) ? userId : null;
+
   // Generate embedding for the new insight
   let embedding;
   try {
     embedding = await getEmbedding(insight.content);
   } catch (err) {
     console.error('[DistillationWorker] Embedding failed for insight, inserting without:', err.message);
-    // Insert without embedding — embedding worker will pick it up
     await pool.query(`
-      INSERT INTO distilled_memory (brand_id, memory_type, content, confidence, source_event_ids, reasoning, embedding_status)
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-    `, [brandId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning]);
+      INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding_status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning]);
     return;
   }
 
-  // Check for similar active memories
+  // Check for similar active memories — scoped by user_id to prevent cross-user supersession
   const embeddingStr = `{${embedding.join(',')}}`;
+  const userClause = effectiveUserId != null
+    ? `AND user_id = $4`
+    : `AND user_id IS NULL`;
+  const similarParams = effectiveUserId != null
+    ? [embeddingStr, brandId, insight.memory_type, effectiveUserId]
+    : [embeddingStr, brandId, insight.memory_type];
+
   const { rows: similar } = await pool.query(`
     SELECT id, content, confidence, source_event_ids, reasoning,
            cosine_similarity(embedding, $1::float8[]) AS similarity
     FROM distilled_memory
     WHERE brand_id = $2
       AND memory_type = $3
+      ${userClause}
       AND superseded_by IS NULL
       AND embedding IS NOT NULL
     ORDER BY cosine_similarity(embedding, $1::float8[]) DESC
     LIMIT 1
-  `, [embeddingStr, brandId, insight.memory_type]);
+  `, similarParams);
 
   if (similar.length > 0 && similar[0].similarity > SUPERSESSION_THRESHOLD) {
     const existing = similar[0];
@@ -303,10 +321,10 @@ async function upsertDistilledMemory(brandId, insight, sourceEventIds) {
     if (alignment === 'contradict') {
       // Supersede: old rule gets superseded_by pointing to new
       const { rows: [newRow] } = await pool.query(`
-        INSERT INTO distilled_memory (brand_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], 'done')
+        INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::float8[], 'done')
         RETURNING id
-      `, [brandId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, embeddingStr]);
+      `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, embeddingStr]);
 
       await pool.query(`
         UPDATE distilled_memory SET superseded_by = $1, last_updated = NOW() WHERE id = $2
@@ -333,9 +351,9 @@ async function upsertDistilledMemory(brandId, insight, sourceEventIds) {
   } else {
     // No similar memory — insert new
     await pool.query(`
-      INSERT INTO distilled_memory (brand_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], 'done')
-    `, [brandId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, embeddingStr]);
+      INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::float8[], 'done')
+    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, embeddingStr]);
 
     console.log(`[DistillationWorker] New ${insight.memory_type} memory (confidence ${insight.confidence})`);
   }

@@ -99,4 +99,59 @@ router.put('/admin/api/users/:id/password', async (req, res) => {
   }
 });
 
+// ── Intelligence Layer: Worker monitoring + distillation ──
+
+// Worker status — GET /admin/api/workers
+router.get('/admin/api/workers', (req, res) => {
+  const { getAllWorkerStatus } = require('../utils/worker-guards');
+  res.json(getAllWorkerStatus());
+});
+
+// Manual distillation trigger — POST /admin/api/distill
+router.post('/admin/api/distill', async (req, res) => {
+  const { runDistillation } = require('../workers/distillation-worker');
+  try {
+    await runDistillation();
+    res.json({ success: true, message: 'Distillation run complete' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// View distilled memories — GET /admin/api/distilled
+router.get('/admin/api/distilled', async (req, res) => {
+  const { brand_id, type, limit } = req.query;
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, brand_id, memory_type, content, confidence, reasoning,
+             source_event_ids, superseded_by, last_used, last_updated, created_at
+      FROM distilled_memory
+      WHERE ($1::text IS NULL OR brand_id = $1)
+        AND ($2::text IS NULL OR memory_type = $2)
+        AND superseded_by IS NULL
+      ORDER BY confidence DESC, last_updated DESC
+      LIMIT $3
+    `, [brand_id || null, type || null, Math.min(parseInt(limit) || 50, 200)]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// View unprocessed events — GET /admin/api/events/pending
+router.get('/admin/api/events/pending', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT event_type, count(*)::int as count
+      FROM memory_events
+      WHERE processed_at IS NULL
+      GROUP BY event_type
+      ORDER BY count DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

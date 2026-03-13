@@ -11,9 +11,9 @@
 
 - [x] **Fix OpenClaw sync timeout** — MOOT (OpenClaw via Telegram replaces local OpenClaw sync)
 
-- [ ] **GitHub webhook setup** — Register webhooks on vineonardo/ikawn-visual-os-v1 and ikawn-openbrain repos pointing to `https://ikawn-openbrain.fly.dev/webhooks/github` for real-time ingestion
+- [x] **GitHub webhook setup** — DONE (2026-03-13). Webhooks registered on both vineonardo/ikawn-visual-os-v1 (#600490070) and ikawn-openbrain (#600490061). Events: push, issues, pull_request → `https://ikawn-openbrain.fly.dev/webhooks/github`
 
-- [ ] **Google Calendar connector** — Needs `GOOGLE_CALENDAR_CREDENTIALS` (service account JSON, base64) set on Fly
+- [x] **Intelligence Layer (Phases 1-4)** — DONE (2026-03-13). 4 new tables (memory_events, distilled_memory, session_summaries, learning_velocity), distillation worker (daily 3am UTC), recall API, Anthropic client, worker guards ($5/day ceiling). Deployed to Fly.
 
 - [ ] **Anthropic Claude upgrade** — Optional: switch Ruhi from GPT-4o to Claude Sonnet for better persona adherence
 

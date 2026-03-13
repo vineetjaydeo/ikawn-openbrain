@@ -2,6 +2,7 @@ FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
+ARG CACHE_BUST=1
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY docs/ ./docs/

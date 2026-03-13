@@ -44,11 +44,22 @@ async function captureMessage({
   }
 }
 
+/** @type {Record<string, string>} */
+const EVENT_TYPE_MAP = {
+  prompt_edit: 'caption_edit',
+  output_edit: 'caption_edit',
+  selection: 'signal',
+  regeneration: 'signal',
+  rejection: 'signal',
+};
+
 /**
  * Capture edit delta — implicit user signals from generation interactions.
+ * Dual-writes: edit_deltas (existing pipeline) + memory_events (distillation pipeline).
  * NEVER throws.
  */
 async function captureEditDelta(data) {
+  // Write 1: edit_deltas (existing pipeline)
   try {
     await pool.query(`
       INSERT INTO edit_deltas (
@@ -66,8 +77,45 @@ async function captureEditDelta(data) {
       data.model_used || null, data.user_signal || 'implicit'
     ]);
   } catch (err) {
-    console.error('[EditDelta] Capture failed:', err.message);
+    console.error('[EditDelta] edit_deltas write failed:', err.message);
+  }
+
+  // Write 2: memory_events (distillation pipeline)
+  try {
+    const eventType = EVENT_TYPE_MAP[data.delta_type] || 'signal';
+    await pool.query(`
+      INSERT INTO memory_events (brand_id, event_type, payload)
+      VALUES ($1, $2, $3)
+    `, [
+      data.brand_id || 'ikawn',
+      eventType,
+      JSON.stringify(data)
+    ]);
+  } catch (err) {
+    console.error('[EditDelta] memory_events write failed:', err.message);
   }
 }
 
-module.exports = { captureMessage, captureEditDelta };
+/**
+ * Capture a generic event into the memory_events distillation pipeline.
+ * NEVER throws.
+ */
+async function captureEvent(data) {
+  try {
+    const result = await pool.query(`
+      INSERT INTO memory_events (brand_id, event_type, payload)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `, [
+      data.brand_id || 'ikawn',
+      data.event_type,
+      JSON.stringify(data.payload)
+    ]);
+    return result.rows[0].id;
+  } catch (err) {
+    console.error('[CaptureEvent] Failed:', err.message, { event_type: data.event_type });
+    return null;
+  }
+}
+
+module.exports = { captureMessage, captureEditDelta, captureEvent };

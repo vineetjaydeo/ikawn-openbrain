@@ -31,6 +31,7 @@ const { startScheduler, triggerSync } = require('./scheduler');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
 const { startMothershipWorker } = require('./workers/mothership-worker');
+const { startDistillationWorker } = require('./workers/distillation-worker');
 
 // Load Ruhi knowledge base at startup
 const docsDir = path.join(__dirname, '..', 'docs');
@@ -147,6 +148,7 @@ async function start() {
       startEmbeddingWorker();
       startModerationWorker();
       startMothershipWorker();
+      startDistillationWorker();
     });
   } catch (err) {
     console.error('Failed to start:', err);

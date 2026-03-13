@@ -27,6 +27,7 @@ const brainHealthRoute = require('./routes/brain-health');
 const adminCostsRoute = require('./routes/admin-costs');
 const adminApiKeysRoute = require('./routes/admin-api-keys');
 const sharedRoute = require('./routes/shared');
+const recallRoute = require('./routes/recall');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
@@ -108,6 +109,7 @@ app.use(notifyRoute);
 app.use(actionsRoute);
 app.use(requireAuthOrApiKey, gdprRoute);
 app.use(requireAuthOrApiKey, brainHealthRoute);
+app.use(requireAuthOrApiKey, recallRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);

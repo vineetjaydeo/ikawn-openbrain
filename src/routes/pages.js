@@ -20,15 +20,8 @@ router.get('/settings', requireAuth, (req, res) => {
 const BASE_STYLES = `
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html { font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
-    body {
-      font-family: inherit;
-      background:
-        radial-gradient(ellipse 120% 60% at 20% 10%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse 80% 50% at 80% 20%, rgba(255, 192, 28, 0.04) 0%, transparent 50%),
-        linear-gradient(180deg, #050818 0%, #080D24 30%, #0A0F2E 60%, #0C1132 100%);
-      color: #fafafa;
-    }
-    a { color: #FFC01C; text-decoration: none; }
+    body { font-family: inherit; background: #0a0a0a; color: #fafafa; }
+    a { color: #e5a819; text-decoration: none; }
     a:hover { text-decoration: none; }
 `;
 

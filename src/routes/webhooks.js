@@ -1,7 +1,11 @@
 const { Router } = require('express');
 const crypto = require('crypto');
 const { pool } = require('../db');
+const { getEmbedding } = require('../embeddings');
 const { handleUpdate, handleSelfReport } = require('../connectors/telegram');
+const { sendTelegramMessage } = require('../utils/telegram');
+const { buildSystemPrompt } = require('../ruhi/persona');
+const { captureMessage } = require('../utils/capture');
 
 const router = Router();
 
@@ -155,6 +159,161 @@ router.post('/webhooks/telegram/:token', async (req, res) => {
     console.error('Telegram webhook capture error:', err);
   }
 });
+
+// ── Intelligence Telegram Bot (@OpenBrain_Ruhi_bot) ──
+// Responds as Ruhi with full RAG + intelligence context. No forwarding to OpenClaw.
+// All work MUST complete before res.json() — Fly.io kills async after response.
+router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
+  const expectedToken = process.env.INTELLIGENCE_TELEGRAM_BOT_TOKEN;
+  if (!expectedToken || req.params.token !== expectedToken) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  const body = req.body;
+  const message = body.message;
+
+  // Only handle text messages
+  if (!message?.text) {
+    res.json({ ok: true });
+    return;
+  }
+
+  const chatId = String(message.chat.id);
+  const userText = message.text;
+  const userName = message.from?.first_name || 'User';
+
+  console.log(`[IntelBot] Message from ${userName} (${chatId}): ${userText.slice(0, 100)}`);
+
+  try {
+    // 1. RAG — search memory for relevant context
+    let memoryContext = '';
+    try {
+      const embedding = await getEmbedding(userText);
+      const memResult = await pool.query(
+        `SELECT content, memory_type, project, created_at,
+                cosine_similarity(embedding, $1) AS similarity
+         FROM memories
+         WHERE embedding IS NOT NULL
+           AND (archived IS NULL OR archived = false)
+         ORDER BY cosine_similarity(embedding, $1) DESC
+         LIMIT 10`,
+        [embedding]
+      );
+      if (memResult.rows.length > 0) {
+        memoryContext = memResult.rows.map((m, i) => {
+          const date = new Date(m.created_at).toLocaleDateString();
+          const type = m.memory_type || 'note';
+          return `[${i + 1}] (${type}, ${date}) ${m.content.slice(0, 500)}`;
+        }).join('\n\n');
+      }
+    } catch (ragErr) {
+      console.warn('[IntelBot] RAG search failed:', ragErr.message);
+    }
+
+    // 2. Inject latest intelligence snapshot
+    let intelContext = '';
+    try {
+      const latestIntel = await pool.query(
+        `SELECT summary, data FROM intelligence_snapshots
+         WHERE snapshot_type = 'cohort_analysis'
+         ORDER BY created_at DESC LIMIT 1`
+      );
+      if (latestIntel.rows[0]) {
+        intelContext = `\n\nCURRENT PLATFORM INTELLIGENCE:\n${latestIntel.rows[0].summary}`;
+      }
+    } catch (intelErr) {
+      console.warn('[IntelBot] Intelligence injection failed:', intelErr.message);
+    }
+
+    // 3. Build system prompt — full Ruhi persona + memory + intelligence
+    const systemPrompt = buildSystemPrompt(userName, 'admin', memoryContext + intelContext);
+
+    // 4. Call Anthropic (non-streaming — Telegram doesn't support SSE)
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userText }],
+    });
+
+    const ruhiReply = response.content.find(b => b.type === 'text')?.text || 'I couldn\'t generate a response right now.';
+
+    // 5. Send reply via Telegram — split if > 4096 chars
+    const chunks = splitTelegramMessage(ruhiReply);
+    for (const chunk of chunks) {
+      await sendTelegramMessage(chunk, { chatId });
+    }
+
+    // 6. Capture both messages to memory
+    captureMessage({
+      brand_id: 'ikawn',
+      channel: 'telegram-ruhi',
+      direction: 'inbound',
+      content: userText,
+      source_ref: `tg_ruhi_in_${chatId}_${message.message_id}`,
+      metadata: { project: 'ruhi-telegram', author: userName }
+    });
+    captureMessage({
+      brand_id: 'ikawn',
+      channel: 'telegram-ruhi',
+      direction: 'outbound',
+      content: ruhiReply,
+      source_ref: `tg_ruhi_out_${chatId}_${message.message_id}`,
+      metadata: { project: 'ruhi-telegram' }
+    });
+
+    console.log(`[IntelBot] Replied to ${userName} (${ruhiReply.length} chars)`);
+  } catch (err) {
+    console.error('[IntelBot] Error:', err);
+    // Try to send error message to user
+    try {
+      await sendTelegramMessage('Something went wrong on my end. Try again in a moment.', { chatId });
+    } catch (_) {}
+  }
+
+  res.json({ ok: true });
+});
+
+/**
+ * Split a message into chunks that fit Telegram's 4096 char limit.
+ * Tries to break at paragraph boundaries, then sentence boundaries.
+ */
+function splitTelegramMessage(text, maxLen = 4096) {
+  if (text.length <= maxLen) return [text];
+
+  const chunks = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Try to break at last paragraph boundary within limit
+    let breakAt = remaining.lastIndexOf('\n\n', maxLen);
+    if (breakAt < maxLen * 0.3) {
+      // Too far back — try single newline
+      breakAt = remaining.lastIndexOf('\n', maxLen);
+    }
+    if (breakAt < maxLen * 0.3) {
+      // Still too far — try sentence boundary
+      breakAt = remaining.lastIndexOf('. ', maxLen);
+      if (breakAt > 0) breakAt += 1; // include the period
+    }
+    if (breakAt < maxLen * 0.3) {
+      // Hard cut
+      breakAt = maxLen;
+    }
+
+    chunks.push(remaining.slice(0, breakAt).trimEnd());
+    remaining = remaining.slice(breakAt).trimStart();
+  }
+
+  return chunks;
+}
 
 // OpenClaw self-report endpoint — API key auth
 router.post('/api/ingest/openclaw', async (req, res) => {

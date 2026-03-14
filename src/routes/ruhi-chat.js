@@ -96,10 +96,25 @@ router.post('/chat', async (req, res) => {
       content: h.content,
     }));
 
+    // Inject latest intelligence snapshot into context
+    let intelContext = '';
+    try {
+      const latestIntel = await pool.query(
+        `SELECT summary, data FROM intelligence_snapshots
+         WHERE snapshot_type = 'cohort_analysis'
+         ORDER BY created_at DESC LIMIT 1`
+      );
+      if (latestIntel.rows[0]) {
+        intelContext = `\n\nCURRENT PLATFORM INTELLIGENCE:\n${latestIntel.rows[0].summary}\n\nCohort data: ${JSON.stringify(latestIntel.rows[0].data)}`;
+      }
+    } catch (intelErr) {
+      console.warn('[RuhiChat] Intelligence injection failed:', intelErr.message);
+    }
+
     // Build system prompt with Ruhi persona
     const userName = obUser?.name || req.session?.user?.name || 'User';
     const userRole = obUser?.role || req.session?.user?.role || 'user';
-    const systemPrompt = buildSystemPrompt(userName, userRole, memoryContext);
+    const systemPrompt = buildSystemPrompt(userName, userRole, memoryContext + intelContext);
 
     // Build OpenAI messages array
     const openaiMessages = [

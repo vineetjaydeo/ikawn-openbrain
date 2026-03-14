@@ -236,6 +236,14 @@ async function initSchema() {
       )
     `);
 
+    // Add org_id column to brands (org model support)
+    await client.query(`
+      ALTER TABLE brands ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_brands_org_id ON brands(org_id) WHERE org_id IS NOT NULL
+    `);
+
     await client.query(`
       INSERT INTO brands (brand_id, name, tier) VALUES ('ikawn', 'iKawn Technologies', 'enterprise')
       ON CONFLICT (brand_id) DO NOTHING

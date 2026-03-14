@@ -40,7 +40,7 @@ function requireAuthOrApiKey(req, res, next) {
   // 2. Check DB-managed keys
   const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
   pool.query(
-    `SELECT id, name, user_id, expires_at, revoked_at FROM api_keys WHERE key_hash = $1`,
+    `SELECT id, name, user_id, org_id, expires_at, revoked_at FROM api_keys WHERE key_hash = $1`,
     [keyHash]
   ).then(result => {
     const key = result.rows[0];
@@ -59,6 +59,7 @@ function requireAuthOrApiKey(req, res, next) {
     req.apiKeyId = key.id;
     req.apiKeyName = key.name;
     req.userId = key.user_id || null;
+    req.orgId = key.org_id || null;
 
     // Update last_used_at + log usage (fire-and-forget)
     pool.query(`UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, [key.id]).catch(() => {});

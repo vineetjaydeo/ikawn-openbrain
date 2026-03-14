@@ -37,6 +37,7 @@ const COST_PER_CALL = {
   'claude-sonnet-4-6': 0.015,
   'gpt-4o-mini': 0.001,
   'gpt-4o': 0.01,
+  'gpt-4.1-mini': 0.001,
 };
 
 /** @type {Map<string, { llmCallsToday: number, estimatedCostToday: number, dayStart: string, consecutiveFailures: number, disabled: boolean, isRunning: boolean, lastBackoffMs: number }>} */

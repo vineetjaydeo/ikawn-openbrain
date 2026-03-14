@@ -10,6 +10,7 @@ const MODEL_ROUTING = {
   outcome_reflection:      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   session_summary:         { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   research_distillation:   { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  intelligence_distillation: { provider: 'openai', model: 'gpt-4.1-mini' },
   strategic_rollup:        { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   product_reflection:      { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   content_generation:      { provider: 'anthropic', model: 'claude-sonnet-4-6' },

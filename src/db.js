@@ -9,6 +9,19 @@ const pool = new Pool({
   ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
 
+// ikawn-v3 read-only connection (for intelligence worker)
+const ikawnOsPool = process.env.IKAWN_OS_DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.IKAWN_OS_DATABASE_URL,
+      max: 2,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
+      ssl: !process.env.IKAWN_OS_DATABASE_URL.includes('sslmode=disable')
+        ? { rejectUnauthorized: false }
+        : false,
+    })
+  : null;
+
 async function initSchema() {
   const client = await pool.connect();
   try {
@@ -413,6 +426,10 @@ async function initSchema() {
     // user_id on api_keys (Wave 1: user-scoped intelligence)
     await client.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`);
 
+    // org_id on api_keys (Wave 2: multi-tenant org model)
+    await client.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_api_keys_org_id ON api_keys(org_id) WHERE org_id IS NOT NULL`);
+
     // Index for fast hash lookups during auth
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash) WHERE revoked_at IS NULL
@@ -655,10 +672,27 @@ async function initSchema() {
       console.log('[Schema] Cost catalog seeded');
     }
 
-    console.log('Database schema initialized (v6)');
+    // ── OpenBrain v7: Intelligence Layer — Cohort Intelligence ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS intelligence_snapshots (
+        id SERIAL PRIMARY KEY,
+        snapshot_type VARCHAR(50) NOT NULL,
+        period VARCHAR(20) NOT NULL,
+        data JSONB NOT NULL,
+        summary TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_snapshots_type_period ON intelligence_snapshots(snapshot_type, period);
+      CREATE INDEX IF NOT EXISTS idx_snapshots_created ON intelligence_snapshots(created_at DESC);
+    `);
+
+    console.log('Database schema initialized (v7)');
   } finally {
     client.release();
   }
 }
 
-module.exports = { pool, initSchema };
+module.exports = { pool, ikawnOsPool, initSchema };

@@ -29,11 +29,14 @@ const adminApiKeysRoute = require('./routes/admin-api-keys');
 const sharedRoute = require('./routes/shared');
 const recallRoute = require('./routes/recall');
 const governanceRoute = require('./routes/governance');
+const brandsApiRoute = require('./routes/brands-api');
+const intelligenceRoute = require('./routes/intelligence');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
 const { startMothershipWorker } = require('./workers/mothership-worker');
 const { startDistillationWorker } = require('./workers/distillation-worker');
+const { startIntelligenceWorker } = require('./workers/intelligence-worker');
 
 // Load Ruhi knowledge base at startup
 const docsDir = path.join(__dirname, '..', 'docs');
@@ -112,6 +115,7 @@ app.use(requireAuthOrApiKey, gdprRoute);
 app.use(requireAuthOrApiKey, brainHealthRoute);
 app.use(requireAuthOrApiKey, recallRoute);
 app.use(requireAuthOrApiKey, governanceRoute);
+app.use(requireAuthOrApiKey, brandsApiRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);
@@ -125,6 +129,7 @@ app.use(requireAuth, ruhiChatRoute);
 app.use(adminApi);
 app.use(adminCostsRoute);
 app.use(adminApiKeysRoute);
+app.use(intelligenceRoute);
 
 // Admin sync endpoint — owner only
 app.post('/admin/sync/:source', requireAuth, async (req, res) => {
@@ -153,6 +158,7 @@ async function start() {
       startModerationWorker();
       startMothershipWorker();
       startDistillationWorker();
+      startIntelligenceWorker();
     });
   } catch (err) {
     console.error('Failed to start:', err);

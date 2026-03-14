@@ -185,8 +185,10 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
   console.log(`[IntelBot] Message from ${userName} (${chatId}): ${userText.slice(0, 100)}`);
 
   try {
-    // 0. Find or create conversation in DB (so it appears on ruhi.ikawn.in)
-    const sourceKey = `telegram:${chatId}`;
+    // 0. Find or create daily conversation in DB (so it appears on ruhi.ikawn.in)
+    // One conversation per calendar day per Telegram chat
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const sourceKey = `telegram:${chatId}:${today}`;
 
     // Look up V's user_id (admin user)
     const userResult = await pool.query("SELECT id FROM users WHERE email = 'v@ikawn.com'");
@@ -198,7 +200,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       return;
     }
 
-    // Find existing conversation for this Telegram chat, or create one
+    // Find today's conversation for this Telegram chat, or create one
     let convResult = await pool.query(
       'SELECT id, uuid FROM conversations WHERE source = $1 AND user_id = $2',
       [sourceKey, userId]
@@ -208,10 +210,11 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       convId = convResult.rows[0].id;
       convUuid = convResult.rows[0].uuid;
     } else {
+      const dateLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const newConv = await pool.query(
         `INSERT INTO conversations (user_id, title, source, brand_id)
          VALUES ($1, $2, $3, 'ikawn') RETURNING id, uuid`,
-        [userId, `Telegram — ${userName}`, sourceKey]
+        [userId, `Telegram — ${dateLabel}`, sourceKey]
       );
       convId = newConv.rows[0].id;
       convUuid = newConv.rows[0].uuid;

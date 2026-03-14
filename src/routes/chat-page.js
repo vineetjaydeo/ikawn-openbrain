@@ -57,8 +57,43 @@ function chatPage(user) {
       height: 100%;
       overflow: hidden;
       font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(ellipse 120% 60% at 20% 10%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse 80% 50% at 80% 20%, rgba(255, 192, 28, 0.04) 0%, transparent 50%),
+        radial-gradient(ellipse 60% 80% at 50% 90%, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
+        linear-gradient(180deg, #050818 0%, #080D24 30%, #0A0F2E 60%, #0C1132 100%);
       color: var(--text);
+    }
+
+    /* Space star field */
+    html::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(1.5px 1.5px at 10% 15%, rgba(255,255,255,0.25) 0%, transparent 100%),
+        radial-gradient(1px 1px at 25% 35%, rgba(255,255,255,0.18) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 45% 8%, rgba(255,255,255,0.22) 0%, transparent 100%),
+        radial-gradient(1px 1px at 60% 42%, rgba(255,255,255,0.15) 0%, transparent 100%),
+        radial-gradient(2px 2px at 75% 18%, rgba(255,192,28,0.2) 0%, transparent 100%),
+        radial-gradient(1px 1px at 88% 55%, rgba(255,255,255,0.18) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 15% 65%, rgba(255,255,255,0.15) 0%, transparent 100%),
+        radial-gradient(1px 1px at 35% 78%, rgba(255,255,255,0.12) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 55% 60%, rgba(99,102,241,0.18) 0%, transparent 100%),
+        radial-gradient(1px 1px at 70% 85%, rgba(255,255,255,0.15) 0%, transparent 100%),
+        radial-gradient(2px 2px at 92% 30%, rgba(255,255,255,0.12) 0%, transparent 100%),
+        radial-gradient(1px 1px at 5% 90%, rgba(255,255,255,0.1) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 40% 95%, rgba(255,255,255,0.12) 0%, transparent 100%),
+        radial-gradient(1px 1px at 80% 70%, rgba(59,130,246,0.15) 0%, transparent 100%);
+      pointer-events: none;
+      z-index: 0;
+      animation: starTwinkle 8s ease-in-out infinite alternate;
+    }
+
+    @keyframes starTwinkle {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.8; }
     }
 
     /* ==================== LAYOUT ==================== */
@@ -66,6 +101,8 @@ function chatPage(user) {
       display: flex;
       height: 100vh;
       width: 100vw;
+      position: relative;
+      z-index: 1;
     }
 
     /* ==================== SIDEBAR ==================== */
@@ -74,8 +111,10 @@ function chatPage(user) {
       left: 0; top: 0; bottom: 0;
       width: var(--sidebar-w);
       min-width: var(--sidebar-w);
-      background: var(--bg-sidebar);
-      border-right: 1px solid var(--border);
+      background: rgba(5, 8, 24, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
       display: flex;
       flex-direction: column;
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -84,7 +123,7 @@ function chatPage(user) {
 
     .sidebar-header {
       padding: 16px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .sidebar-brand {
@@ -217,7 +256,7 @@ function chatPage(user) {
 
     .sidebar-footer {
       padding: 14px 16px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -297,19 +336,44 @@ function chatPage(user) {
       color: var(--text-dim);
       gap: 12px;
       padding: 80px 20px;
+      animation: welcomeFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
+    @keyframes welcomeFade {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes floatIcon {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.15); }
+    }
+
     .welcome-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: 16px;
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
       background: var(--accent);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.3rem;
+      font-size: 1.5rem;
       font-weight: 700;
       color: #0a0a0a;
-      margin-bottom: 4px;
+      margin-bottom: 8px;
+      position: relative;
+      animation: floatIcon 4s ease-in-out infinite;
+    }
+    .welcome-icon::after {
+      content: '';
+      position: absolute;
+      inset: -18px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 192, 28, 0.15) 0%, transparent 70%);
+      z-index: -1;
+      animation: glowPulse 3s ease-in-out infinite;
     }
     .welcome-screen h2 {
       font-size: 1.5rem;
@@ -363,13 +427,13 @@ function chatPage(user) {
     .msg-row.user .msg-bubble {
       max-width: 75%;
       padding: 12px 20px;
-      background: linear-gradient(135deg, rgba(255, 192, 28, 0.18), rgba(245, 158, 11, 0.14));
-      color: #e8e0d0;
+      background: linear-gradient(135deg, #FFC01C 0%, #F5A623 100%);
+      color: #0A0F2E;
       border-radius: 20px 20px 6px 20px;
-      border: 1px solid rgba(255, 192, 28, 0.25);
+      border: none;
       font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      font-weight: 500;
-      box-shadow: 0 2px 12px rgba(255, 192, 28, 0.06);
+      font-weight: 400;
+      box-shadow: 0 2px 8px rgba(255, 192, 28, 0.2), 0 0 24px rgba(255, 192, 28, 0.06);
     }
     .msg-row.assistant .msg-bubble {
       max-width: 100%;
@@ -531,11 +595,7 @@ function chatPage(user) {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 14px 18px;
-      background: var(--bg-assistant);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      border-bottom-left-radius: 4px;
+      padding: 10px 0;
     }
     .typing-label {
       font-size: 0.9rem;
@@ -561,11 +621,109 @@ function chatPage(user) {
       30% { opacity: 1; transform: scale(1); }
     }
 
+    /* ==================== GENERATION CARD ==================== */
+    .gen-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-top: 8px;
+      max-width: 520px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .gen-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .gen-card-agent {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+    .gen-card-status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .gen-card-status .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid var(--border-light);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .gen-card-prompt {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+      font-style: italic;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .gen-card-images {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .gen-card-images.single { grid-template-columns: 1fr; }
+    .gen-card-images img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .gen-card-images img:hover { opacity: 0.85; }
+    .gen-card-placeholder {
+      aspect-ratio: 1;
+      background: var(--bg-hover);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gen-card-placeholder .shimmer {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border-light);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    .gen-card-error {
+      color: var(--danger);
+      font-size: 0.82rem;
+      padding: 12px;
+      text-align: center;
+    }
+    .gen-card-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      font-size: 0.78rem;
+      color: var(--accent);
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .gen-card-link:hover { opacity: 0.8; }
+
     /* ==================== INPUT AREA ==================== */
     .input-area {
       position: sticky;
       bottom: 0;
-      background: linear-gradient(transparent, var(--bg) 20%);
+      background: linear-gradient(transparent, rgba(8, 13, 36, 0.95) 30%);
       padding: 8px 20px 20px;
     }
 
@@ -630,16 +788,19 @@ function chatPage(user) {
       display: flex;
       align-items: flex-end;
       gap: 8px;
-      background: var(--bg-input);
-      border: 1px solid var(--border-light);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 24px;
       padding: 10px 16px;
-      transition: all 0.25s ease;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
     }
     .compose:focus-within {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 16px rgba(0,0,0,0.2);
+      border-color: rgba(255, 192, 28, 0.25);
+      background: rgba(255, 255, 255, 0.05);
+      box-shadow: 0 0 0 3px rgba(255, 192, 28, 0.04), 0 8px 32px rgba(0,0,0,0.12);
     }
 
     .compose-btn {
@@ -1352,6 +1513,9 @@ function chatPage(user) {
                 // Update sidebar
                 const conv = conversations.find(c => c.id === activeConvId);
                 if (conv) { conv.title = evt.title; renderConversationList(); }
+              } else if (evt.type === 'generation_started') {
+                // Show generation card inline in chat
+                showGenerationCard(evt.generationId, evt.agent, evt.prompt, evt.batchSize);
               } else if (evt.type === 'error') {
                 showToast(evt.error || evt.message || 'An error occurred', 'error');
               }
@@ -1374,6 +1538,164 @@ function chatPage(user) {
         isStreaming = false;
         abortController = null;
         updateSendBtn();
+      }
+    }
+
+    /* ==================== GENERATION CARD ==================== */
+    function showGenerationCard(generationId, agent, prompt, batchSize) {
+      const container = document.getElementById('messages-inner');
+      if (!container) return;
+
+      const cardId = 'gen-' + generationId;
+
+      const card = document.createElement('div');
+      card.className = 'msg-row assistant';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'msg-avatar assistant-avatar';
+      avatar.textContent = 'R';
+
+      const genCard = document.createElement('div');
+      genCard.className = 'gen-card';
+      genCard.id = cardId;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'gen-card-header';
+      const agentLabel = document.createElement('span');
+      agentLabel.className = 'gen-card-agent';
+      agentLabel.textContent = (agent || 'genie').toUpperCase();
+      const statusLabel = document.createElement('span');
+      statusLabel.className = 'gen-card-status';
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      statusLabel.appendChild(spinner);
+      statusLabel.appendChild(document.createTextNode(' Generating...'));
+      header.appendChild(agentLabel);
+      header.appendChild(statusLabel);
+
+      // Prompt
+      const promptEl = document.createElement('div');
+      promptEl.className = 'gen-card-prompt';
+      promptEl.textContent = prompt || '';
+
+      // Image placeholders
+      const imagesEl = document.createElement('div');
+      imagesEl.className = 'gen-card-images';
+      const count = batchSize || 4;
+      for (let i = 0; i < count; i++) {
+        const ph = document.createElement('div');
+        ph.className = 'gen-card-placeholder';
+        const shim = document.createElement('div');
+        shim.className = 'shimmer';
+        ph.appendChild(shim);
+        imagesEl.appendChild(ph);
+      }
+
+      genCard.appendChild(header);
+      genCard.appendChild(promptEl);
+      genCard.appendChild(imagesEl);
+      card.appendChild(avatar);
+      card.appendChild(genCard);
+      container.appendChild(card);
+      scrollToBottom(false);
+
+      // Start polling for results
+      pollGeneration(generationId, cardId);
+    }
+
+    async function pollGeneration(generationId, cardId) {
+      const maxAttempts = 60; // 2 minutes at 2s intervals
+      let attempts = 0;
+
+      const poll = async () => {
+        attempts++;
+        if (attempts > maxAttempts) {
+          updateGenCard(cardId, 'error', null, 'Generation timed out');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/actions/status/' + generationId);
+          if (!res.ok) {
+            if (attempts > 5) {
+              updateGenCard(cardId, 'error', null, 'Failed to check status');
+              return;
+            }
+            setTimeout(poll, 3000);
+            return;
+          }
+
+          const data = await res.json();
+
+          const imageUrls = data.resultUrls || data.urls || [];
+          if ((data.status === 'complete' || data.status === 'completed') && imageUrls.length > 0) {
+            updateGenCard(cardId, 'completed', imageUrls, null, generationId);
+          } else if (data.status === 'failed' || data.status === 'error') {
+            updateGenCard(cardId, 'error', null, data.error || 'Generation failed');
+          } else {
+            // Still processing
+            setTimeout(poll, 2000);
+          }
+        } catch (err) {
+          if (attempts > 5) {
+            updateGenCard(cardId, 'error', null, 'Connection lost');
+            return;
+          }
+          setTimeout(poll, 3000);
+        }
+      };
+
+      // First poll after 3s (generation needs time to start)
+      setTimeout(poll, 3000);
+    }
+
+    function updateGenCard(cardId, status, urls, errorMsg, generationId) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+
+      const statusEl = card.querySelector('.gen-card-status');
+      const imagesEl = card.querySelector('.gen-card-images');
+
+      if (status === 'completed' && urls) {
+        // Update status
+        while (statusEl.firstChild) statusEl.removeChild(statusEl.firstChild);
+        statusEl.appendChild(document.createTextNode('\\u2713 Complete'));
+        statusEl.style.color = 'var(--success)';
+
+        // Show images
+        if (urls.length === 1) imagesEl.classList.add('single');
+        while (imagesEl.firstChild) imagesEl.removeChild(imagesEl.firstChild);
+        urls.forEach(url => {
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = 'Generated image';
+          img.loading = 'lazy';
+          img.addEventListener('click', () => window.open(url, '_blank'));
+          imagesEl.appendChild(img);
+        });
+
+        // Add link to view on iKawn OS
+        if (generationId) {
+          const link = document.createElement('a');
+          link.className = 'gen-card-link';
+          link.href = 'https://os.ikawn.com/genie/' + generationId;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.textContent = 'View on iKawn OS \\u2192';
+          card.appendChild(link);
+        }
+
+        scrollToBottom(false);
+      } else if (status === 'error') {
+        while (statusEl.firstChild) statusEl.removeChild(statusEl.firstChild);
+        statusEl.appendChild(document.createTextNode('\\u2715 Failed'));
+        statusEl.style.color = 'var(--danger)';
+        while (imagesEl.firstChild) imagesEl.removeChild(imagesEl.firstChild);
+        const errDiv = document.createElement('div');
+        errDiv.className = 'gen-card-error';
+        errDiv.textContent = errorMsg || 'Unknown error';
+        imagesEl.appendChild(errDiv);
       }
     }
 

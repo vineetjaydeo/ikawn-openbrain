@@ -303,6 +303,12 @@ async function initSchema() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_share_token ON conversations(share_token) WHERE share_token IS NOT NULL;
     `);
 
+    // Source tracking for external conversations (Telegram, etc.)
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS source VARCHAR(100);
+      CREATE INDEX IF NOT EXISTS idx_conversations_source ON conversations(source) WHERE source IS NOT NULL;
+    `);
+
     // ── OpenBrain v3: edit_deltas — highest priority training data ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS edit_deltas (

@@ -185,6 +185,45 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
   console.log(`[IntelBot] Message from ${userName} (${chatId}): ${userText.slice(0, 100)}`);
 
   try {
+    // 0. Find or create conversation in DB (so it appears on ruhi.ikawn.in)
+    const sourceKey = `telegram:${chatId}`;
+
+    // Look up V's user_id (admin user)
+    const userResult = await pool.query("SELECT id FROM users WHERE email = 'v@ikawn.com'");
+    const userId = userResult.rows[0]?.id;
+    if (!userId) {
+      console.error('[IntelBot] Admin user not found in DB');
+      await sendTelegramMessage('System error — admin user not configured.', { chatId });
+      res.json({ ok: true });
+      return;
+    }
+
+    // Find existing conversation for this Telegram chat, or create one
+    let convResult = await pool.query(
+      'SELECT id, uuid FROM conversations WHERE source = $1 AND user_id = $2',
+      [sourceKey, userId]
+    );
+    let convId, convUuid;
+    if (convResult.rows.length > 0) {
+      convId = convResult.rows[0].id;
+      convUuid = convResult.rows[0].uuid;
+    } else {
+      const newConv = await pool.query(
+        `INSERT INTO conversations (user_id, title, source, brand_id)
+         VALUES ($1, $2, $3, 'ikawn') RETURNING id, uuid`,
+        [userId, `Telegram — ${userName}`, sourceKey]
+      );
+      convId = newConv.rows[0].id;
+      convUuid = newConv.rows[0].uuid;
+      console.log(`[IntelBot] Created conversation ${convUuid} for ${sourceKey}`);
+    }
+
+    // Save user message to messages table
+    await pool.query(
+      'INSERT INTO messages (conversation_id, role, content, brand_id) VALUES ($1, $2, $3, $4)',
+      [convId, 'user', userText, 'ikawn']
+    );
+
     // 1. RAG — search memory for relevant context
     let memoryContext = '';
     try {
@@ -228,25 +267,45 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     // 3. Build system prompt — full Ruhi persona + memory + intelligence
     const systemPrompt = buildSystemPrompt(userName, 'admin', memoryContext + intelContext);
 
-    // 4. Call Anthropic (non-streaming — Telegram doesn't support SSE)
+    // 4. Get conversation history for context (last 20 messages)
+    const historyResult = await pool.query(
+      'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 20',
+      [convId]
+    );
+    const historyMessages = historyResult.rows.reverse().map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content,
+    }));
+
+    // 5. Call Anthropic (non-streaming — Telegram doesn't support SSE)
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       system: systemPrompt,
-      messages: [{ role: 'user', content: userText }],
+      messages: historyMessages,
     });
 
     const ruhiReply = response.content.find(b => b.type === 'text')?.text || 'I couldn\'t generate a response right now.';
 
-    // 5. Send reply via Telegram — split if > 4096 chars
+    // 6. Save assistant reply to messages table + update conversation
+    await pool.query(
+      "INSERT INTO messages (conversation_id, role, content, model, brand_id) VALUES ($1, 'assistant', $2, $3, $4)",
+      [convId, ruhiReply, 'claude-sonnet-4-6', 'ikawn']
+    );
+    await pool.query(
+      'UPDATE conversations SET updated_at = NOW() WHERE id = $1',
+      [convId]
+    );
+
+    // 7. Send reply via Telegram — split if > 4096 chars
     const chunks = splitTelegramMessage(ruhiReply);
     for (const chunk of chunks) {
       await sendTelegramMessage(chunk, { chatId });
     }
 
-    // 6. Capture both messages to memory
+    // 8. Capture both messages to memories for RAG (fire-and-forget)
     captureMessage({
       brand_id: 'ikawn',
       channel: 'telegram-ruhi',
@@ -264,7 +323,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       metadata: { project: 'ruhi-telegram' }
     });
 
-    console.log(`[IntelBot] Replied to ${userName} (${ruhiReply.length} chars)`);
+    console.log(`[IntelBot] Replied to ${userName} (${ruhiReply.length} chars, conv ${convUuid})`);
   } catch (err) {
     console.error('[IntelBot] Error:', err);
     // Try to send error message to user

@@ -595,6 +595,122 @@ Per-agent tracking:
 
 ---
 
+## 9.5 Intelligence Hardening (Critical — Apply to Existing Workers Too)
+
+These fixes apply to the existing distillation/recall/generation pipeline AND the new agent system. They prevent memory corruption as volume scales.
+
+### 9.5.1 Distillation: Temporal Weighting
+
+**Problem:** Current `MIN_EVENTS_FOR_DISTILLATION = 3` guards on count but not spread. One editing session can produce 3+ events that look like a pattern but are actually a one-off.
+
+**Fix (apply to distillation-worker.js):**
+- Do NOT distill if all qualifying events share the same `session_id` (or were created within a 1-hour window)
+- Require events spread across at least 2 distinct sessions/days
+- Bias confidence DOWN if events are tightly time-clustered:
+  ```
+  time_spread = (max_timestamp - min_timestamp) / (24 * 60 * 60 * 1000)  // days
+  spread_factor = Math.min(1, time_spread / 7)  // full confidence after 7 days of evidence
+  adjusted_confidence = raw_confidence * spread_factor
+  ```
+
+### 9.5.2 Supersession: Escalate High-Confidence Alignment Checks
+
+**Problem:** Cosine similarity > 0.85 triggers LLM alignment check via Haiku, but Haiku is too shallow for subtle contradictions between high-confidence memories (e.g., "Use emojis frequently" vs "Avoid emojis" may embed close).
+
+**Fix:**
+- If EITHER the existing memory OR the new candidate has confidence > 0.8 → escalate alignment check to **Sonnet** (not Haiku)
+- This prevents high-confidence corruption at minimal extra cost (only triggers for established beliefs)
+- Haiku remains the default for low-confidence alignments
+
+### 9.5.3 Recall: Weighted Scoring with Recency + Usage
+
+**Problem:** Current `score = similarity * confidence` means old high-confidence memories dominate forever, even when superseded by newer patterns.
+
+**Fix (apply to recall.js):**
+```
+score =
+  (similarity * 0.6) +
+  (confidence * 0.25) +
+  (recency_boost * 0.1) +
+  (usage_boost * 0.05)
+
+// recency_boost: exponential decay over last_updated
+recency_boost = Math.exp(-days_since_update / 30)  // half-life ~21 days
+
+// usage_boost: log-scaled frequency of last_used
+usage_boost = Math.min(1, Math.log(times_used + 1) / Math.log(20))
+```
+
+Both `last_used` and `last_updated` already exist on memories. Start tracking `times_used` (simple counter incremented on recall hit).
+
+### 9.5.4 Generation: Remove Rule Mention Directive
+
+**Problem:** `generateWithMemory` includes "When your output is influenced by a learned rule, mention it naturally." This leaks internal reasoning, breaks brand voice subtly, and feels robotic over time.
+
+**Fix:**
+- Remove the mention directive entirely from the generation system prompt
+- Enforce rules silently — the output should reflect the rule without citing it
+- For explainability: return `memoriesUsed` array in the API response (already done) — visible in admin/debug views only, never in user-facing output
+
+### 9.5.5 Worker Guardrails: Per-Brand Isolation
+
+**Problem:** Current cost/rate guards are global per worker. One noisy brand can eat the entire daily budget.
+
+**Fix:**
+- Scope guard state by `workerName:brandId` (not just `workerName`)
+- Keep global cap as a ceiling, but add per-brand soft cap:
+  ```
+  global_daily_cap = $10 (hard ceiling)
+  per_brand_daily_cap = $5 (soft, adjustable per brand)
+  ```
+- When a brand hits its soft cap: skip that brand's tasks, alert via Telegram, continue processing other brands
+
+### 9.5.6 Memory Events: Add Source Column
+
+**Problem:** `memory_events.payload` is free JSON with no signal origin tracking. Can't differentiate user edits from system events from external signals.
+
+**Fix:** Add to `memory_events` table:
+```sql
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'system';
+-- Values: 'user_edit', 'agent_action', 'external_signal', 'system'
+```
+
+This enables:
+- Weighting user edits higher than system events in distillation
+- Debugging where a learned rule originated
+- Future: differential trust levels per source
+
+### 9.5.7 Outcome Attribution (Phase 1.5 — Design Now, Build After Agents Proven)
+
+**Problem:** The loop is capture → distill → recall → generate. But there's no feedback on whether a recalled memory led to a good or bad outcome. All memories look equally valid forever.
+
+**Design (implement after Phase 1):**
+- When content performs well/poorly (GA engagement, user approval rate, edit rate)
+- OR when a user edits agent output again → write a `memory_feedback` event:
+  ```
+  { memory_id, outcome: 'positive'|'negative', signal: 'user_edit'|'ga_engagement'|'approval', details }
+  ```
+- Distillation worker processes `memory_feedback` events:
+  - Positive → bump confidence
+  - Negative → decay confidence, eventually supersede
+  - Pattern: which memories consistently lead to edits? → those rules are wrong
+
+This closes the full loop: memory → action → outcome → memory quality adjustment.
+
+### 9.5.8 Implementation Priority
+
+| Fix | When | Effort |
+|-----|------|--------|
+| Remove "mention rules" from generation (9.5.4) | **Immediately** | 1 line |
+| Recall weighted scoring (9.5.3) | **Phase 1** | ~20 lines |
+| Distillation temporal spread (9.5.1) | **Phase 1** | ~15 lines |
+| Supersession escalation (9.5.2) | **Phase 1** | ~10 lines |
+| Per-brand worker guards (9.5.5) | **Phase 1** | ~30 lines |
+| Memory events source column (9.5.6) | **Phase 1** | 1 ALTER + update capture calls |
+| Outcome attribution (9.5.7) | **Phase 1.5** | New worker + schema |
+
+---
+
 ## 10. Integration Points
 
 ### 10.1 Google APIs (OAuth2)

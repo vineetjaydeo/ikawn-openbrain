@@ -12,7 +12,8 @@ async function captureMessage({
   direction,
   content,
   metadata = {},
-  source_ref = null
+  source_ref = null,
+  user_id = null
 }) {
   const ref = source_ref || `${channel}_${direction}_${Date.now()}`;
 
@@ -21,8 +22,8 @@ async function captureMessage({
       INSERT INTO memories (
         brand_id, content, source, memory_type,
         source_ref, tags, author, project,
-        embedding_status
-      ) VALUES ($1, $2, $3, 'conversation', $4, $5, $6, $7, 'pending')
+        embedding_status, user_id
+      ) VALUES ($1, $2, $3, 'conversation', $4, $5, $6, $7, 'pending', $8)
       ON CONFLICT (source_ref) WHERE source_ref IS NOT NULL DO UPDATE SET
         content = EXCLUDED.content,
         updated_at = NOW()
@@ -34,8 +35,15 @@ async function captureMessage({
       ref,
       [channel, direction],
       direction === 'inbound' ? 'user' : 'ruhi',
-      metadata.project || channel
+      metadata.project || channel,
+      user_id
     ]);
+
+    // Emit event for trigger-based tasks
+    try {
+      const eventBus = require('./event-bus');
+      eventBus.emit('memory.created', { brandId: brand_id, channel, direction });
+    } catch (_) {}
 
     return result.rows[0].id;
   } catch (err) {

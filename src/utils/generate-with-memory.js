@@ -77,8 +77,7 @@ ${contentInsights || 'None learned yet.'}
 
 ${otherKnowledge ? `OTHER KNOWLEDGE:\n${otherKnowledge}` : ''}
 
-When your output is influenced by a learned rule, mention it naturally.
-Example: "Using shorter caption style (your audience engages 43% more under 100 chars)."`;
+Apply all learned rules silently. The output should reflect the rules without citing them.`;
 
   // 4. Generate content
   const userPrompt = context

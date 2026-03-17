@@ -17,6 +17,8 @@
     "@mozilla/readability": "^0.6.0",
     "bcryptjs": "^3.0.3",
     "cookie-session": "^2.1.1",
+    "croner": "^10.0.1",
+    "eventemitter2": "^6.4.9",
     "express": "^4.21.0",
     "express-rate-limit": "^8.3.0",
     "googleapis": "^171.4.0",

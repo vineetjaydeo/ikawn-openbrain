@@ -81,9 +81,19 @@ async function recall(params) {
     }
 
     const distilledQuery = `
-      SELECT *, similarity * confidence AS score FROM (
-        SELECT id, memory_type, content, confidence, reasoning, last_updated, created_at,
-               cosine_similarity(embedding, $1::float8[]) AS similarity
+      SELECT *, (
+        (similarity * 0.6) +
+        (confidence * time_decay * 0.25) +
+        (CASE WHEN last_updated IS NOT NULL
+          THEN EXP(-EXTRACT(EPOCH FROM (NOW() - last_updated)) / (30 * 86400)) * 0.1
+          ELSE 0.05 END) +
+        (LEAST(1, LN(COALESCE(times_used, 0) + 1) / LN(20)) * 0.05)
+      ) AS score FROM (
+        SELECT id, memory_type, content, confidence, reasoning, last_updated, created_at, times_used,
+               cosine_similarity(embedding, $1::float8[]) AS similarity,
+               CASE WHEN last_updated IS NOT NULL
+                 THEN EXP(-EXTRACT(EPOCH FROM (NOW() - last_updated)) / (30 * 86400))
+                 ELSE 0.5 END AS time_decay
         FROM distilled_memory
         ${distilledWhere}
       ) sub
@@ -162,8 +172,9 @@ async function recall(params) {
     .map(r => r.id);
   if (distilledIds.length > 0) {
     pool.query(`
-      UPDATE distilled_memory SET last_used = NOW() WHERE id = ANY($1)
-    `, [distilledIds]).catch(() => {}); // fire-and-forget
+      UPDATE distilled_memory SET last_used = NOW(), times_used = COALESCE(times_used, 0) + 1
+      WHERE id = ANY($1)
+    `, [distilledIds]).catch(() => {});
   }
 
   return { memories: topResults };

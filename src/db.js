@@ -275,6 +275,17 @@ async function initSchema() {
       ALTER TABLE memories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     `);
 
+    // ── Multi-user isolation: user_id on memories ──
+    await client.query(`
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+      CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id) WHERE user_id IS NOT NULL;
+    `);
+    // Backfill: assign all existing memories to the admin user (Vineet)
+    await client.query(`
+      UPDATE memories SET user_id = (SELECT id FROM users WHERE email = 'v@ikawn.com' LIMIT 1)
+      WHERE user_id IS NULL
+    `);
+
     // Backfill existing memories
     await client.query(`
       UPDATE memories SET embedding_status = 'done', brand_id = 'ikawn' WHERE embedding IS NOT NULL AND brand_id IS NULL;
@@ -703,7 +714,110 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_snapshots_created ON intelligence_snapshots(created_at DESC);
     `);
 
-    console.log('Database schema initialized (v7)');
+    // ── times_used on distilled_memory (recall weighted scoring) ──
+    await client.query(`
+      ALTER TABLE distilled_memory ADD COLUMN IF NOT EXISTS times_used INTEGER DEFAULT 0;
+    `);
+
+    // ── source on memory_events (signal origin tracking) ──
+    await client.query(`
+      ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'system';
+    `);
+
+    // ── OpenBrain v8: Agent Platform ──
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS scheduled_tasks (
+        id SERIAL PRIMARY KEY,
+        uuid UUID DEFAULT gen_random_uuid() UNIQUE,
+        brand_id TEXT NOT NULL DEFAULT 'ikawn',
+        user_id INTEGER REFERENCES users(id),
+        agent_slug TEXT NOT NULL DEFAULT 'ruhi',
+        name TEXT NOT NULL,
+        description TEXT,
+        tier TEXT NOT NULL DEFAULT 'direct',
+        tool TEXT NOT NULL,
+        config JSONB DEFAULT '{}',
+        schedule_type TEXT NOT NULL,
+        cron_expression TEXT,
+        interval_minutes INTEGER,
+        run_after TIMESTAMPTZ,
+        trigger_event TEXT,
+        active_window_start TIME DEFAULT '07:00',
+        active_window_end TIME DEFAULT '19:00',
+        timezone TEXT DEFAULT 'Asia/Calcutta',
+        enabled BOOLEAN DEFAULT true,
+        next_run_at TIMESTAMPTZ,
+        last_run_at TIMESTAMPTZ,
+        last_status TEXT,
+        last_error TEXT,
+        run_count INTEGER DEFAULT 0,
+        consecutive_failures INTEGER DEFAULT 0,
+        requires_approval BOOLEAN DEFAULT false,
+        max_cost_per_run NUMERIC(8,2),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks (next_run_at) WHERE enabled = true;
+      CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_brand ON scheduled_tasks (brand_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS task_runs (
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER REFERENCES scheduled_tasks(id),
+        agent_slug TEXT NOT NULL,
+        started_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        status TEXT DEFAULT 'running',
+        tier TEXT NOT NULL,
+        result JSONB,
+        error TEXT,
+        cost_usd NUMERIC(8,4) DEFAULT 0,
+        tokens_used INTEGER DEFAULT 0,
+        plan JSONB,
+        approval_message TEXT,
+        approved_by TEXT,
+        approved_at TIMESTAMPTZ
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs (task_id, started_at DESC);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS domain_agents (
+        id SERIAL PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        brand_id TEXT NOT NULL DEFAULT 'ikawn',
+        name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        persona TEXT NOT NULL,
+        tools TEXT[] NOT NULL,
+        memory_tags TEXT[],
+        enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brand_oauth_tokens (
+        id SERIAL PRIMARY KEY,
+        brand_id TEXT NOT NULL DEFAULT 'ikawn',
+        provider TEXT NOT NULL,
+        scopes TEXT[] NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brand_id, provider)
+      )
+    `);
+
+    console.log('Database schema initialized (v8 — agent platform)');
   } finally {
     client.release();
   }

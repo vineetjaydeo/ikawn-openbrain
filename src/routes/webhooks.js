@@ -3,9 +3,10 @@ const crypto = require('crypto');
 const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
 const { handleUpdate, handleSelfReport } = require('../connectors/telegram');
-const { sendTelegramMessage } = require('../utils/telegram');
+const { sendTelegramMessage, sendChatAction } = require('../utils/telegram');
 const { buildSystemPrompt } = require('../ruhi/persona');
 const { captureMessage } = require('../utils/capture');
+const { getTool, getToolSchemas } = require('../tools/registry');
 
 const router = Router();
 
@@ -122,6 +123,12 @@ router.post('/webhooks/telegram/:token', async (req, res) => {
 
   const body = req.body;
 
+  // Send typing indicator immediately so user knows the bot is working
+  const chatId = body.message?.chat?.id || body.edited_message?.chat?.id;
+  if (chatId) {
+    sendChatAction('typing', { chatId: String(chatId), botToken: req.params.token });
+  }
+
   // Forward to OpenClaw FIRST — this is the critical path for user response.
   // Must happen before res.json() to avoid Fly.io killing async continuation.
   const openclawWebhookUrl = process.env.OPENCLAW_WEBHOOK_URL;
@@ -170,19 +177,90 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
   }
 
   const body = req.body;
+
+  // Handle callback queries (approval buttons) inline
+  if (body.callback_query) {
+    const cq = body.callback_query;
+    const cqChatId = String(cq.message?.chat?.id || '');
+    const data = cq.data || '';
+    try {
+      const [action, runIdStr] = data.split(':');
+      const runId = parseInt(runIdStr, 10);
+      if (runId && (action === 'approve' || action === 'reject')) {
+        const { rows: [run] } = await pool.query(
+          `SELECT tr.*, st.name AS task_name, st.agent_slug
+           FROM task_runs tr JOIN scheduled_tasks st ON st.id = tr.task_id
+           WHERE tr.id = $1`, [runId]
+        );
+        if (run) {
+          if (action === 'approve') {
+            await pool.query("UPDATE task_runs SET status = 'approved', approved_by = 'telegram', approved_at = NOW() WHERE id = $1", [runId]);
+            await sendTelegramMessage(`\u2705 Approved: "${run.task_name}"`, { chatId: cqChatId });
+          } else {
+            await pool.query("UPDATE task_runs SET status = 'rejected', approved_by = 'telegram', approved_at = NOW() WHERE id = $1", [runId]);
+            captureMessage({
+              brand_id: 'ikawn', channel: 'agent', direction: 'inbound',
+              content: `[CORRECTION] Task "${run.task_name}" (${run.agent_slug}) rejected via Telegram. Action: ${run.result?.summary || 'unknown'}`,
+              source_ref: `correction_${runId}`,
+              metadata: { project: 'agent-platform', memory_type: 'CORRECTION' },
+            });
+            await sendTelegramMessage(`\u274c Rejected: "${run.task_name}". Feedback captured.`, { chatId: cqChatId });
+          }
+        }
+        await fetch(`https://api.telegram.org/bot${req.params.token}/answerCallbackQuery`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callback_query_id: cq.id }),
+        });
+      }
+    } catch (cbErr) { console.error('[IntelBot] Callback error:', cbErr.message); }
+    res.json({ ok: true });
+    return;
+  }
+
   const message = body.message;
 
-  // Only handle text messages
-  if (!message?.text) {
+  // Must have either text or photo
+  if (!message?.text && !message?.photo && !message?.caption) {
     res.json({ ok: true });
     return;
   }
 
   const chatId = String(message.chat.id);
-  const userText = message.text;
   const userName = message.from?.first_name || 'User';
 
-  console.log(`[IntelBot] Message from ${userName} (${chatId}): ${userText.slice(0, 100)}`);
+  // Build user content — text, photo, or photo+caption
+  let userText = message.text || message.caption || '';
+  let imageBase64 = null;
+  let imageMediaType = 'image/jpeg';
+
+  if (message.photo && message.photo.length > 0) {
+    // Get highest resolution photo (last in array), download as base64
+    const bestPhoto = message.photo[message.photo.length - 1];
+    try {
+      const fileRes = await fetch(`https://api.telegram.org/bot${req.params.token}/getFile?file_id=${bestPhoto.file_id}`);
+      const fileData = await fileRes.json();
+      if (fileData.ok && fileData.result.file_path) {
+        const fileUrl = `https://api.telegram.org/file/bot${req.params.token}/${fileData.result.file_path}`;
+        const imgRes = await fetch(fileUrl);
+        const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+        imageBase64 = imgBuffer.toString('base64');
+        // Detect media type from file path
+        const fp = fileData.result.file_path.toLowerCase();
+        if (fp.endsWith('.png')) imageMediaType = 'image/png';
+        else if (fp.endsWith('.webp')) imageMediaType = 'image/webp';
+        else if (fp.endsWith('.gif')) imageMediaType = 'image/gif';
+      }
+    } catch (err) {
+      console.warn('[IntelBot] Failed to download photo:', err.message);
+    }
+    if (!userText) userText = 'What do you see in this image?';
+  }
+
+  // Typing indicator — repeat every 4s to keep it alive during long API calls
+  sendChatAction('typing', { chatId });
+  const typingInterval = setInterval(() => sendChatAction('typing', { chatId }), 4000);
+
+  console.log(`[IntelBot] Message from ${userName} (${chatId}): ${userText.slice(0, 100)}${imageBase64 ? ' [+image]' : ''}`);
 
   try {
     // 0. Find or create daily conversation in DB (so it appears on ruhi.ikawn.in)
@@ -227,7 +305,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       [convId, 'user', userText, 'ikawn']
     );
 
-    // 1. RAG — search memory for relevant context
+    // 1. RAG — search memory for relevant context (scoped to this user)
     let memoryContext = '';
     try {
       const embedding = await getEmbedding(userText);
@@ -237,9 +315,10 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
          FROM memories
          WHERE embedding IS NOT NULL
            AND (archived IS NULL OR archived = false)
+           AND (user_id = $2 OR access_level NOT IN ('private') OR user_id IS NULL)
          ORDER BY cosine_similarity(embedding, $1) DESC
          LIMIT 10`,
-        [embedding]
+        [embedding, userId]
       );
       if (memResult.rows.length > 0) {
         memoryContext = memResult.rows.map((m, i) => {
@@ -280,17 +359,72 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       content: m.content,
     }));
 
-    // 5. Call Anthropic (non-streaming — Telegram doesn't support SSE)
+    // If current message has an image, replace the last user message with multimodal content
+    if (imageBase64 && historyMessages.length > 0) {
+      const lastMsg = historyMessages[historyMessages.length - 1];
+      if (lastMsg.role === 'user') {
+        lastMsg.content = [
+          { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
+          { type: 'text', text: userText },
+        ];
+      }
+    }
+
+    // 5. Call Anthropic with web search + manage_task tools
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: historyMessages,
-    });
 
-    const ruhiReply = response.content.find(b => b.type === 'text')?.text || 'I couldn\'t generate a response right now.';
+    // Build tool definitions — manage_task from registry + web_search server tool
+    const manageTaskSchemas = getToolSchemas(['manage_task']);
+    const allTools = [
+      ...manageTaskSchemas,
+      { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
+    ];
+
+    // Multi-turn loop: Claude may call manage_task, we execute and feed result back
+    let messages = [...historyMessages];
+    let ruhiReply = '';
+    const MAX_ROUNDS = 5;
+
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages,
+        tools: allTools,
+      });
+
+      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use' && b.name !== 'web_search');
+      const textBlocks = response.content.filter(b => b.type === 'text');
+
+      if (toolUseBlocks.length === 0) {
+        // No more tool calls — extract final text
+        ruhiReply = textBlocks.map(b => b.text).join('\n') || 'I couldn\'t generate a response right now.';
+        break;
+      }
+
+      // Execute tool calls and feed results back
+      messages.push({ role: 'assistant', content: response.content });
+      const toolResults = [];
+      for (const toolBlock of toolUseBlocks) {
+        const tool = getTool(toolBlock.name);
+        let result;
+        if (tool) {
+          try {
+            result = await tool.execute(toolBlock.input || {}, { brandId: 'ikawn', userId, pool });
+          } catch (err) {
+            result = { success: false, data: null, summary: `Tool error: ${err.message}` };
+          }
+        } else {
+          result = { success: false, data: null, summary: `Unknown tool: ${toolBlock.name}` };
+        }
+        toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: JSON.stringify(result) });
+      }
+      messages.push({ role: 'user', content: toolResults });
+    }
+
+    if (!ruhiReply) ruhiReply = 'I ran out of processing rounds. Let me know if you need anything else.';
 
     // 6. Save assistant reply to messages table + update conversation
     await pool.query(
@@ -308,14 +442,15 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       await sendTelegramMessage(chunk, { chatId });
     }
 
-    // 8. Capture both messages to memories for RAG (fire-and-forget)
+    // 8. Capture both messages to memories for RAG (fire-and-forget, user-scoped)
     captureMessage({
       brand_id: 'ikawn',
       channel: 'telegram-ruhi',
       direction: 'inbound',
       content: userText,
       source_ref: `tg_ruhi_in_${chatId}_${message.message_id}`,
-      metadata: { project: 'ruhi-telegram', author: userName }
+      metadata: { project: 'ruhi-telegram', author: userName },
+      user_id: userId
     });
     captureMessage({
       brand_id: 'ikawn',
@@ -323,16 +458,18 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       direction: 'outbound',
       content: ruhiReply,
       source_ref: `tg_ruhi_out_${chatId}_${message.message_id}`,
-      metadata: { project: 'ruhi-telegram' }
+      metadata: { project: 'ruhi-telegram' },
+      user_id: userId
     });
 
     console.log(`[IntelBot] Replied to ${userName} (${ruhiReply.length} chars, conv ${convUuid})`);
   } catch (err) {
     console.error('[IntelBot] Error:', err);
-    // Try to send error message to user
     try {
       await sendTelegramMessage('Something went wrong on my end. Try again in a moment.', { chatId });
     } catch (_) {}
+  } finally {
+    clearInterval(typingInterval);
   }
 
   res.json({ ok: true });
@@ -376,6 +513,83 @@ function splitTelegramMessage(text, maxLen = 4096) {
 
   return chunks;
 }
+
+// ── Telegram Callback Query Handler (approval buttons) ──
+router.post('/webhooks/intelligence-telegram-callback/:token', async (req, res) => {
+  const expectedToken = process.env.INTELLIGENCE_TELEGRAM_BOT_TOKEN;
+  if (!expectedToken || req.params.token !== expectedToken) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  const callbackQuery = req.body.callback_query;
+  if (!callbackQuery) {
+    res.json({ ok: true });
+    return;
+  }
+
+  const chatId = String(callbackQuery.message?.chat?.id || '');
+  const data = callbackQuery.data || '';
+
+  try {
+    const [action, runIdStr] = data.split(':');
+    const runId = parseInt(runIdStr, 10);
+    if (!runId || (action !== 'approve' && action !== 'reject')) {
+      await sendTelegramMessage('Invalid callback data.', { chatId });
+      res.json({ ok: true });
+      return;
+    }
+
+    // Fetch the task run
+    const { rows: [run] } = await pool.query(
+      `SELECT tr.*, st.name AS task_name, st.agent_slug
+       FROM task_runs tr
+       JOIN scheduled_tasks st ON st.id = tr.task_id
+       WHERE tr.id = $1`,
+      [runId]
+    );
+
+    if (!run) {
+      await sendTelegramMessage('Task run not found.', { chatId });
+      res.json({ ok: true });
+      return;
+    }
+
+    if (action === 'approve') {
+      await pool.query(
+        "UPDATE task_runs SET status = 'approved', approved_by = 'telegram', approved_at = NOW() WHERE id = $1",
+        [runId]
+      );
+      await sendTelegramMessage(`\u2705 Approved: "${run.task_name}"`, { chatId });
+    } else {
+      await pool.query(
+        "UPDATE task_runs SET status = 'rejected', approved_by = 'telegram', approved_at = NOW() WHERE id = $1",
+        [runId]
+      );
+      // Capture rejection as CORRECTION memory for future learning
+      captureMessage({
+        brand_id: 'ikawn',
+        channel: 'agent',
+        direction: 'inbound',
+        content: `[CORRECTION] Task "${run.task_name}" (${run.agent_slug}) rejected by user via Telegram. Action was: ${run.result?.summary || 'unknown'}`,
+        source_ref: `correction_${runId}`,
+        metadata: { project: 'agent-platform', memory_type: 'CORRECTION' },
+      });
+      await sendTelegramMessage(`\u274c Rejected: "${run.task_name}". Feedback captured.`, { chatId });
+    }
+
+    // Answer the callback query to remove the loading state
+    const token = process.env.INTELLIGENCE_TELEGRAM_BOT_TOKEN;
+    await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQuery.id }),
+    });
+  } catch (err) {
+    console.error('[CallbackQuery] Error:', err);
+  }
+
+  res.json({ ok: true });
+});
 
 // OpenClaw self-report endpoint — API key auth
 router.post('/api/ingest/openclaw', async (req, res) => {

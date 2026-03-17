@@ -32,6 +32,8 @@ const governanceRoute = require('./routes/governance');
 const brandsApiRoute = require('./routes/brands-api');
 const intelligenceRoute = require('./routes/intelligence');
 const { startScheduler, triggerSync } = require('./scheduler');
+const { seedAgents } = require('./agents/seed-all');
+const { loadTools } = require('./tools/registry');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
 const { startMothershipWorker } = require('./workers/mothership-worker');
@@ -149,6 +151,8 @@ app.post('/admin/sync/:source', requireAuth, async (req, res) => {
 async function start() {
   try {
     await initSchema();
+    await seedAgents();
+    loadTools();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`OpenBrain running on port ${PORT}`);
       // Start ingestion scheduler

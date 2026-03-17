@@ -86,6 +86,19 @@ async function distillEditDeltas() {
       continue; // Not enough data yet
     }
 
+    // Session diversity: require events spread across >= 1 hour
+    const timestamps = brandEvents.map(e => new Date(e.created_at).getTime());
+    const minTs = Math.min(...timestamps);
+    const maxTs = Math.max(...timestamps);
+    const timeSpreadHours = (maxTs - minTs) / (60 * 60 * 1000);
+    if (timeSpreadHours < 1) {
+      continue; // All from same session — not enough temporal diversity
+    }
+
+    // Adjust confidence based on time spread (full confidence after 7 days of evidence)
+    const timeSpreadDays = (maxTs - minTs) / (24 * 60 * 60 * 1000);
+    const spreadFactor = Math.min(1, timeSpreadDays / 7);
+
     // Process in chunks of MAX_EVENTS_PER_CALL
     for (let i = 0; i < brandEvents.length; i += MAX_EVENTS_PER_CALL) {
       const chunk = brandEvents.slice(i, i + MAX_EVENTS_PER_CALL);
@@ -134,6 +147,14 @@ If no clear patterns exist, return an empty array [].`;
         if (!Array.isArray(rules)) {
           console.warn('[DistillationWorker] Non-array response for edit deltas, skipping chunk');
           continue; // Don't mark processed — retry next run
+        }
+
+        // Apply spread factor to confidence (temporal diversity weighting)
+        for (const rule of rules) {
+          if (rule.confidence) {
+            rule.confidence = Math.round(rule.confidence * spreadFactor * 100) / 100;
+            rule.confidence = Math.max(0.3, rule.confidence); // floor
+          }
         }
 
         for (const rule of rules) {
@@ -188,6 +209,13 @@ async function distillGeneralEvents() {
     const userId = groupEvents[0].user_id || null;
     if (groupEvents.length < MIN_EVENTS_FOR_DISTILLATION) continue;
 
+    // Session diversity: require events spread across >= 1 hour
+    const gTimestamps = groupEvents.map(e => new Date(e.created_at).getTime());
+    const gMinTs = Math.min(...gTimestamps);
+    const gMaxTs = Math.max(...gTimestamps);
+    if ((gMaxTs - gMinTs) / (60 * 60 * 1000) < 1) continue;
+    const gSpreadFactor = Math.min(1, (gMaxTs - gMinTs) / (7 * 24 * 60 * 60 * 1000));
+
     for (let i = 0; i < groupEvents.length; i += MAX_EVENTS_PER_CALL) {
       const chunk = groupEvents.slice(i, i + MAX_EVENTS_PER_CALL);
 
@@ -233,6 +261,14 @@ Rules:
         if (!Array.isArray(insights)) {
           console.warn('[DistillationWorker] Non-array response for general events, skipping chunk');
           continue;
+        }
+
+        // Apply spread factor to confidence
+        for (const insight of insights) {
+          if (insight.confidence) {
+            insight.confidence = Math.round(insight.confidence * gSpreadFactor * 100) / 100;
+            insight.confidence = Math.max(0.3, insight.confidence);
+          }
         }
 
         for (const insight of insights) {
@@ -314,12 +350,15 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
     const existing = similar[0];
 
     // High similarity — ask LLM whether content aligns or contradicts
-    if (!guard.trackLLMCall('claude-haiku-4-5-20251001')) return;
+    // Escalate to Sonnet if either memory has high confidence (prevents corruption)
+    const useHighModel = existing.confidence > 0.8 || insight.confidence > 0.8;
+    const alignmentModel = useHighModel ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
+    if (!guard.trackLLMCall(alignmentModel)) return;
 
     let alignment = 'agree';
     try {
       const alignmentRaw = await callReflectionLLM(
-        'edit_delta_distillation',
+        useHighModel ? 'strategic_rollup' : 'edit_delta_distillation',
         'You compare two knowledge rules. Reply with ONLY the word "agree" or "contradict". Nothing else.',
         `Existing rule: "${existing.content}"\nNew rule: "${insight.content}"`
       );
@@ -329,18 +368,22 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
     }
 
     if (alignment === 'contradict') {
-      // Supersede: old rule gets superseded_by pointing to new
-      const { rows: [newRow] } = await pool.query(`
-        INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::float8[], 'done')
-        RETURNING id
-      `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, embeddingStr]);
+      // Contradiction pressure: reduce BOTH confidences by 0.1
+      // The one that keeps getting reinforced wins; the other decays
+      const reducedExisting = Math.max(0.1, existing.confidence - 0.1);
+      const reducedNew = Math.max(0.1, insight.confidence - 0.1);
 
       await pool.query(`
-        UPDATE distilled_memory SET superseded_by = $1, last_updated = NOW() WHERE id = $2
-      `, [newRow.id, existing.id]);
+        UPDATE distilled_memory SET confidence = $1, last_updated = NOW() WHERE id = $2
+      `, [reducedExisting, existing.id]);
 
-      console.log(`[DistillationWorker] Superseded memory ${existing.id} → ${newRow.id} (contradiction)`);
+      // Still insert the new contradicting memory so it can compete
+      await pool.query(`
+        INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::float8[], 'done')
+      `, [brandId, effectiveUserId, insight.memory_type, insight.content, reducedNew, sourceEventIds, insight.reasoning, embeddingStr]);
+
+      console.log(`[DistillationWorker] Contradiction: existing ${existing.id} (${existing.confidence}->${reducedExisting}), new (${insight.confidence}->${reducedNew})`);
     } else {
       // Reinforce: bump confidence, merge evidence
       const newConfidence = Math.min(existing.confidence + 0.1, 0.99);
@@ -359,7 +402,52 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
       console.log(`[DistillationWorker] Reinforced memory ${existing.id} (confidence ${existing.confidence} → ${newConfidence})`);
     }
   } else {
-    // No similar memory — insert new
+    // Cluster dedup: check if top 3 similar memories say essentially the same thing
+    const { rows: top3 } = await pool.query(`
+      SELECT id, content, cosine_similarity(embedding, $1::float8[]) AS similarity
+      FROM distilled_memory
+      WHERE brand_id = $2 AND memory_type = $3
+        ${userClause}
+        AND superseded_by IS NULL AND embedding IS NOT NULL
+      ORDER BY cosine_similarity(embedding, $1::float8[]) DESC
+      LIMIT 3
+    `, similarParams);
+
+    const highSimilarCount = top3.filter(r => r.similarity > 0.80).length;
+    if (highSimilarCount >= 2) {
+      console.log(`[DistillationWorker] Skipping duplicate insight (${highSimilarCount} similar memories exist)`);
+      return; // We already know this
+    }
+
+    // Per-type cap: max 30 voice rules, 20 creative patterns, 50 total per brand
+    const TYPE_CAPS = { BRAND_VOICE_RULE: 30, CREATIVE_PATTERN: 20 };
+    const typeCap = TYPE_CAPS[insight.memory_type];
+    if (typeCap) {
+      const capParams = effectiveUserId != null ? [brandId, insight.memory_type, effectiveUserId] : [brandId, insight.memory_type];
+      const { rows: [{ count }] } = await pool.query(`
+        SELECT COUNT(*)::int AS count FROM distilled_memory
+        WHERE brand_id = $1 AND memory_type = $2 AND superseded_by IS NULL
+          ${userClause}
+      `, capParams);
+
+      if (count >= typeCap) {
+        // Evict lowest effective_confidence entry
+        await pool.query(`
+          DELETE FROM distilled_memory WHERE id = (
+            SELECT id FROM distilled_memory
+            WHERE brand_id = $1 AND memory_type = $2 AND superseded_by IS NULL
+              ${userClause}
+            ORDER BY confidence * CASE WHEN last_updated IS NOT NULL
+              THEN EXP(-EXTRACT(EPOCH FROM (NOW() - last_updated)) / (30 * 86400))
+              ELSE 0.5 END ASC
+            LIMIT 1
+          )
+        `, capParams);
+        console.log(`[DistillationWorker] Evicted lowest-confidence ${insight.memory_type} (cap: ${typeCap})`);
+      }
+    }
+
+    // Insert new
     await pool.query(`
       INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::float8[], 'done')

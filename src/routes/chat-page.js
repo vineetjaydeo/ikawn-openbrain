@@ -561,6 +561,102 @@ function chatPage(user) {
       30% { opacity: 1; transform: scale(1); }
     }
 
+    /* ==================== GENERATION CARD ==================== */
+    .gen-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-top: 8px;
+      max-width: 520px;
+    }
+    .gen-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .gen-card-agent {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+    .gen-card-status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .gen-card-status .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid var(--border-light);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .gen-card-prompt {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+      font-style: italic;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .gen-card-images {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .gen-card-images.single { grid-template-columns: 1fr; }
+    .gen-card-images img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .gen-card-images img:hover { opacity: 0.85; }
+    .gen-card-placeholder {
+      aspect-ratio: 1;
+      background: var(--bg-hover);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gen-card-placeholder .shimmer {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border-light);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    .gen-card-error {
+      color: var(--danger);
+      font-size: 0.82rem;
+      padding: 12px;
+      text-align: center;
+    }
+    .gen-card-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      font-size: 0.78rem;
+      color: var(--accent);
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .gen-card-link:hover { opacity: 0.8; }
+
     /* ==================== INPUT AREA ==================== */
     .input-area {
       position: sticky;
@@ -1352,6 +1448,9 @@ function chatPage(user) {
                 // Update sidebar
                 const conv = conversations.find(c => c.id === activeConvId);
                 if (conv) { conv.title = evt.title; renderConversationList(); }
+              } else if (evt.type === 'generation_started') {
+                // Show generation card inline in chat
+                showGenerationCard(evt.generationId, evt.agent, evt.prompt, evt.batchSize);
               } else if (evt.type === 'error') {
                 showToast(evt.error || evt.message || 'An error occurred', 'error');
               }
@@ -1374,6 +1473,164 @@ function chatPage(user) {
         isStreaming = false;
         abortController = null;
         updateSendBtn();
+      }
+    }
+
+    /* ==================== GENERATION CARD ==================== */
+    function showGenerationCard(generationId, agent, prompt, batchSize) {
+      const container = document.getElementById('messages-inner');
+      if (!container) return;
+
+      const cardId = 'gen-' + generationId;
+
+      const card = document.createElement('div');
+      card.className = 'msg-row assistant';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'msg-avatar assistant-avatar';
+      avatar.textContent = 'R';
+
+      const genCard = document.createElement('div');
+      genCard.className = 'gen-card';
+      genCard.id = cardId;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'gen-card-header';
+      const agentLabel = document.createElement('span');
+      agentLabel.className = 'gen-card-agent';
+      agentLabel.textContent = (agent || 'genie').toUpperCase();
+      const statusLabel = document.createElement('span');
+      statusLabel.className = 'gen-card-status';
+      const spinner = document.createElement('div');
+      spinner.className = 'spinner';
+      statusLabel.appendChild(spinner);
+      statusLabel.appendChild(document.createTextNode(' Generating...'));
+      header.appendChild(agentLabel);
+      header.appendChild(statusLabel);
+
+      // Prompt
+      const promptEl = document.createElement('div');
+      promptEl.className = 'gen-card-prompt';
+      promptEl.textContent = prompt || '';
+
+      // Image placeholders
+      const imagesEl = document.createElement('div');
+      imagesEl.className = 'gen-card-images';
+      const count = batchSize || 4;
+      for (let i = 0; i < count; i++) {
+        const ph = document.createElement('div');
+        ph.className = 'gen-card-placeholder';
+        const shim = document.createElement('div');
+        shim.className = 'shimmer';
+        ph.appendChild(shim);
+        imagesEl.appendChild(ph);
+      }
+
+      genCard.appendChild(header);
+      genCard.appendChild(promptEl);
+      genCard.appendChild(imagesEl);
+      card.appendChild(avatar);
+      card.appendChild(genCard);
+      container.appendChild(card);
+      scrollToBottom(false);
+
+      // Start polling for results
+      pollGeneration(generationId, cardId);
+    }
+
+    async function pollGeneration(generationId, cardId) {
+      const maxAttempts = 60; // 2 minutes at 2s intervals
+      let attempts = 0;
+
+      const poll = async () => {
+        attempts++;
+        if (attempts > maxAttempts) {
+          updateGenCard(cardId, 'error', null, 'Generation timed out');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/actions/status/' + generationId);
+          if (!res.ok) {
+            if (attempts > 5) {
+              updateGenCard(cardId, 'error', null, 'Failed to check status');
+              return;
+            }
+            setTimeout(poll, 3000);
+            return;
+          }
+
+          const data = await res.json();
+
+          const imageUrls = data.resultUrls || data.urls || [];
+          if ((data.status === 'complete' || data.status === 'completed') && imageUrls.length > 0) {
+            updateGenCard(cardId, 'completed', imageUrls, null, generationId);
+          } else if (data.status === 'failed' || data.status === 'error') {
+            updateGenCard(cardId, 'error', null, data.error || 'Generation failed');
+          } else {
+            // Still processing
+            setTimeout(poll, 2000);
+          }
+        } catch (err) {
+          if (attempts > 5) {
+            updateGenCard(cardId, 'error', null, 'Connection lost');
+            return;
+          }
+          setTimeout(poll, 3000);
+        }
+      };
+
+      // First poll after 3s (generation needs time to start)
+      setTimeout(poll, 3000);
+    }
+
+    function updateGenCard(cardId, status, urls, errorMsg, generationId) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+
+      const statusEl = card.querySelector('.gen-card-status');
+      const imagesEl = card.querySelector('.gen-card-images');
+
+      if (status === 'completed' && urls) {
+        // Update status
+        while (statusEl.firstChild) statusEl.removeChild(statusEl.firstChild);
+        statusEl.appendChild(document.createTextNode('\u2713 Complete'));
+        statusEl.style.color = 'var(--success)';
+
+        // Show images
+        if (urls.length === 1) imagesEl.classList.add('single');
+        while (imagesEl.firstChild) imagesEl.removeChild(imagesEl.firstChild);
+        urls.forEach(url => {
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = 'Generated image';
+          img.loading = 'lazy';
+          img.addEventListener('click', () => window.open(url, '_blank'));
+          imagesEl.appendChild(img);
+        });
+
+        // Add link to view on iKawn OS
+        if (generationId) {
+          const link = document.createElement('a');
+          link.className = 'gen-card-link';
+          link.href = 'https://os.ikawn.com/genie/' + generationId;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.textContent = 'View on iKawn OS \u2192';
+          card.appendChild(link);
+        }
+
+        scrollToBottom(false);
+      } else if (status === 'error') {
+        while (statusEl.firstChild) statusEl.removeChild(statusEl.firstChild);
+        statusEl.appendChild(document.createTextNode('\u2715 Failed'));
+        statusEl.style.color = 'var(--danger)';
+        while (imagesEl.firstChild) imagesEl.removeChild(imagesEl.firstChild);
+        const errDiv = document.createElement('div');
+        errDiv.className = 'gen-card-error';
+        errDiv.textContent = errorMsg || 'Unknown error';
+        imagesEl.appendChild(errDiv);
       }
     }
 

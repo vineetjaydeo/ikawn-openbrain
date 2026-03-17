@@ -27,10 +27,7 @@ router.get('/api/mission/mentions', requireAuth, async (req, res) => {
         role: a.role,
       })),
       ...usersResult.rows.map(u => ({
-        type: 'person',
-        slug: u.name.toLowerCase(),
-        name: u.name,
-        role: u.role,
+        type: 'person', slug: u.name.toLowerCase(), name: u.name, role: u.role,
       })),
     ];
 
@@ -988,27 +985,10 @@ function missionPage(isAdmin) {
       info.appendChild(details);
       top.appendChild(info);
 
-      if (isAdmin) {
-        var label = document.createElement('label');
-        label.className = 'toggle';
-        var input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = a.enabled;
-        input.onchange = (function(slug) { return function() { toggleAgent(slug, this.checked); }; })(a.slug);
-        var track = document.createElement('span');
-        track.className = 'toggle-track';
-        var thumb = document.createElement('span');
-        thumb.className = 'toggle-thumb';
-        label.appendChild(input);
-        label.appendChild(track);
-        label.appendChild(thumb);
-        top.appendChild(label);
-      } else {
-        var statusBadge = document.createElement('span');
-        statusBadge.className = 'badge ' + (a.enabled ? 'badge-success' : 'badge-dim');
-        statusBadge.textContent = a.enabled ? 'Active' : 'Disabled';
-        top.appendChild(statusBadge);
-      }
+      var statusBadge = document.createElement('span');
+      statusBadge.className = 'badge badge-success';
+      statusBadge.textContent = 'Active';
+      top.appendChild(statusBadge);
 
       card.appendChild(top);
 
@@ -1082,14 +1062,6 @@ function missionPage(isAdmin) {
       }
 
       grid.appendChild(card);
-    });
-  }
-
-  async function toggleAgent(slug, enabled) {
-    await fetch('/api/mission/agents/' + encodeURIComponent(slug), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: enabled }),
     });
   }
 

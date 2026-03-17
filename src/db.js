@@ -817,7 +817,52 @@ async function initSchema() {
       )
     `);
 
-    console.log('Database schema initialized (v8 — agent platform)');
+    // ── OpenBrain v8.1: Agent Support Tables ──
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS growth_experiments (
+        id SERIAL PRIMARY KEY,
+        brand_id TEXT NOT NULL DEFAULT 'ikawn',
+        agent_slug TEXT NOT NULL DEFAULT 'growth',
+        name TEXT NOT NULL,
+        hypothesis TEXT NOT NULL,
+        channel TEXT,
+        target_reps INTEGER NOT NULL DEFAULT 100,
+        current_reps INTEGER NOT NULL DEFAULT 0,
+        metric_name TEXT NOT NULL,
+        metric_baseline FLOAT,
+        metric_current FLOAT,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'running', 'paused', 'evaluating', 'scaled', 'killed')),
+        outcome TEXT,
+        started_at TIMESTAMPTZ,
+        evaluated_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_growth_experiments_brand_status ON growth_experiments(brand_id, status);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS weekly_scorecards (
+        id SERIAL PRIMARY KEY,
+        brand_id TEXT NOT NULL DEFAULT 'ikawn',
+        week_start DATE NOT NULL,
+        compiled_by TEXT NOT NULL DEFAULT 'ruhi',
+        sections JSONB NOT NULL DEFAULT '{}',
+        highlights TEXT[],
+        blockers TEXT[],
+        score FLOAT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brand_id, week_start)
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_weekly_scorecards_brand_week ON weekly_scorecards(brand_id, week_start DESC);
+    `);
+
+    console.log('Database schema initialized (v8.1 — agent platform + support tables)');
   } finally {
     client.release();
   }

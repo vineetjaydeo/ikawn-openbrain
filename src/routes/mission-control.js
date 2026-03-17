@@ -2,6 +2,7 @@ const { Router } = require('express');
 const { pool } = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { getTools } = require('../tools/registry');
+const { calculateNextRun } = require('../utils/schedule');
 const { RUHI_FAVICON_LINK } = require('../utils/ruhi-assets');
 
 const router = Router();
@@ -82,12 +83,15 @@ router.post('/api/mission/tasks', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: `Tool '${tool}' not found in registry` });
     }
 
+    const taskDef = { schedule_type, cron_expression: cron_expression || null, interval_minutes: interval_minutes || null };
+    const nextRun = calculateNextRun(taskDef);
+
     const { rows } = await pool.query(
-      `INSERT INTO scheduled_tasks (name, description, agent_slug, tool, tier, schedule_type, cron_expression, interval_minutes, brand_id, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ikawn', $9)
-       RETURNING uuid, name, agent_slug, tool, schedule_type, enabled, created_at`,
+      `INSERT INTO scheduled_tasks (name, description, agent_slug, tool, tier, schedule_type, cron_expression, interval_minutes, next_run_at, brand_id, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ikawn', $10)
+       RETURNING uuid, name, agent_slug, tool, schedule_type, enabled, next_run_at, created_at`,
       [name, description || null, agent_slug || 'ruhi', tool, tier || 'direct', schedule_type,
-       cron_expression || null, interval_minutes || null, req.session.user.id]
+       cron_expression || null, interval_minutes || null, nextRun, req.session.user.id]
     );
 
     res.json({ task: rows[0] });

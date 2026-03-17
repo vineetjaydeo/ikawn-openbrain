@@ -17,7 +17,12 @@ async function seedAgents() {
     const { rowCount } = await pool.query(`
       INSERT INTO domain_agents (slug, brand_id, name, role, persona, tools, memory_tags)
       VALUES ($1, 'ikawn', $2, $3, $4, $5, $6)
-      ON CONFLICT (slug) DO NOTHING
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        role = EXCLUDED.role,
+        persona = EXCLUDED.persona,
+        tools = EXCLUDED.tools,
+        memory_tags = EXCLUDED.memory_tags
     `, [agent.slug, agent.name, agent.role, agent.persona, agent.tools, agent.memory_tags]);
 
     if (rowCount > 0) {

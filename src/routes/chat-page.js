@@ -1938,13 +1938,24 @@ function chatPage(user) {
       const items = e.clipboardData?.items;
       if (!items) return;
       for (const item of items) {
-        if (item.type.startsWith('image/')) {
+        if (item.kind === 'file') {
           e.preventDefault();
           const file = item.getAsFile();
           if (file) await uploadFile(file);
         }
       }
     }
+
+    // Drag-and-drop support
+    (function initDragDrop() {
+      var chatArea = document.querySelector('.chat-area') || document.body;
+      chatArea.addEventListener('dragover', function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+      chatArea.addEventListener('drop', async function(e) {
+        e.preventDefault();
+        var files = Array.from(e.dataTransfer.files);
+        for (var f of files) await uploadFile(f);
+      });
+    })();
 
     async function uploadFile(file) {
       const isImage = file.type.startsWith('image/');
@@ -1957,13 +1968,21 @@ function chatPage(user) {
       try {
         const base64 = await fileToBase64(file);
 
+        // Fix MIME detection — browsers often fail for .md, .csv, etc.
+        var ct = file.type;
+        if (!ct || ct === 'application/octet-stream') {
+          var ext = file.name.split('.').pop().toLowerCase();
+          var mimeMap = { md: 'text/markdown', txt: 'text/plain', csv: 'text/csv', json: 'application/json', pdf: 'application/pdf' };
+          ct = mimeMap[ext] || 'application/octet-stream';
+        }
+
         const res = await fetch('/api/upload/direct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             data: base64,
             filename: file.name,
-            contentType: file.type,
+            contentType: ct,
           }),
         });
 
@@ -1977,8 +1996,10 @@ function chatPage(user) {
         const attachment = {
           type: isImage ? 'image' : 'document',
           url: result.url,
+          name: file.name,
           filename: file.name,
           preview: isImage ? URL.createObjectURL(file) : null,
+          extracted_text: result.extracted_text || null,
         };
 
         pendingAttachments.push(attachment);

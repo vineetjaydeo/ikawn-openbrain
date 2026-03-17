@@ -30,8 +30,8 @@ function chatPage(user) {
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #0A0F2E;
-      --bg-sidebar: #070B22;
+      --bg: rgb(5,5,5);
+      --bg-sidebar: rgb(5,5,5);
       --bg-input: #111738;
       --bg-hover: #171E45;
       --bg-assistant: transparent;
@@ -80,7 +80,9 @@ function chatPage(user) {
       flex-direction: column;
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 50;
+      transform: translateX(-100%);
     }
+    .sidebar.open { transform: translateX(0); }
 
     .sidebar-header {
       padding: 16px;
@@ -253,7 +255,7 @@ function chatPage(user) {
     }
 
     .main-header {
-      display: none;
+      display: flex;
       padding: 12px 16px;
       border-bottom: 1px solid var(--border);
       align-items: center;
@@ -1068,15 +1070,7 @@ function chatPage(user) {
 
     /* ==================== RESPONSIVE ==================== */
     @media (max-width: 768px) {
-      .sidebar {
-        position: fixed;
-        left: 0; top: 0; bottom: 0;
-        transform: translateX(-100%);
-        width: 280px;
-        min-width: 280px;
-      }
-      .sidebar.open { transform: translateX(0); }
-      .main-header { display: flex; }
+      .sidebar { width: 280px; min-width: 280px; }
       .messages-inner { padding: 20px 16px 130px; }
       .input-area { padding: 0 12px 14px; }
       .msg-bubble { max-width: 90%; }

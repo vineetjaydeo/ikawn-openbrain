@@ -260,7 +260,7 @@ function missionPage(isAdmin) {
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: #0A0F2E;
+      --bg: rgb(5,5,5);
       --bg-card: #111738;
       --bg-hover: #171E45;
       --border: #1E2550;

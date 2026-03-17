@@ -697,17 +697,96 @@ This enables:
 
 This closes the full loop: memory → action → outcome → memory quality adjustment.
 
-### 9.5.8 Implementation Priority
+### 9.5.8 Production Failure Modes at Scale (~10k events)
 
-| Fix | When | Effort |
-|-----|------|--------|
-| Remove "mention rules" from generation (9.5.4) | **Immediately** | 1 line |
-| Recall weighted scoring (9.5.3) | **Phase 1** | ~20 lines |
-| Distillation temporal spread (9.5.1) | **Phase 1** | ~15 lines |
-| Supersession escalation (9.5.2) | **Phase 1** | ~10 lines |
-| Per-brand worker guards (9.5.5) | **Phase 1** | ~30 lines |
-| Memory events source column (9.5.6) | **Phase 1** | 1 ALTER + update capture calls |
-| Outcome attribution (9.5.7) | **Phase 1.5** | New worker + schema |
+Based on simulation of realistic event distribution (6k caption edits, 2k signals, 2k mixed):
+
+**Phase 1 (0→1k): Honeymoon.** 10-30 brand voice rules, confidence ramps fast, outputs improve noticeably, edit rate drops. Feels like magic.
+
+**Phase 2 (1k→5k): Pattern Saturation.** 50-120 distilled memories, many overlapping/redundant ("Use short sentences" + "Keep captions under 100 chars" + "Avoid long paragraphs"). Recall returns clusters instead of insights. Generation overfits — repetitive tone, less creative variation. Subtle degradation begins.
+
+**Phase 3 (5k→10k): Memory Drift.** Conflicting rules emerge from different time periods, both high-confidence. Confidence inflation via reinforcement (0.7→0.9+) even when context changed. Old high-confidence memories lock in recall bias. Outputs feel "correct but rigid." Users say "it was better last week."
+
+**Top 6 production failure modes (in order of likelihood):**
+
+1. **Silent memory poisoning** — One-off campaign style (festival, aggressive CTA) produces 3-5 edits → distilled as permanent rule. System now believes temporary tone is brand voice. No crash, just slow quality erosion.
+
+2. **Over-reinforcement loop** — Memory used in generation → user edits slightly → new event → reinforces same memory. Self-confirming bias. Even weak rules become strong over time.
+
+3. **Recall overcrowding** — At 100+ memories, top 10 results are semantically similar, not diverse. Generation sees a narrow slice → loss of creative range.
+
+4. **Contradiction coexistence** — "Use emojis" and "Avoid emojis" both active, both high confidence. Supersession detection isn't perfect, so both survive.
+
+5. **Worker starvation** — One noisy brand floods memory_events, distillation spends all cycles there, other brands stop learning.
+
+6. **Hidden cost creep** — More events → more alignment checks → invisible cost multipliers even with guards.
+
+### 9.5.9 Scale Defenses (6 Fixes)
+
+These prevent the failure modes above without overbuilding:
+
+**Fix 1: Memory Decay (prevents drift + stale dominance)**
+```
+effective_confidence = confidence * time_decay(last_updated)
+// time_decay: exponential, half-life ~30 days
+// Old rules naturally weaken. New behavior can override.
+```
+Apply `effective_confidence` in recall scoring AND in distillation reinforcement decisions. This alone fixes drift and stale dominance.
+
+**Fix 2: Session Diversity Requirement (prevents one-session poisoning)**
+Already specified in 9.5.1. Before distilling: require events from >= 2 different sessions. Non-negotiable.
+
+**Fix 3: Cluster Deduplication (prevents recall overcrowding)**
+Before inserting new distilled memory:
+```
+1. Fetch top 3 similar existing memories (cosine > 0.85)
+2. If all 3 say essentially the same thing → skip insert
+3. No full clustering needed — just "do we already know this?"
+```
+Keeps active memory count manageable without pruning.
+
+**Fix 4: Per-Type Memory Cap (hard ceiling on overcrowding)**
+```
+max 30 BRAND_VOICE_RULES per brand
+max 20 CREATIVE_PATTERNS per brand
+max 50 total active distilled memories per brand
+```
+If exceeded: drop lowest `effective_confidence` entries. Enforced at distillation insert time.
+
+**Fix 5: Contradiction Pressure (resolves coexistence)**
+When contradiction detected between two memories:
+- Instead of keeping both at full confidence
+- Reduce confidence of BOTH by 0.1
+- Creates natural resolution pressure over time
+- The one that keeps getting reinforced wins; the other decays
+
+**Fix 6: Memory Feedback Loop (the missing weapon)**
+Already specified in 9.5.7. The unlock:
+```
+Output accepted without edits ✅ → reinforce memories used (+0.05 confidence)
+Output heavily edited ❌ → penalize memories used (-0.1 confidence)
+```
+Memory evolves based on actual outcomes, not just pattern frequency.
+
+### 9.5.10 One-Line Risk Summary
+
+> You're not at risk of under-learning. You're at risk of learning too confidently from too little signal.
+
+### 9.5.11 Implementation Priority (Updated)
+
+| Fix | When | Effort | Prevents |
+|-----|------|--------|----------|
+| Remove "mention rules" (9.5.4) | **Immediately** | 1 line | Leaking internals |
+| Session diversity (9.5.1/Fix 2) | **Phase 1** | ~15 lines | One-session poisoning |
+| Memory decay (Fix 1) | **Phase 1** | ~20 lines | Drift + stale dominance |
+| Recall weighted scoring (9.5.3) | **Phase 1** | ~20 lines | Old memory lock-in |
+| Cluster dedup (Fix 3) | **Phase 1** | ~25 lines | Recall overcrowding |
+| Per-type cap (Fix 4) | **Phase 1** | ~15 lines | Memory bloat |
+| Contradiction pressure (Fix 5) | **Phase 1** | ~10 lines | Coexistence |
+| Supersession escalation (9.5.2) | **Phase 1** | ~10 lines | High-confidence corruption |
+| Per-brand worker guards (9.5.5) | **Phase 1** | ~30 lines | Worker starvation |
+| Memory events source (9.5.6) | **Phase 1** | 1 ALTER | Signal origin tracking |
+| Outcome attribution (Fix 6/9.5.7) | **Phase 1.5** | New worker + schema | Learning without feedback |
 
 ---
 

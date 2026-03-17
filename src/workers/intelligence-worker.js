@@ -11,11 +11,11 @@ const { sendTelegramMessage } = require('../utils/telegram');
 const guard = createWorkerGuard('intelligence');
 
 const INTELLIGENCE_CONFIG = {
-  intervalMs: 60 * 60 * 1000,
+  intervalMs: 6 * 60 * 60 * 1000, // every 6 hours (was 1h — overkill for <100 users)
   statementTimeoutMs: 10000,
   snapshotRetentionDays: 90,
-  alertCooldownMs: 4 * 60 * 60 * 1000,
-  maxAlertsPerDay: parseInt(process.env.MAX_INTELLIGENCE_ALERTS_PER_DAY || '3', 10),
+  alertCooldownMs: 12 * 60 * 60 * 1000, // 12h cooldown between alerts (was 4h)
+  maxAlertsPerDay: 1, // max 1 alert per day (was 3)
 };
 
 const TOTAL_AGENTS = 6; // genie, remix, prism, lazarus, muse, campaign
@@ -47,9 +47,10 @@ function resetAlertThrottle() {
 
 function canSendAlert(isRisk = false) {
   resetAlertThrottle();
-  if (isRisk) return true; // risk alerts bypass throttle
   if (alertsSentToday >= INTELLIGENCE_CONFIG.maxAlertsPerDay) return false;
-  if (Date.now() - lastAlertTime < INTELLIGENCE_CONFIG.alertCooldownMs) return false;
+  // Risk alerts get a shorter cooldown (4h) but never bypass entirely
+  const cooldown = isRisk ? INTELLIGENCE_CONFIG.alertCooldownMs : INTELLIGENCE_CONFIG.alertCooldownMs;
+  if (Date.now() - lastAlertTime < cooldown) return false;
   return true;
 }
 
@@ -361,28 +362,11 @@ Agent popularity: ${JSON.stringify(agentsPopularity)}`;
 
     console.log(`[Intelligence] Snapshot saved: ${enrichedUsers.length} users, ${Object.keys(cohortSummary).length} cohorts, ${signals.length} signals`);
 
-    // Step 9: Send Telegram alerts for notable signals
-    const alertSignals = signals.filter(s => s.type === 'risk' || s.type === 'opportunity');
-    if (alertSignals.length > 0) {
-      const isRisk = alertSignals.some(s => s.type === 'risk');
-      if (canSendAlert(isRisk)) {
-        const alertLines = alertSignals.map(s => {
-          const icon = s.type === 'risk' ? '\u{1F7E0}' : '\u{1F7E2}';
-          return `${icon} ${s.description}`;
-        });
-
-        const alertText = `\u{1F9E0} <b>Ruhi Intelligence</b>\n\n${alertLines.join('\n')}\n\n${summary}\n\n<i>Drill deeper: ruhi.ikawn.in</i>`;
-        const sent = await sendTelegramMessage(alertText);
-        if (sent) {
-          markAlertSent();
-          // Track alert
-          await pool.query(
-            `INSERT INTO intelligence_snapshots (snapshot_type, period, data) VALUES ($1, $2, $3)`,
-            ['alert_sent', today, JSON.stringify({ signal_count: alertSignals.length, signals: alertSignals.map(s => s.signal) })]
-          );
-        }
-      }
-    }
+    // Step 9: Telegram alerts DISABLED until user base is large enough to generate meaningful changes.
+    // Snapshots still saved to DB and visible on ruhi.ikawn.in/admin/intelligence.
+    // To re-enable: uncomment and set INTELLIGENCE_ALERTS_ENABLED=true in Fly secrets.
+    // const alertsEnabled = process.env.INTELLIGENCE_ALERTS_ENABLED === 'true';
+    console.log('[Intelligence] Telegram alerts disabled — view insights at ruhi.ikawn.in/admin/intelligence');
 
     // Step 10: Cleanup old snapshots
     await pool.query(

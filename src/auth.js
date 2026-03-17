@@ -45,8 +45,8 @@ function requireAuthOrApiKey(req, res, next) {
   ).then(result => {
     const key = result.rows[0];
     if (!key) {
-      // No match in env or DB
-      return requireAuth(req, res, next);
+      // API key was explicitly provided but invalid — never redirect, always 401
+      return res.status(401).json({ error: 'Invalid API key' });
     }
     if (key.revoked_at) {
       return res.status(401).json({ error: 'API key has been revoked' });
@@ -71,8 +71,8 @@ function requireAuthOrApiKey(req, res, next) {
     return next();
   }).catch(err => {
     console.error('API key DB lookup error:', err.message);
-    // Fallback to session auth on DB error
-    return requireAuth(req, res, next);
+    // API key was provided but DB lookup failed — 500, not redirect
+    return res.status(500).json({ error: 'API key validation failed' });
   });
 }
 

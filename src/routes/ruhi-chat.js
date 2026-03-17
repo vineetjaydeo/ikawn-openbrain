@@ -7,19 +7,28 @@ const { captureMessage } = require('../utils/capture');
 
 const router = Router();
 
-async function searchMemory(query, accessLevels, limit = 10) {
+async function searchMemory(query, accessLevels, limit = 10, userId = null) {
   const embedding = await getEmbedding(query);
 
   const placeholders = accessLevels.map((_, i) => `$${i + 2}`).join(', ');
+  // User isolation: show user's own memories + shared memories at their access level (excluding other users' private memories)
+  const userFilter = userId
+    ? ` AND (user_id = $${accessLevels.length + 3} OR access_level NOT IN ('private') OR user_id IS NULL)`
+    : '';
+  const params = userId
+    ? [embedding, ...accessLevels, limit, userId]
+    : [embedding, ...accessLevels, limit];
+
   const result = await pool.query(
     `SELECT id, content, memory_type, project, hashtags, author, created_at, cosine_similarity(embedding, $1) AS similarity
      FROM memories
      WHERE embedding IS NOT NULL
        AND (archived IS NULL OR archived = false)
        AND (access_level IS NULL OR access_level IN (${placeholders}))
+       ${userFilter}
      ORDER BY cosine_similarity(embedding, $1) DESC
      LIMIT $${accessLevels.length + 2}`,
-    [embedding, ...accessLevels, limit]
+    params
   );
 
   return result.rows;
@@ -78,14 +87,16 @@ router.post('/chat', async (req, res) => {
       convId = convResult.rows[0].id;
     }
 
-    // Search memory for context (RAG)
-    const memoryResults = await searchMemory(message, userAccessLevels, 10);
+    // Search memory for context (RAG) — scoped to requesting user
+    const currentUserId = req.session?.user?.id || null;
+    const memoryResults = await searchMemory(message, userAccessLevels, 10, currentUserId);
     let memoryContext = '';
     if (memoryResults.length > 0) {
       memoryContext = memoryResults.map((m, i) => {
         const date = new Date(m.created_at).toLocaleDateString();
         const type = m.memory_type || 'note';
-        return `[${i + 1}] (${type}, ${date}) ${m.content.slice(0, 500)}`;
+        const by = m.author ? `, by ${m.author}` : '';
+        return `[${i + 1}] (${type}, ${date}${by}) ${m.content.slice(0, 500)}`;
       }).join('\n\n');
     }
 
@@ -139,7 +150,7 @@ router.post('/chat', async (req, res) => {
       },
     });
 
-    // Save both sides to memories via captureMessage (idempotent, proper metadata)
+    // Save both sides to memories via captureMessage (idempotent, proper metadata, user-scoped)
     const authorName = (obUser?.name || req.session?.user?.name || 'user').toLowerCase();
     captureMessage({
       brand_id: 'ikawn',
@@ -147,7 +158,8 @@ router.post('/chat', async (req, res) => {
       direction: 'inbound',
       content: message,
       source_ref: `ruhi_in_${convId}_${Date.now()}`,
-      metadata: { project: 'ruhi-chat' }
+      metadata: { project: 'ruhi-chat' },
+      user_id: currentUserId
     });
     captureMessage({
       brand_id: 'ikawn',
@@ -155,7 +167,8 @@ router.post('/chat', async (req, res) => {
       direction: 'outbound',
       content: fullResponse,
       source_ref: `ruhi_out_${convId}_${Date.now()}`,
-      metadata: { project: 'ruhi-chat' }
+      metadata: { project: 'ruhi-chat' },
+      user_id: currentUserId
     });
 
     // Update conversation last_activity

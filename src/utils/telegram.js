@@ -50,4 +50,27 @@ async function sendTelegramMessage(text, opts = {}) {
   }
 }
 
-module.exports = { sendTelegramMessage };
+/**
+ * Send a chat action (e.g. "typing") via Telegram Bot API.
+ * @param {string} action - Chat action: 'typing', 'upload_photo', etc.
+ * @param {Object} opts
+ * @param {string} opts.chatId - Target chat ID
+ * @param {string} [opts.botToken] - Override bot token (defaults to INTELLIGENCE_TELEGRAM_BOT_TOKEN)
+ */
+async function sendChatAction(action, opts = {}) {
+  const token = opts.botToken || process.env.INTELLIGENCE_TELEGRAM_BOT_TOKEN;
+  const chatId = opts.chatId;
+  if (!token || !chatId) return;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendChatAction`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, action }),
+    });
+  } catch (_) {
+    // Best-effort — don't block on failure
+  }
+}
+
+module.exports = { sendTelegramMessage, sendChatAction };

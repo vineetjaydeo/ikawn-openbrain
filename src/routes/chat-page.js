@@ -668,6 +668,7 @@ function chatPage(user) {
     .input-area-inner {
       max-width: 860px;
       margin: 0 auto;
+      position: relative;
     }
 
     /* Pending attachments */
@@ -988,6 +989,37 @@ function chatPage(user) {
       height: 100%;
       object-fit: cover;
     }
+    .gallery-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 0 16px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .gallery-tab {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .gallery-tab:hover { background: var(--bg-hover); color: var(--text); }
+    .gallery-tab.active { background: rgba(255,192,28,0.15); color: var(--accent); font-weight: 600; }
+    .gallery-agent-badge {
+      position: absolute;
+      bottom: 4px;
+      left: 4px;
+      background: rgba(10,15,46,0.8);
+      color: var(--accent);
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
     .gallery-empty {
       text-align: center;
       color: var(--text-dim);
@@ -1049,6 +1081,67 @@ function chatPage(user) {
       .input-area { padding: 0 12px 14px; }
       .msg-bubble { max-width: 90%; }
     }
+
+    /* @mention autocomplete */
+    .mention-dropdown {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      right: 0;
+      max-height: 220px;
+      overflow-y: auto;
+      background: var(--bg-input);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+      z-index: 100;
+      display: none;
+      margin-bottom: 8px;
+    }
+    .mention-dropdown.visible { display: block; }
+    .mention-dropdown * { color: var(--text); }
+    .mention-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .mention-item:hover, .mention-item.active {
+      background: rgba(255, 192, 28, 0.1);
+    }
+    .mention-item:first-child { border-radius: 12px 12px 0 0; }
+    .mention-item:last-child { border-radius: 0 0 12px 12px; }
+    .mention-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .mention-avatar.agent { background: linear-gradient(135deg, var(--accent), #F59E0B); color: #0A0F2E; }
+    .mention-avatar.person { background: var(--border); color: var(--text); }
+    .mention-info { display: flex; flex-direction: column; }
+    .mention-name { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+    .mention-role { font-size: 0.72rem; color: var(--text-dim); }
+
+    /* Gold mention pills in messages */
+    .mention-pill {
+      display: inline-block;
+      background: linear-gradient(135deg, rgba(255,192,28,0.2), rgba(245,158,11,0.15));
+      color: var(--accent);
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-size: 0.85em;
+      font-weight: 600;
+      font-family: 'Google Sans', sans-serif;
+      border: 1px solid rgba(255,192,28,0.3);
+    }
   </style>
 </head>
 <body>
@@ -1073,7 +1166,7 @@ function chatPage(user) {
         <div class="sidebar-footer-user">${user.name || user.email}</div>
         <div class="sidebar-footer-links">
           <a href="/settings">Settings</a>
-          ${isAdmin ? '<a href="/admin">Admin</a><a href="/admin/brain-health">Health</a>' : ''}
+          ${isAdmin ? '<a href="/mission">Mission</a><a href="/admin">Admin</a><a href="/admin/brain-health">Health</a>' : ''}
           <a href="javascript:void(0)" onclick="logout()">Logout</a>
         </div>
         <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 4px;">v${require('../../package.json').version}</div>
@@ -1125,6 +1218,7 @@ function chatPage(user) {
         <div class="input-area-inner">
           <div id="reply-preview-container"></div>
           <div class="pending-attachments" id="pending-attachments"></div>
+          <div id="mention-dropdown" class="mention-dropdown"></div>
           <div class="compose">
             <button class="compose-btn" onclick="triggerFileUpload()" title="Attach file">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/></svg>
@@ -1153,6 +1247,11 @@ function chatPage(user) {
       <div class="gallery-header">
         <h3>Choose from Gallery</h3>
         <button class="gallery-close" onclick="closeGalleryPicker()">&times;</button>
+      </div>
+      <div class="gallery-tabs" id="gallery-tabs">
+        <button class="gallery-tab active" data-source="all" onclick="filterGallery('all',this)">All</button>
+        <button class="gallery-tab" data-source="generations" onclick="filterGallery('generations',this)">Generations</button>
+        <button class="gallery-tab" data-source="chat" onclick="filterGallery('chat',this)">Chat</button>
       </div>
       <div class="gallery-body" id="gallery-body">
         <div class="gallery-loading">Loading images...</div>
@@ -1505,13 +1604,34 @@ function chatPage(user) {
       updateSendBtn();
       scrollToBottom(true);
 
+      // Detect @mention client-side for typing indicator
+      var mentionMatch = content.match(/@(\w+)/);
+      var mentionAgent = mentionMatch ? mentionList.find(function(m) { return m.slug.toLowerCase() === mentionMatch[1].toLowerCase() && m.type === 'agent'; }) : null;
+      var typingAvatar = mentionAgent ? mentionAgent.name[0].toUpperCase() : 'R';
+      var typingLabel = mentionAgent ? mentionAgent.name + ' is thinking' : 'Thinking';
+      if (mentionAgent) window._currentAgentIdentity = { slug: mentionAgent.slug, name: mentionAgent.name, role: mentionAgent.role };
+
       // Show thinking indicator
       const typingRow = document.createElement('div');
       typingRow.className = 'typing-indicator visible';
       typingRow.id = 'typing';
-      typingRow.innerHTML =
-        '<div class="msg-avatar assistant-avatar">R</div>'
-        + '<div class="typing-content"><span class="typing-label">Thinking</span><div class="typing-dots"><span></span><span></span><span></span></div></div>';
+      const typingAv = document.createElement('div');
+      typingAv.className = 'msg-avatar assistant-avatar';
+      typingAv.textContent = typingAvatar;
+      const typingContent = document.createElement('div');
+      typingContent.className = 'typing-content';
+      const typingLabelEl = document.createElement('span');
+      typingLabelEl.className = 'typing-label';
+      typingLabelEl.textContent = typingLabel;
+      const typingDots = document.createElement('div');
+      typingDots.className = 'typing-dots';
+      typingDots.appendChild(document.createElement('span'));
+      typingDots.appendChild(document.createElement('span'));
+      typingDots.appendChild(document.createElement('span'));
+      typingContent.appendChild(typingLabelEl);
+      typingContent.appendChild(typingDots);
+      typingRow.appendChild(typingAv);
+      typingRow.appendChild(typingContent);
       container.appendChild(typingRow);
       scrollToBottom(true);
 
@@ -1567,18 +1687,38 @@ function chatPage(user) {
 
             try {
               const evt = JSON.parse(data);
-              if (evt.type === 'chunk' && evt.text) {
+              if (evt.type === 'agent_identity') {
+                // Update typing indicator to show agent avatar
+                const typing = document.getElementById('typing');
+                if (typing) {
+                  const av = typing.querySelector('.assistant-avatar');
+                  if (av) av.textContent = evt.name[0].toUpperCase();
+                  const label = typing.querySelector('.typing-label');
+                  if (label) label.textContent = evt.name + ' is thinking';
+                }
+                // Store for message row
+                window._currentAgentIdentity = evt;
+              } else if (evt.type === 'chunk' && evt.text) {
                 if (firstChunk) {
                   firstChunk = false;
                   const typing = document.getElementById('typing');
                   if (typing) typing.remove();
                   assistantRow = document.createElement('div');
                   assistantRow.className = 'msg-row assistant';
-                  assistantRow.innerHTML =
-                    '<div class="msg-avatar assistant-avatar">R</div>'
-                    + '<div class="msg-bubble" id="streaming-bubble"></div>';
+                  const agentId = window._currentAgentIdentity;
+                  const avatarChar = agentId ? agentId.name[0].toUpperCase() : 'R';
+                  const avatarEl = document.createElement('div');
+                  avatarEl.className = 'msg-avatar assistant-avatar';
+                  avatarEl.textContent = avatarChar;
+                  if (agentId) avatarEl.title = agentId.name + ' (' + agentId.role + ')';
+                  const bubbleEl = document.createElement('div');
+                  bubbleEl.className = 'msg-bubble';
+                  bubbleEl.id = 'streaming-bubble';
+                  assistantRow.appendChild(avatarEl);
+                  assistantRow.appendChild(bubbleEl);
                   container.appendChild(assistantRow);
                   bubble = document.getElementById('streaming-bubble');
+                  window._currentAgentIdentity = null;
                 }
                 fullText += evt.text;
                 try { bubble.innerHTML = marked.parse(fullText); } catch { bubble.textContent = fullText; }
@@ -1601,7 +1741,11 @@ function chatPage(user) {
           }
         }
 
-        if (bubble) bubble.removeAttribute('id');
+        if (bubble) {
+          // Apply mention pills to final rendered content
+          if (typeof renderMentionPills === 'function') bubble.innerHTML = renderMentionPills(bubble.innerHTML);
+          bubble.removeAttribute('id');
+        }
         if (firstChunk) { const typing = document.getElementById('typing'); if (typing) typing.remove(); }
 
       } catch (err) {
@@ -1892,13 +2036,18 @@ function chatPage(user) {
     /* ==================== GALLERY PICKER ==================== */
     let galleryImages = [];
     let gallerySelected = new Set();
+    let galleryFilter = 'all';
 
     async function openGalleryPicker() {
       gallerySelected.clear();
+      galleryFilter = 'all';
       const overlay = document.getElementById('gallery-overlay');
       const body = document.getElementById('gallery-body');
-      // Clear previous content safely
       while (body.firstChild) body.removeChild(body.firstChild);
+      // Reset tabs
+      document.querySelectorAll('.gallery-tab').forEach(function(t) {
+        t.classList.toggle('active', t.dataset.source === 'all');
+      });
       const loadingDiv = document.createElement('div');
       loadingDiv.className = 'gallery-loading';
       loadingDiv.textContent = 'Loading images...';
@@ -1911,33 +2060,7 @@ function chatPage(user) {
         if (!res.ok) throw new Error('Failed to load gallery');
         const data = await res.json();
         galleryImages = data.images || [];
-
-        while (body.firstChild) body.removeChild(body.firstChild);
-
-        if (galleryImages.length === 0) {
-          const emptyDiv = document.createElement('div');
-          emptyDiv.className = 'gallery-empty';
-          emptyDiv.textContent = 'No images found. Upload images in your conversations to see them here.';
-          body.appendChild(emptyDiv);
-          return;
-        }
-
-        const grid = document.createElement('div');
-        grid.className = 'gallery-grid';
-        grid.id = 'gallery-grid';
-        galleryImages.forEach((img, idx) => {
-          const thumb = document.createElement('div');
-          thumb.className = 'gallery-thumb';
-          thumb.dataset.idx = idx;
-          const imgEl = document.createElement('img');
-          imgEl.src = img.url;
-          imgEl.alt = img.filename || 'image';
-          imgEl.loading = 'lazy';
-          thumb.appendChild(imgEl);
-          thumb.addEventListener('click', () => toggleGalleryItem(idx, thumb));
-          grid.appendChild(thumb);
-        });
-        body.appendChild(grid);
+        renderGalleryGrid();
       } catch (err) {
         while (body.firstChild) body.removeChild(body.firstChild);
         const errDiv = document.createElement('div');
@@ -1945,6 +2068,65 @@ function chatPage(user) {
         errDiv.textContent = 'Failed to load images: ' + err.message;
         body.appendChild(errDiv);
       }
+    }
+
+    function renderGalleryGrid() {
+      const body = document.getElementById('gallery-body');
+      while (body.firstChild) body.removeChild(body.firstChild);
+
+      const filtered = galleryFilter === 'all'
+        ? galleryImages
+        : galleryImages.filter(function(img) {
+            return galleryFilter === 'generations' ? img.source === 'generation' : img.source === 'chat';
+          });
+
+      if (filtered.length === 0) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'gallery-empty';
+        if (galleryImages.length === 0) {
+          emptyDiv.textContent = 'No images found. Generate them on ';
+          const link = document.createElement('a');
+          link.href = 'https://os.ikawn.com';
+          link.target = '_blank';
+          link.textContent = 'os.ikawn.com';
+          link.style.color = 'var(--accent)';
+          emptyDiv.appendChild(link);
+        } else {
+          emptyDiv.textContent = 'No images in this category.';
+        }
+        body.appendChild(emptyDiv);
+        return;
+      }
+
+      const grid = document.createElement('div');
+      grid.className = 'gallery-grid';
+      filtered.forEach(function(img) {
+        const origIdx = galleryImages.indexOf(img);
+        const thumb = document.createElement('div');
+        thumb.className = 'gallery-thumb' + (gallerySelected.has(origIdx) ? ' selected' : '');
+        thumb.dataset.idx = origIdx;
+        const imgEl = document.createElement('img');
+        imgEl.src = img.thumbnail || img.url;
+        imgEl.alt = img.filename || 'image';
+        imgEl.loading = 'lazy';
+        thumb.appendChild(imgEl);
+        if (img.source === 'generation' && img.agent) {
+          const badge = document.createElement('span');
+          badge.className = 'gallery-agent-badge';
+          badge.textContent = img.agent;
+          thumb.appendChild(badge);
+        }
+        thumb.addEventListener('click', function() { toggleGalleryItem(origIdx, thumb); });
+        grid.appendChild(thumb);
+      });
+      body.appendChild(grid);
+    }
+
+    function filterGallery(source, btn) {
+      galleryFilter = source;
+      document.querySelectorAll('.gallery-tab').forEach(function(t) { t.classList.remove('active'); });
+      btn.classList.add('active');
+      renderGalleryGrid();
     }
 
     function closeGalleryPicker() {
@@ -1979,7 +2161,7 @@ function chatPage(user) {
           type: 'image',
           url: img.url,
           filename: img.filename || 'image',
-          preview: img.url,
+          preview: img.thumbnail || img.url,
         });
       }
       renderPendingAttachments();
@@ -2198,6 +2380,167 @@ function chatPage(user) {
         toastTimer = setTimeout(() => el.classList.remove('visible'), 4000);
       });
     }
+
+    /* ==================== @MENTION AUTOCOMPLETE ==================== */
+    let mentionList = [];
+    let mentionActiveIdx = -1;
+    let mentionQuery = '';
+    let mentionStartPos = -1;
+
+    // Fetch mentionable entities on page load
+    (async function loadMentions() {
+      try {
+        const res = await fetch('/api/mission/mentions', { headers: { 'Accept': 'application/json' } });
+        if (res.ok) mentionList = await res.json();
+      } catch (_) {}
+    })();
+
+    function getMentionDropdown() { return document.getElementById('mention-dropdown'); }
+
+    function buildMentionItem(m, isActive) {
+      const item = document.createElement('div');
+      item.className = 'mention-item' + (isActive ? ' active' : '');
+      item.dataset.slug = m.slug;
+      item.dataset.name = m.name;
+      item.onclick = function() { selectMention(this); };
+
+      const avatar = document.createElement('div');
+      avatar.className = 'mention-avatar ' + (m.type === 'agent' ? 'agent' : 'person');
+      avatar.textContent = m.name[0].toUpperCase();
+
+      const info = document.createElement('div');
+      info.className = 'mention-info';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'mention-name';
+      nameEl.textContent = '@' + m.slug;
+      const roleEl = document.createElement('span');
+      roleEl.className = 'mention-role';
+      roleEl.textContent = m.name + ' \u2014 ' + m.role;
+      info.appendChild(nameEl);
+      info.appendChild(roleEl);
+
+      item.appendChild(avatar);
+      item.appendChild(info);
+      return item;
+    }
+
+    function showMentionDropdown(filtered) {
+      const dd = getMentionDropdown();
+      if (!filtered.length) { dd.classList.remove('visible'); return; }
+      mentionActiveIdx = 0;
+      dd.replaceChildren();
+      filtered.forEach(function(m, i) {
+        dd.appendChild(buildMentionItem(m, i === 0));
+      });
+      dd.classList.add('visible');
+    }
+
+    function hideMentionDropdown() {
+      getMentionDropdown().classList.remove('visible');
+      mentionStartPos = -1;
+      mentionQuery = '';
+      mentionActiveIdx = -1;
+    }
+
+    function selectMention(el) {
+      const slug = el?.dataset?.slug;
+      if (!slug) return;
+      const input = document.getElementById('msg-input');
+      const before = input.value.slice(0, mentionStartPos);
+      const after = input.value.slice(input.selectionStart);
+      input.value = before + '@' + slug + ' ' + after;
+      hideMentionDropdown();
+      input.focus();
+      const pos = before.length + slug.length + 2;
+      input.setSelectionRange(pos, pos);
+      autoGrow(input);
+      updateSendBtn();
+    }
+
+    // Listen for input on the textarea to detect @mentions
+    document.addEventListener('DOMContentLoaded', function() {
+      const input = document.getElementById('msg-input');
+      if (!input) return;
+
+      input.addEventListener('input', function() {
+        const val = input.value;
+        const cursor = input.selectionStart;
+
+        // Find the @ symbol before cursor
+        const textBeforeCursor = val.slice(0, cursor);
+        const atIdx = textBeforeCursor.lastIndexOf('@');
+
+        if (atIdx >= 0) {
+          // Only trigger if @ is at start or preceded by space/newline
+          const charBefore = atIdx > 0 ? val[atIdx - 1] : ' ';
+          if (charBefore === ' ' || charBefore === '\\n' || atIdx === 0) {
+            const query = textBeforeCursor.slice(atIdx + 1).toLowerCase();
+            // Don't show dropdown if there's a space in the query (mention already complete)
+            if (!query.includes(' ')) {
+              mentionStartPos = atIdx;
+              mentionQuery = query;
+              const filtered = mentionList.filter(function(m) {
+                return m.slug.toLowerCase().startsWith(query) || m.name.toLowerCase().startsWith(query);
+              }).slice(0, 6);
+              showMentionDropdown(filtered);
+              return;
+            }
+          }
+        }
+        hideMentionDropdown();
+      });
+
+      // Handle keyboard nav in mention dropdown
+      window.handleInputKey = function(e) {
+        const dd = getMentionDropdown();
+        if (dd.classList.contains('visible')) {
+          const items = dd.querySelectorAll('.mention-item');
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            mentionActiveIdx = Math.min(mentionActiveIdx + 1, items.length - 1);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === mentionActiveIdx); });
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            mentionActiveIdx = Math.max(mentionActiveIdx - 1, 0);
+            items.forEach(function(el, i) { el.classList.toggle('active', i === mentionActiveIdx); });
+            return;
+          }
+          if (e.key === 'Tab' || e.key === 'Enter') {
+            e.preventDefault();
+            if (items[mentionActiveIdx]) selectMention(items[mentionActiveIdx]);
+            return;
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            hideMentionDropdown();
+            return;
+          }
+        }
+        // Default: Enter to send
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      };
+    });
+
+    // Render @mentions as gold pills in message content
+    function renderMentionPills(html) {
+      return html.replace(/@(\w+)/g, function(match, slug) {
+        var found = mentionList.find(function(m) { return m.slug.toLowerCase() === slug.toLowerCase(); });
+        if (found) return '<span class="mention-pill">' + escapeHtml(match) + '</span>';
+        return match;
+      });
+    }
+
+    // Patch renderContent to add mention pills
+    var _origRenderContent = renderContent;
+    renderContent = function(role, content) {
+      var html = _origRenderContent(role, content);
+      return renderMentionPills(html);
+    };
   </script>
 </body>
 </html>`;

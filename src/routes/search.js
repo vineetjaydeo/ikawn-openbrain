@@ -6,7 +6,7 @@ const router = Router();
 
 router.get('/search', async (req, res) => {
   try {
-    const { q, type, project, hashtag, access_level, author, from, to, limit, brand_id } = req.query;
+    const { q, type, project, hashtag, access_level, author, from, to, limit, brand_id, user_id } = req.query;
     if (!q) {
       return res.status(400).json({ error: 'q query parameter is required' });
     }
@@ -68,6 +68,11 @@ router.get('/search', async (req, res) => {
     if (author) {
       query += ` AND author = $${paramIdx++}`;
       params.push(author);
+    }
+    if (user_id) {
+      // User isolation: show this user's memories + non-private shared memories
+      query += ` AND (user_id = $${paramIdx++} OR access_level NOT IN ('private') OR user_id IS NULL)`;
+      params.push(parseInt(user_id));
     }
     if (from) {
       query += ` AND created_at >= $${paramIdx++}`;

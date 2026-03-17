@@ -134,35 +134,86 @@ router.post('/api/actions/complete', requireAuthOrApiKey, async (req, res) => {
   }
 });
 
-// GET /api/gallery — proxy to ikawn OS external generations list
+// GET /api/gallery — unified gallery: ikawn OS generations + local chat attachments
 router.get('/api/gallery', requireAuthOrApiKey, async (req, res) => {
   try {
-    if (!IKAWN_API_KEY) {
-      return res.status(500).json({ error: 'IKAWN_API_KEY not configured' });
+    const userId = req.session?.user?.id || req.apiUser?.id;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const source = req.query.source; // 'generations', 'chat', or undefined (all)
+
+    const images = [];
+
+    // Fetch generations from ikawn OS (unless filtered to chat only)
+    if (source !== 'chat' && IKAWN_API_KEY) {
+      try {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (req.query.agent) params.set('agent', req.query.agent);
+        const url = `${IKAWN_API_URL}/api/external/generations?${params}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${IKAWN_API_KEY}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          for (const gen of (data.generations || [])) {
+            if (gen.status !== 'complete' || !gen.resultUrls?.length) continue;
+            const thumbs = gen.thumbnailUrls || [];
+            for (let i = 0; i < gen.resultUrls.length; i++) {
+              images.push({
+                url: gen.resultUrls[i],
+                thumbnail: thumbs[i] || gen.resultUrls[i],
+                filename: `${gen.agent}_${i + 1}`,
+                source: 'generation',
+                agent: gen.agent,
+                date: gen.createdAt,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Gallery] ikawn OS fetch error:', err.message);
+      }
     }
 
-    const { agent, limit, offset } = req.query;
-    const params = new URLSearchParams();
-    if (agent) params.set('agent', agent);
-    if (limit) params.set('limit', limit);
-    if (offset) params.set('offset', offset);
-
-    const qs = params.toString();
-    const url = `${IKAWN_API_URL}/api/external/generations${qs ? '?' + qs : ''}`;
-
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${IKAWN_API_KEY}` },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch gallery', details: data });
+    // Fetch local chat attachments (unless filtered to generations only)
+    if (source !== 'generations' && userId) {
+      try {
+        const { rows } = await pool.query(
+          `SELECT m.attachments, m.created_at, c.title AS conversation_title
+           FROM messages m
+           JOIN conversations c ON c.id = m.conversation_id
+           WHERE c.user_id = $1
+             AND m.attachments IS NOT NULL
+             AND m.attachments != '[]'::jsonb
+           ORDER BY m.created_at DESC
+           LIMIT $2`,
+          [userId, limit]
+        );
+        for (const row of rows) {
+          const attachments = Array.isArray(row.attachments) ? row.attachments : [];
+          for (const a of attachments) {
+            if (a.type === 'image' && a.url) {
+              images.push({
+                url: a.url,
+                thumbnail: a.url,
+                filename: a.filename || 'image',
+                source: 'chat',
+                conversation: row.conversation_title,
+                date: row.created_at,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[Gallery] Chat attachments error:', err.message);
+      }
     }
 
-    res.json(data);
+    // Sort by date descending
+    images.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json({ images });
   } catch (err) {
-    console.error('[Gallery] Proxy error:', err);
+    console.error('[Gallery] Error:', err);
     res.status(500).json({ error: 'Failed to fetch gallery' });
   }
 });

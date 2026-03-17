@@ -17,7 +17,7 @@ const router = Router();
 router.get('/admin/api/api-keys', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT k.id, k.key_prefix, k.name, k.created_at, k.expires_at, k.revoked_at, k.last_used_at,
+      SELECT k.id, k.key_prefix, k.name, k.created_at, k.expires_at, k.revoked_at, k.last_used_at, k.org_id,
              u.email as created_by_email,
              (SELECT COUNT(*)::int FROM api_key_usage WHERE api_key_id = k.id) as usage_count
       FROM api_keys k
@@ -34,7 +34,7 @@ router.get('/admin/api/api-keys', requireAdmin, async (req, res) => {
 // Generate a new API key
 router.post('/admin/api/api-keys', requireAdmin, async (req, res) => {
   try {
-    const { name, expires_in } = req.body;
+    const { name, expires_in, org_id } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
@@ -53,10 +53,10 @@ router.post('/admin/api/api-keys', requireAdmin, async (req, res) => {
     // else: null = never expires
 
     const result = await pool.query(
-      `INSERT INTO api_keys (key_hash, key_prefix, name, created_by, expires_at)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, key_prefix, name, created_at, expires_at`,
-      [keyHash, keyPrefix, name.trim(), req.session.user.id, expiresAt]
+      `INSERT INTO api_keys (key_hash, key_prefix, name, created_by, expires_at, org_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, key_prefix, name, created_at, expires_at, org_id`,
+      [keyHash, keyPrefix, name.trim(), req.session?.user?.id || null, expiresAt, org_id || null]
     );
 
     // Return the full key ONCE — it can never be retrieved again

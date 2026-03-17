@@ -310,7 +310,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     try {
       const embedding = await getEmbedding(userText);
       const memResult = await pool.query(
-        `SELECT content, memory_type, project, created_at,
+        `SELECT content, memory_type, project, author, created_at,
                 cosine_similarity(embedding, $1) AS similarity
          FROM memories
          WHERE embedding IS NOT NULL
@@ -324,7 +324,8 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
         memoryContext = memResult.rows.map((m, i) => {
           const date = new Date(m.created_at).toLocaleDateString();
           const type = m.memory_type || 'note';
-          return `[${i + 1}] (${type}, ${date}) ${m.content.slice(0, 500)}`;
+          const by = m.author ? `, by ${m.author}` : '';
+          return `[${i + 1}] (${type}, ${date}${by}) ${m.content.slice(0, 500)}`;
         }).join('\n\n');
       }
     } catch (ragErr) {

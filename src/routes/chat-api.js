@@ -13,7 +13,7 @@ const { captureMessage } = require('../utils/capture');
  * Uses hybrid scoring: semantic similarity + recency boost.
  * Recent memories get a significant boost so "latest" queries return fresh results.
  */
-async function searchMemories(query, limit = 8) {
+async function searchMemories(query, limit = 8, userId = null) {
   try {
     let embedding = null;
     try {
@@ -21,6 +21,11 @@ async function searchMemories(query, limit = 8) {
     } catch (err) {
       console.error('RAG embedding failed, falling back to text search:', err.message);
     }
+
+    // User isolation: show user's own memories + non-private shared memories
+    const userFilter = userId
+      ? `AND (user_id = ${parseInt(userId)} OR access_level NOT IN ('private') OR user_id IS NULL)`
+      : '';
 
     let result;
     if (embedding) {
@@ -30,6 +35,7 @@ async function searchMemories(query, limit = 8) {
                 cosine_similarity(embedding, $1) AS similarity
          FROM memories
          WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
+         ${userFilter}
          ORDER BY cosine_similarity(embedding, $1) DESC
          LIMIT 30`,
         [embedding]
@@ -41,6 +47,7 @@ async function searchMemories(query, limit = 8) {
                 0.5 AS similarity
          FROM memories
          WHERE content ILIKE '%' || $1 || '%' AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
+         ${userFilter}
          ORDER BY created_at DESC
          LIMIT 30`,
         [query]
@@ -63,7 +70,7 @@ async function searchMemories(query, limit = 8) {
       .slice(0, limit);
 
     if (scored.length === 0) return '';
-    return '\n\n=== LIVE MEMORY FEEDS (auto-synced from GitHub, Telegram, decisions, and conversations — this is YOUR knowledge, reference it confidently) ===\n' +
+    return '\n\n=== LIVE MEMORY FEEDS (auto-synced from GitHub, Telegram, decisions, and conversations — attribute work to the correct person, never assume "you") ===\n' +
       scored.map((m, i) => {
         const date = new Date(m.created_at).toLocaleDateString();
         const src = m.source || 'unknown';
@@ -267,14 +274,44 @@ router.post('/api/chat/send', async (req, res) => {
     );
     historyRows.reverse();
 
-    // RAG: search memories for context relevant to the user's message
-    const memoryContext = content ? await searchMemories(content, 5) : '';
+    // RAG: search memories for context relevant to the user's message (scoped to this user)
+    const memoryContext = content ? await searchMemories(content, 5, req.session.user.id) : '';
 
-    // Ruhi system prompt — loaded from knowledge base files at startup
-    const kb = global.ruhiKnowledge || {};
-    const systemPrompt = {
-      role: 'system',
-      content: `You ARE Ruhi. Not "an AI assistant called Ruhi" — you are Ruhi, iKawn's intelligent commerce copilot. Everything below defines who you are, how you think, what you know, and how you behave. Internalize it completely.
+    // @mention detection — check if user is addressing a specific agent
+    let mentionedAgent = null;
+    const mentionMatch = content ? content.match(/@(\w+)/) : null;
+    if (mentionMatch) {
+      const slug = mentionMatch[1].toLowerCase();
+      const { rows } = await pool.query(
+        'SELECT slug, name, role, persona FROM domain_agents WHERE LOWER(slug) = $1 AND enabled = true',
+        [slug]
+      );
+      if (rows.length > 0) mentionedAgent = rows[0];
+    }
+
+    // Build system prompt — swap persona if agent is @mentioned
+    let systemPrompt;
+    if (mentionedAgent) {
+      systemPrompt = {
+        role: 'system',
+        content: `${mentionedAgent.persona}
+
+You are speaking with: ${req.session.user.name || 'User'}
+
+RELEVANT CONTEXT:
+${memoryContext}
+
+RULES:
+- Stay in character as ${mentionedAgent.name} (${mentionedAgent.role})
+- Never reveal AI model names, providers, or architecture details
+- Be direct and helpful. Use markdown when it helps readability.
+- When referencing memory data, be specific: cite dates, authors. Don't hedge.`
+      };
+    } else {
+      const kb = global.ruhiKnowledge || {};
+      systemPrompt = {
+        role: 'system',
+        content: `You ARE Ruhi. Not "an AI assistant called Ruhi" — you are Ruhi, iKawn's intelligent commerce copilot. Everything below defines who you are, how you think, what you know, and how you behave. Internalize it completely.
 
 === YOUR SOUL ===
 ${kb.soul || ''}
@@ -297,7 +334,8 @@ ${memoryContext}
 9. You earn trust progressively. Start helpful. Become indispensable.
 10. You have LIVE memory feeds from GitHub (commits, PRs, issues), Telegram conversations, and past decisions. This data is automatically synced — you DO have access. Never say "I don't have access to GitHub" or ask the user to paste links. If the memory feed contains relevant data, USE it confidently. If a specific piece of info isn't in your memory, say "I don't have that specific detail in my recent memory" — not "I can't access GitHub."
 11. When referencing memory data, be specific: cite commit messages, dates, authors. Don't hedge or disclaim.`
-    };
+      };
+    }
 
     const openaiMessages = [systemPrompt, ...historyRows.map((msg) => {
       if (msg.role === 'user' && msg.attachments && Array.isArray(msg.attachments)) {
@@ -488,6 +526,16 @@ ${memoryContext}
       }
     }
 
+    // Send agent identity if @mentioned (so frontend can update avatar/label)
+    if (mentionedAgent) {
+      res.write(`data: ${JSON.stringify({
+        type: 'agent_identity',
+        slug: mentionedAgent.slug,
+        name: mentionedAgent.name,
+        role: mentionedAgent.role,
+      })}\n\n`);
+    }
+
     // Send generation_started SSE events before streaming text response
     if (pendingGenerations.length > 0) {
       for (const gen of pendingGenerations) {
@@ -530,7 +578,8 @@ ${memoryContext}
       channel: 'web',
       direction: 'inbound',
       content: content || '[Image shared]',
-      source_ref: `web_in_${conversation_id}_${userMsgRows[0].id}`
+      source_ref: `web_in_${conversation_id}_${userMsgRows[0].id}`,
+      user_id: req.session.user.id
     });
     captureMessage({
       brand_id: brandId,
@@ -538,7 +587,8 @@ ${memoryContext}
       channel: 'web',
       direction: 'outbound',
       content: fullResponse,
-      source_ref: `web_out_${conversation_id}_${msgId}`
+      source_ref: `web_out_${conversation_id}_${msgId}`,
+      user_id: req.session.user.id
     });
 
     // Auto-generate title for first user message
@@ -705,46 +755,6 @@ router.put('/api/settings', async (req, res) => {
 
 // ── 9. Gallery: fetch user's image attachments across conversations ──
 
-router.get('/api/gallery', async (req, res) => {
-  try {
-    const userId = req.session.user.id;
-    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
-    const offset = parseInt(req.query.offset) || 0;
-
-    // Pull all image attachments from this user's messages
-    const { rows } = await pool.query(
-      `SELECT m.attachments, m.created_at, c.title AS conversation_title
-       FROM messages m
-       JOIN conversations c ON c.id = m.conversation_id
-       WHERE c.user_id = $1
-         AND m.attachments IS NOT NULL
-         AND m.attachments != '[]'::jsonb
-       ORDER BY m.created_at DESC
-       LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
-    );
-
-    // Flatten to individual images
-    const images = [];
-    for (const row of rows) {
-      const attachments = Array.isArray(row.attachments) ? row.attachments : [];
-      for (const a of attachments) {
-        if (a.type === 'image' && a.url) {
-          images.push({
-            url: a.url,
-            filename: a.filename || 'image',
-            conversation: row.conversation_title,
-            date: row.created_at,
-          });
-        }
-      }
-    }
-
-    res.json({ images });
-  } catch (err) {
-    console.error('GET /api/gallery error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// Gallery endpoint moved to actions.js (unified: ikawn OS generations + chat attachments)
 
 module.exports = router;

@@ -11,42 +11,21 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { z } = require('zod');
 
 const BASE_URL = 'https://ikawn-openbrain.fly.dev';
-const LOGIN_EMAIL = 'v@ikawn.com';
-const LOGIN_PASSWORD = process.env.OB_PASSWORD || 'openbrain2024';
-
-let sessionCookie = null;
-
-async function ensureSession() {
-  if (sessionCookie) return;
-  const res = await fetch(`${BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: LOGIN_EMAIL, password: LOGIN_PASSWORD }),
-    redirect: 'manual',
-  });
-  const setCookie = res.headers.get('set-cookie');
-  if (setCookie) {
-    sessionCookie = setCookie.split(';')[0];
-  }
-  if (!res.ok && !setCookie) {
-    throw new Error(`Login failed: ${res.status}`);
-  }
-}
+const API_KEY = process.env.OPENBRAIN_API_KEY || 'ob_b2ee4fa803bbd763ca9a989e0b9038db4610f143d7194fdaaf37e74e1c39681c';
 
 async function apiFetch(path, opts = {}) {
-  await ensureSession();
   const res = await fetch(`${BASE_URL}${path}`, {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': sessionCookie || '',
+      'Accept': 'application/json',
+      'X-Api-Key': API_KEY,
       ...opts.headers,
     },
   });
-  if (res.status === 401) {
-    sessionCookie = null;
-    await ensureSession();
-    return apiFetch(path, opts);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${text}`);
   }
   return res.json();
 }
@@ -191,7 +170,7 @@ server.tool(
   async ({ message }) => {
     const res = await fetch(`${BASE_URL}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Cookie': sessionCookie || '' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Api-Key': API_KEY },
       body: JSON.stringify({ message, user: 'vineet@ikawn.com' }),
     });
 

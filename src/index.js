@@ -31,6 +31,7 @@ const recallRoute = require('./routes/recall');
 const governanceRoute = require('./routes/governance');
 const brandsApiRoute = require('./routes/brands-api');
 const intelligenceRoute = require('./routes/intelligence');
+const missionControlRoute = require('./routes/mission-control');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
 const { loadTools } = require('./tools/registry');
@@ -121,6 +122,9 @@ app.use(requireAuthOrApiKey, brandsApiRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);
+
+// Mission Control API — requires auth
+app.use(missionControlRoute);
 
 // Chat API + upload — requires auth
 app.use(requireAuth, chatApi);

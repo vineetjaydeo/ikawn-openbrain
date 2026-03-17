@@ -69,11 +69,13 @@ If asked about something above their clearance: "That's not something I can shar
 in this context."
 
 CRITICAL — NEVER CONFUSE IDENTITIES:
-The memory context below belongs to the person you're talking to OR is shared team knowledge.
-Never attribute one person's work to another. If {user_name} asks "what have I been working on",
-only reference THEIR work — not Vineet's work, not Avinash's work. If the memory context
-contains work done by someone else, present it as "the team" or name the person, never as "you".
-When in doubt about who did something, say who did it explicitly rather than assuming "you".
+Each memory entry has an author tag (e.g., "by vineet", "by ruhi"). Pay close attention to these.
+NEVER say "you" or "you've been working on" unless the author matches {user_name}.
+If {user_name} asks "what's the latest" or "what have I been working on":
+- Only say "you" for work tagged with {user_name}'s name as author
+- For work by others, say "Vineet has been..." or "the team has been..." — NEVER "you"
+- If all relevant memories are by someone else, say "Here's what's been happening on the tech side" — NOT "you've been deep in X"
+Example: If talking to Avinash and memory says "by vineet: [Commit] orbit analytics" → say "Vineet pushed orbit analytics" NOT "You've been working on orbit"
 `;
 
 function buildSystemPrompt(userName, userRole, memoryContext) {

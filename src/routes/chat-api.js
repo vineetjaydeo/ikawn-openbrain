@@ -7,6 +7,7 @@ const { readLink } = require('../utils/link-reader');
 const { extractText } = require('../utils/doc-parser');
 const { getEmbedding } = require('../embeddings');
 const { captureMessage } = require('../utils/capture');
+const { getTool } = require('../tools/registry');
 
 /**
  * RAG: search memories for relevant context.
@@ -266,6 +267,62 @@ router.post('/api/chat/send', async (req, res) => {
       [convInternalId]
     );
     const isFirstUserMessage = parseInt(countRows[0].cnt) === 1;
+
+    // ── /skill shortcut: direct tool invocation ──
+    const skillMatch = content.match(/^\/(\w+)(?:\s+(.*))?$/s);
+    if (skillMatch) {
+      const toolName = skillMatch[1];
+      const toolArgs = (skillMatch[2] || '').trim();
+      const tool = getTool(toolName);
+
+      if (tool) {
+        // Set up SSE
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        // Send agent_identity so frontend shows correct avatar
+        res.write(`data: ${JSON.stringify({ type: 'agent_identity', agent: 'ruhi', name: 'Ruhi' })}\n\n`);
+
+        try {
+          const result = await tool.execute(
+            toolArgs ? { query: toolArgs, prompt: toolArgs } : {},
+            { brandId: 'ikawn', userId: req.session.user.id, pool }
+          );
+
+          const summary = result?.summary || JSON.stringify(result?.data || result, null, 2);
+          const formatted = `**/${toolName}** result:\n\n${summary}`;
+
+          // Stream as chunk
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: formatted })}\n\n`);
+
+          // Save assistant response to DB
+          await pool.query(
+            'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+            [convInternalId, 'assistant', formatted]
+          );
+
+          // Auto-title on first message
+          if (isFirstUserMessage) {
+            await pool.query('UPDATE conversations SET title = $1 WHERE id = $2', ['/' + toolName, convInternalId]);
+            res.write(`data: ${JSON.stringify({ type: 'title', title: '/' + toolName })}\n\n`);
+          }
+
+          res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+          return res.end();
+        } catch (err) {
+          const errMsg = `**/${toolName}** failed: ${err.message}`;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
+          await pool.query(
+            'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+            [convInternalId, 'assistant', errMsg]
+          );
+          res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+          return res.end();
+        }
+      }
+    }
 
     // Build OpenAI messages array from conversation history (last 50)
     const { rows: historyRows } = await pool.query(

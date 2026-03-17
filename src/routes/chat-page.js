@@ -2386,12 +2386,25 @@ function chatPage(user) {
     let mentionActiveIdx = -1;
     let mentionQuery = '';
     let mentionStartPos = -1;
+    let skillList = [];
+    let skillMode = false; // true when showing /skill autocomplete
 
-    // Fetch mentionable entities on page load
+    // Fetch mentionable entities + tools on page load
     (async function loadMentions() {
       try {
         const res = await fetch('/api/mission/mentions', { headers: { 'Accept': 'application/json' } });
         if (res.ok) mentionList = await res.json();
+      } catch (_) {}
+    })();
+    (async function loadSkills() {
+      try {
+        const res = await fetch('/api/mission/tools', { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+          const data = await res.json();
+          skillList = (data.tools || []).map(function(t) {
+            return { slug: t.name, name: t.name, role: t.description || t.tier, type: 'skill' };
+          });
+        }
       } catch (_) {}
     })();
 
@@ -2402,20 +2415,21 @@ function chatPage(user) {
       item.className = 'mention-item' + (isActive ? ' active' : '');
       item.dataset.slug = m.slug;
       item.dataset.name = m.name;
+      item.dataset.mtype = m.type || 'agent';
       item.onclick = function() { selectMention(this); };
 
       const avatar = document.createElement('div');
-      avatar.className = 'mention-avatar ' + (m.type === 'agent' ? 'agent' : 'person');
-      avatar.textContent = m.name[0].toUpperCase();
+      avatar.className = 'mention-avatar ' + (m.type === 'skill' ? 'agent' : m.type === 'agent' ? 'agent' : 'person');
+      avatar.textContent = m.type === 'skill' ? '/' : m.name[0].toUpperCase();
 
       const info = document.createElement('div');
       info.className = 'mention-info';
       const nameEl = document.createElement('span');
       nameEl.className = 'mention-name';
-      nameEl.textContent = '@' + m.slug;
+      nameEl.textContent = (m.type === 'skill' ? '/' : '@') + m.slug;
       const roleEl = document.createElement('span');
       roleEl.className = 'mention-role';
-      roleEl.textContent = m.name + ' \u2014 ' + m.role;
+      roleEl.textContent = m.type === 'skill' ? m.role : (m.name + ' \u2014 ' + m.role);
       info.appendChild(nameEl);
       info.appendChild(roleEl);
 
@@ -2445,10 +2459,12 @@ function chatPage(user) {
     function selectMention(el) {
       const slug = el?.dataset?.slug;
       if (!slug) return;
+      const isSkill = el?.dataset?.mtype === 'skill';
       const input = document.getElementById('msg-input');
       const before = input.value.slice(0, mentionStartPos);
       const after = input.value.slice(input.selectionStart);
-      input.value = before + '@' + slug + ' ' + after;
+      const prefix = isSkill ? '/' : '@';
+      input.value = before + prefix + slug + ' ' + after;
       hideMentionDropdown();
       input.focus();
       const pos = before.length + slug.length + 2;
@@ -2465,9 +2481,26 @@ function chatPage(user) {
       input.addEventListener('input', function() {
         const val = input.value;
         const cursor = input.selectionStart;
+        const textBeforeCursor = val.slice(0, cursor);
+
+        // Detect /skill at position 0
+        if (val.startsWith('/')) {
+          const query = textBeforeCursor.slice(1).toLowerCase();
+          if (!query.includes(' ')) {
+            skillMode = true;
+            mentionStartPos = 0;
+            mentionQuery = query;
+            var filtered = skillList.filter(function(s) {
+              return s.slug.toLowerCase().startsWith(query);
+            }).slice(0, 8);
+            showMentionDropdown(filtered);
+            return;
+          }
+        }
+
+        skillMode = false;
 
         // Find the @ symbol before cursor
-        const textBeforeCursor = val.slice(0, cursor);
         const atIdx = textBeforeCursor.lastIndexOf('@');
 
         if (atIdx >= 0) {

@@ -4,6 +4,7 @@ const { getEmbedding } = require('../embeddings');
 const { streamChatAnthropic } = require('../utils/llm');
 const { buildSystemPrompt } = require('../ruhi/persona');
 const { captureMessage } = require('../utils/capture');
+const { getTool, getTools } = require('../tools/registry');
 
 const router = Router();
 
@@ -87,8 +88,52 @@ router.post('/chat', async (req, res) => {
       convId = convResult.rows[0].id;
     }
 
-    // Search memory for context (RAG) — scoped to requesting user
     const currentUserId = req.session?.user?.id || null;
+
+    // ── /skill shortcut: direct tool invocation ──
+    const skillMatch = message.match(/^\/(\w+)(?:\s+(.*))?$/s);
+    if (skillMatch) {
+      const toolName = skillMatch[1];
+      const toolArgs = (skillMatch[2] || '').trim();
+      const tool = getTool(toolName);
+
+      if (tool) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        try {
+          const result = await tool.execute(
+            toolArgs ? { query: toolArgs, prompt: toolArgs } : {},
+            { brandId: 'ikawn', userId: currentUserId, pool }
+          );
+
+          const summary = result?.summary || JSON.stringify(result?.data || result, null, 2);
+          const formatted = `**/${toolName}** result:\n\n${summary}`;
+
+          // Stream as chunks for consistent UX
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: formatted })}\n\n`);
+
+          // Save to conversation
+          const authorName = (obUser?.name || req.session?.user?.name || 'user').toLowerCase();
+          captureMessage({ brand_id: 'ikawn', channel: 'ruhi-chat', direction: 'inbound', content: message, source_ref: `ruhi_in_${convId}_${Date.now()}`, metadata: { project: 'ruhi-chat' }, user_id: currentUserId });
+          captureMessage({ brand_id: 'ikawn', channel: 'ruhi-chat', direction: 'outbound', content: formatted, source_ref: `ruhi_out_${convId}_${Date.now()}`, metadata: { project: 'ruhi-chat', tool: toolName }, user_id: currentUserId });
+          await pool.query('UPDATE ob_conversations SET last_activity = NOW() WHERE id = $1', [convId]);
+
+          res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId })}\n\n`);
+          return res.end();
+        } catch (err) {
+          const errMsg = `**/${toolName}** failed: ${err.message}`;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId })}\n\n`);
+          return res.end();
+        }
+      }
+      // If tool not found, fall through to normal Ruhi chat (Ruhi can explain the available skills)
+    }
+
+    // Search memory for context (RAG) — scoped to requesting user
     const memoryResults = await searchMemory(message, userAccessLevels, 10, currentUserId);
     let memoryContext = '';
     if (memoryResults.length > 0) {

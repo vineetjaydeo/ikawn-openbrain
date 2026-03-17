@@ -334,7 +334,7 @@ ${memoryContext}
     // JSONB value comes back as parsed JSON, so a stored '"gpt-4o"' returns the string 'gpt-4o'
     const model = settingsRows.length ? settingsRows[0].value : undefined;
 
-    // Define web_search tool
+    // Define tools
     const tools = [
       {
         type: 'function',
@@ -349,6 +349,28 @@ ${memoryContext}
             required: ['query']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'generate_image',
+          description: 'Generate images using iKawn creative agents. Use this when the user asks you to create, generate, design, or make images, wallpapers, photos, visuals, etc. Always use this tool — never just describe what you would generate.',
+          parameters: {
+            type: 'object',
+            properties: {
+              agent: {
+                type: 'string',
+                enum: ['genie', 'remix', 'prism', 'lazarus'],
+                description: 'Which agent to use. genie = text-to-image (default), remix = image transformation, prism = product photography, lazarus = image-to-video'
+              },
+              prompt: {
+                type: 'string',
+                description: 'Detailed visual prompt describing what to generate. Be specific about style, lighting, composition, colors.'
+              }
+            },
+            required: ['prompt']
+          }
+        }
       }
     ];
 
@@ -361,6 +383,7 @@ ${memoryContext}
     // First call: check if model wants to use tools
     let messagesForStream = [...openaiMessages];
     const toolCheckResult = await chatCompletion(openaiMessages, { model, tools });
+    const pendingGenerations = [];
 
     if (toolCheckResult.tool_calls && toolCheckResult.tool_calls.length > 0) {
       // Process tool calls — strip any leaked content/reasoning from tool call message
@@ -385,7 +408,96 @@ ${memoryContext}
               content: '[Web search failed]'
             });
           }
+        } else if (toolCall.function.name === 'generate_image') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const agent = args.agent || 'genie';
+            const prompt = args.prompt;
+
+            const IKAWN_API_URL = process.env.IKAWN_API_URL || 'https://os.ikawn.com';
+            const IKAWN_API_KEY = process.env.IKAWN_API_KEY;
+
+            if (!IKAWN_API_KEY) {
+              messagesForStream.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: '[Generation failed: IKAWN_API_KEY not configured]'
+              });
+              continue;
+            }
+
+            const genResponse = await fetch(`${IKAWN_API_URL}/api/external/generate`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${IKAWN_API_KEY}`,
+              },
+              body: JSON.stringify({ agent, prompt }),
+            });
+
+            const genData = await genResponse.json();
+
+            if (!genResponse.ok) {
+              messagesForStream.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: `[Generation failed: ${genData.error || 'Unknown error'}]`
+              });
+              continue;
+            }
+
+            const batchSize = ['genie', 'remix'].includes(agent) ? 4 : 1;
+
+            // Record in OpenBrain DB
+            if (genData.generationId) {
+              pool.query(`
+                INSERT INTO generations (brand_id, agent_name, prompt, output_type, status, ikawn_generation_id, batch_size)
+                VALUES ($1, $2, $3, $4, 'pending', $5, $6)
+                ON CONFLICT DO NOTHING
+              `, ['ikawn', agent, prompt, agent === 'lazarus' ? 'video' : 'image', genData.generationId, batchSize])
+                .catch(err => console.warn('[Chat] Failed to record generation:', err.message));
+            }
+
+            pendingGenerations.push({
+              generationId: genData.generationId,
+              agent,
+              prompt,
+              batchSize,
+            });
+
+            messagesForStream.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                success: true,
+                generationId: genData.generationId,
+                agent,
+                batch_size: batchSize,
+                message: `Generation triggered successfully with ${agent}. ${batchSize} image(s) are being created and will appear in the chat shortly.`
+              })
+            });
+          } catch (err) {
+            console.error('generate_image error:', err);
+            messagesForStream.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `[Generation failed: ${err.message}]`
+            });
+          }
         }
+      }
+    }
+
+    // Send generation_started SSE events before streaming text response
+    if (pendingGenerations.length > 0) {
+      for (const gen of pendingGenerations) {
+        res.write(`data: ${JSON.stringify({
+          type: 'generation_started',
+          generationId: gen.generationId,
+          agent: gen.agent,
+          prompt: gen.prompt,
+          batchSize: gen.batchSize,
+        })}\n\n`);
       }
     }
 
@@ -587,6 +699,50 @@ router.put('/api/settings', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('PUT /api/settings error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 9. Gallery: fetch user's image attachments across conversations ──
+
+router.get('/api/gallery', async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    // Pull all image attachments from this user's messages
+    const { rows } = await pool.query(
+      `SELECT m.attachments, m.created_at, c.title AS conversation_title
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.user_id = $1
+         AND m.attachments IS NOT NULL
+         AND m.attachments != '[]'::jsonb
+       ORDER BY m.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+
+    // Flatten to individual images
+    const images = [];
+    for (const row of rows) {
+      const attachments = Array.isArray(row.attachments) ? row.attachments : [];
+      for (const a of attachments) {
+        if (a.type === 'image' && a.url) {
+          images.push({
+            url: a.url,
+            filename: a.filename || 'image',
+            conversation: row.conversation_title,
+            date: row.created_at,
+          });
+        }
+      }
+    }
+
+    res.json({ images });
+  } catch (err) {
+    console.error('GET /api/gallery error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

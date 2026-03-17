@@ -901,6 +901,129 @@ function chatPage(user) {
     .share-dropdown-item.danger { color: var(--danger); }
     .share-dropdown-item.danger:hover { background: rgba(239,68,68,0.1); }
 
+    /* ==================== GALLERY PICKER ==================== */
+    .gallery-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .gallery-overlay.visible { display: flex; }
+    .gallery-modal {
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 640px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .gallery-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .gallery-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .gallery-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .gallery-close:hover { background: var(--bg-hover); color: var(--text); }
+    .gallery-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 10px;
+    }
+    .gallery-thumb {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .gallery-thumb:hover { border-color: var(--accent); transform: scale(1.03); }
+    .gallery-thumb.selected { border-color: var(--accent); }
+    .gallery-thumb.selected::after {
+      content: '\\2713';
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: var(--accent);
+      color: #000;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .gallery-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .gallery-empty {
+      text-align: center;
+      color: var(--text-dim);
+      padding: 40px 20px;
+      font-size: 0.9rem;
+    }
+    .gallery-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .gallery-count {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+    .gallery-add-btn {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 20px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .gallery-add-btn:hover { opacity: 0.85; }
+    .gallery-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .gallery-loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-dim);
+    }
+
     /* ==================== SIDEBAR OVERLAY (mobile) ==================== */
     .sidebar-overlay {
       display: none;
@@ -1006,6 +1129,9 @@ function chatPage(user) {
             <button class="compose-btn" onclick="triggerFileUpload()" title="Attach file">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/></svg>
             </button>
+            <button class="compose-btn" onclick="openGalleryPicker()" title="Choose from gallery">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </button>
             <textarea id="msg-input" rows="1" placeholder="Talk to Ruhi..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
             <button class="compose-btn model-toggle" id="model-toggle" onclick="toggleModel()" title="Toggle model"></button>
             <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled>
@@ -1020,6 +1146,23 @@ function chatPage(user) {
 
   <!-- File input (hidden) -->
   <input type="file" id="file-input" accept="image/*,application/pdf,text/plain,text/markdown,text/csv" multiple style="display:none" onchange="handleFileSelect(event)">
+
+  <!-- Gallery Picker -->
+  <div class="gallery-overlay" id="gallery-overlay" onclick="if(event.target===this)closeGalleryPicker()">
+    <div class="gallery-modal">
+      <div class="gallery-header">
+        <h3>Choose from Gallery</h3>
+        <button class="gallery-close" onclick="closeGalleryPicker()">&times;</button>
+      </div>
+      <div class="gallery-body" id="gallery-body">
+        <div class="gallery-loading">Loading images...</div>
+      </div>
+      <div class="gallery-footer">
+        <span class="gallery-count" id="gallery-count">0 selected</span>
+        <button class="gallery-add-btn" id="gallery-add-btn" disabled onclick="addGallerySelection()">Add Selected</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Lightbox -->
   <div class="lightbox" id="lightbox" onclick="closeLightbox()">
@@ -1744,6 +1887,104 @@ function chatPage(user) {
       pendingAttachments.forEach(a => { if (a.preview) URL.revokeObjectURL(a.preview); });
       pendingAttachments = [];
       renderPendingAttachments();
+    }
+
+    /* ==================== GALLERY PICKER ==================== */
+    let galleryImages = [];
+    let gallerySelected = new Set();
+
+    async function openGalleryPicker() {
+      gallerySelected.clear();
+      const overlay = document.getElementById('gallery-overlay');
+      const body = document.getElementById('gallery-body');
+      // Clear previous content safely
+      while (body.firstChild) body.removeChild(body.firstChild);
+      const loadingDiv = document.createElement('div');
+      loadingDiv.className = 'gallery-loading';
+      loadingDiv.textContent = 'Loading images...';
+      body.appendChild(loadingDiv);
+      overlay.classList.add('visible');
+      updateGalleryFooter();
+
+      try {
+        const res = await fetch('/api/gallery?limit=100');
+        if (!res.ok) throw new Error('Failed to load gallery');
+        const data = await res.json();
+        galleryImages = data.images || [];
+
+        while (body.firstChild) body.removeChild(body.firstChild);
+
+        if (galleryImages.length === 0) {
+          const emptyDiv = document.createElement('div');
+          emptyDiv.className = 'gallery-empty';
+          emptyDiv.textContent = 'No images found. Upload images in your conversations to see them here.';
+          body.appendChild(emptyDiv);
+          return;
+        }
+
+        const grid = document.createElement('div');
+        grid.className = 'gallery-grid';
+        grid.id = 'gallery-grid';
+        galleryImages.forEach((img, idx) => {
+          const thumb = document.createElement('div');
+          thumb.className = 'gallery-thumb';
+          thumb.dataset.idx = idx;
+          const imgEl = document.createElement('img');
+          imgEl.src = img.url;
+          imgEl.alt = img.filename || 'image';
+          imgEl.loading = 'lazy';
+          thumb.appendChild(imgEl);
+          thumb.addEventListener('click', () => toggleGalleryItem(idx, thumb));
+          grid.appendChild(thumb);
+        });
+        body.appendChild(grid);
+      } catch (err) {
+        while (body.firstChild) body.removeChild(body.firstChild);
+        const errDiv = document.createElement('div');
+        errDiv.className = 'gallery-empty';
+        errDiv.textContent = 'Failed to load images: ' + err.message;
+        body.appendChild(errDiv);
+      }
+    }
+
+    function closeGalleryPicker() {
+      document.getElementById('gallery-overlay').classList.remove('visible');
+      gallerySelected.clear();
+    }
+
+    function toggleGalleryItem(idx, el) {
+      if (gallerySelected.has(idx)) {
+        gallerySelected.delete(idx);
+        el.classList.remove('selected');
+      } else {
+        gallerySelected.add(idx);
+        el.classList.add('selected');
+      }
+      updateGalleryFooter();
+    }
+
+    function updateGalleryFooter() {
+      const count = gallerySelected.size;
+      document.getElementById('gallery-count').textContent = count + ' selected';
+      document.getElementById('gallery-add-btn').disabled = count === 0;
+    }
+
+    function addGallerySelection() {
+      for (const idx of gallerySelected) {
+        const img = galleryImages[idx];
+        if (!img) continue;
+        // Avoid duplicates
+        if (pendingAttachments.some(a => a.url === img.url)) continue;
+        pendingAttachments.push({
+          type: 'image',
+          url: img.url,
+          filename: img.filename || 'image',
+          preview: img.url,
+        });
+      }
+      renderPendingAttachments();
+      updateSendBtn();
+      closeGalleryPicker();
     }
 
     /* ==================== MODEL TOGGLE ==================== */

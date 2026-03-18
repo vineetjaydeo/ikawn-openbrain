@@ -401,6 +401,9 @@ function chatPage(user) {
       flex: 1;
       overflow-y: auto;
       padding: 0;
+      background:
+        radial-gradient(ellipse 120% 40% at 50% 57%, rgba(25,25,35,0.5) 0%, rgba(5,5,5,0) 70%),
+        var(--bg);
     }
     .messages::-webkit-scrollbar { width: 5px; }
     .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

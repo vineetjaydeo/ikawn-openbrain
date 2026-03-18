@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { requireAuth, requireAdmin } = require('../auth');
 const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
+const { SPACETIME_CSS, SPACETIME_HTML, SPACETIME_JS } = require('../utils/spacetime-bg');
 
 const router = Router();
 
@@ -42,13 +43,11 @@ function loginPage() {
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}
-    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .container { text-align: center; padding: 40px; width: 100%; max-width: 380px; }
+    ${SPACETIME_CSS}
+    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #020208; }
+    .container { text-align: center; padding: 40px; width: 100%; max-width: 380px; position: relative; z-index: 1; }
     .brand-icon {
-      width: 56px; height: 56px; border-radius: 14px;
-      background: #e5a819;
-      display: flex; align-items: center; justify-content: center;
-      padding: 8px;
+      width: 64px; height: 64px;
       margin: 0 auto 16px;
     }
     .brand-icon img {
@@ -64,6 +63,7 @@ function loginPage() {
   </style>
 </head>
 <body>
+  ${SPACETIME_HTML}
   <div class="container">
     <div class="brand-icon"><img src="${RUHI_ICON_URL}" alt="Ruhi"></div>
     <h1>Ruhi</h1>
@@ -138,6 +138,7 @@ function loginPage() {
       } catch { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
     }
   </script>
+  <script>${SPACETIME_JS}</script>
 </body>
 </html>`;
 }
@@ -309,8 +310,13 @@ function settingsPage(user) {
     .subtitle { color: #a1a1aa; margin-bottom: 28px; font-size: 0.875rem; }
     .form-group { margin-bottom: 14px; }
     .form-group label { display: block; font-size: 0.8rem; color: #a1a1aa; margin-bottom: 4px; font-weight: 500; }
-    .form-group input { width: 100%; padding: 11px 14px; background: #18181b; border: 1px solid #27272a; border-radius: 8px; color: #fafafa; font-size: 1rem; font-family: inherit; }
-    .form-group input:focus { outline: none; border-color: #e5a819; box-shadow: 0 0 0 3px #e5a81920; }
+    .form-group input, .form-group textarea { width: 100%; padding: 11px 14px; background: #18181b; border: 1px solid #27272a; border-radius: 8px; color: #fafafa; font-size: 1rem; font-family: inherit; }
+    .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #e5a819; box-shadow: 0 0 0 3px #e5a81920; }
+    .form-group textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+    .char-count { font-size: 0.75rem; color: #71717a; text-align: right; margin-top: 2px; }
+    .section-title { font-size: 0.95rem; font-weight: 600; margin-top: 28px; margin-bottom: 4px; }
+    .section-desc { font-size: 0.8rem; color: #71717a; margin-bottom: 12px; }
+    hr.divider { border: none; border-top: 1px solid #27272a; margin: 28px 0; }
     button { width: 100%; padding: 12px; background: #e5a819; color: #0a0a0a; border: none; border-radius: 8px; font-size: 1rem; font-family: inherit; cursor: pointer; margin-top: 8px; font-weight: 600; }
     button:hover { background: #d19a15; }
     .msg { margin-top: 12px; font-size: 0.875rem; display: none; text-align: center; }
@@ -324,6 +330,21 @@ function settingsPage(user) {
     <a href="/" class="back">&larr; Back</a>
     <h1>Settings</h1>
     <p class="subtitle">${user.email}</p>
+
+    <p class="section-title">Custom Instructions</p>
+    <p class="section-desc">Tell Ruhi about yourself — your role, preferences, or how you'd like responses. This is added to every conversation.</p>
+    <form onsubmit="saveInstructions(event)">
+      <div class="form-group">
+        <textarea id="instructions" maxlength="500" placeholder="e.g. I'm the CTO. Keep answers technical and concise. Always suggest test cases."></textarea>
+        <div class="char-count"><span id="charCount">0</span>/500</div>
+      </div>
+      <button type="submit">Save Instructions</button>
+    </form>
+    <p class="msg" id="instrMsg"></p>
+
+    <hr class="divider">
+
+    <p class="section-title">Change Password</p>
     <form onsubmit="changePw(event)">
       <div class="form-group"><label>Current Password</label><input type="password" id="current" placeholder="Current password"></div>
       <div class="form-group"><label>New Password</label><input type="password" id="newpw" placeholder="Min 6 characters"></div>
@@ -333,6 +354,43 @@ function settingsPage(user) {
     <p class="msg" id="msg"></p>
   </div>
   <script>
+    // Custom Instructions
+    const instrEl = document.getElementById('instructions');
+    const charCountEl = document.getElementById('charCount');
+    instrEl.addEventListener('input', () => { charCountEl.textContent = instrEl.value.length; });
+
+    (async () => {
+      try {
+        const r = await fetch('/api/custom-instructions');
+        if (r.ok) {
+          const d = await r.json();
+          instrEl.value = d.custom_instructions || '';
+          charCountEl.textContent = instrEl.value.length;
+        }
+      } catch(e) {}
+    })();
+
+    async function saveInstructions(e) {
+      e.preventDefault();
+      const msgEl = document.getElementById('instrMsg');
+      msgEl.style.display = 'none';
+      try {
+        const res = await fetch('/api/custom-instructions', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ custom_instructions: instrEl.value })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showMsgOn(msgEl, 'Saved', 'success');
+      } catch(err) { showMsgOn(msgEl, err.message, 'error'); }
+    }
+
+    function showMsgOn(el, text, type) {
+      el.textContent = text;
+      el.className = 'msg msg-' + type;
+      el.style.display = 'block';
+    }
+
     async function changePw(e) {
       e.preventDefault();
       const msgEl = document.getElementById('msg');
@@ -356,12 +414,7 @@ function settingsPage(user) {
         document.getElementById('confirm').value = '';
       } catch(err) { showMsg(err.message, 'error'); }
     }
-    function showMsg(text, type) {
-      const el = document.getElementById('msg');
-      el.textContent = text;
-      el.className = 'msg msg-' + type;
-      el.style.display = 'block';
-    }
+    function showMsg(text, type) { showMsgOn(document.getElementById('msg'), text, type); }
   </script>
 </body>
 </html>`;

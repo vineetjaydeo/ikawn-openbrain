@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { requireAuth } = require('../auth');
 const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
+const { SPACETIME_CSS, SPACETIME_HTML, SPACETIME_JS } = require('../utils/spacetime-bg');
 
 const router = Router();
 
@@ -413,7 +414,9 @@ function chatPage(user) {
       gap: 20px;
     }
 
-    /* ==================== STAR FIELD EMPTY STATE ==================== */
+    /* ==================== SPACETIME BACKGROUND ==================== */
+    ${SPACETIME_CSS}
+
     .welcome-screen {
       flex: 1;
       display: flex;
@@ -424,27 +427,6 @@ function chatPage(user) {
       min-height: 60vh;
       gap: 16px;
     }
-    .welcome-stars {
-      position: fixed;
-      inset: 0;
-      overflow: hidden;
-      pointer-events: none;
-      z-index: 0;
-    }
-    .welcome-star {
-      position: absolute;
-      width: 2px;
-      height: 2px;
-      background: rgba(255,255,255,0.4);
-      border-radius: 50%;
-      animation: starDrift linear infinite;
-    }
-    @keyframes starDrift {
-      0% { transform: translateY(0) translateX(0); opacity: 0; }
-      10% { opacity: 1; }
-      90% { opacity: 1; }
-      100% { transform: translateY(-80px) translateX(20px); opacity: 0; }
-    }
     .welcome-logo {
       font-size: 3.2rem;
       font-weight: 700;
@@ -453,17 +435,21 @@ function chatPage(user) {
       letter-spacing: -0.03em;
       z-index: 1;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 12px;
+      gap: 6px;
     }
     .welcome-logo .sparkle {
       color: var(--accent);
-      font-size: 2.4rem;
+      font-size: 2rem;
     }
     .welcome-tagline {
-      font-size: 0.95rem;
-      color: var(--text-muted);
+      font-size: 2rem;
+      color: var(--text-dim);
       z-index: 1;
+      font-family: 'Noto Serif', Georgia, serif;
+      font-style: italic;
+      font-weight: 400;
     }
 
     /* ---------- Message rows ---------- */
@@ -561,7 +547,15 @@ function chatPage(user) {
     .msg-bubble p:last-child { margin-bottom: 0; }
     .msg-bubble ul, .msg-bubble ol { padding-left: 1.4em; margin-bottom: 0.65em; }
     .msg-bubble li { margin-bottom: 0.25em; }
-    .msg-bubble blockquote { border-left: 3px solid var(--accent); padding-left: 14px; color: var(--text-dim); margin: 0.5em 0; }
+    .msg-bubble blockquote {
+      border-left: 3px solid var(--accent); padding: 12px 14px; color: var(--text-dim);
+      margin: 0.5em 0; background: #111; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      position: relative;
+    }
+    .msg-bubble blockquote .copy-btn {
+      position: absolute; top: 6px; right: 6px; opacity: 0; transition: opacity 0.15s;
+    }
+    .msg-bubble blockquote:hover .copy-btn { opacity: 1; }
     .msg-bubble strong { color: var(--text); font-weight: 600; }
 
     /* ---------- Reply button on hover ---------- */
@@ -628,21 +622,49 @@ function chatPage(user) {
       font-size: 0.88em;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
     }
+    .msg-bubble .code-block-wrapper {
+      position: relative;
+      margin: 0.65em 0;
+    }
     .msg-bubble pre {
       background: rgb(12,12,12);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      padding: 16px;
       overflow-x: auto;
-      margin: 0.65em 0;
-      position: relative;
+      margin: 0;
+      padding: 16px;
     }
     .msg-bubble pre code {
       background: none;
       padding: 0;
+      display: block;
       font-size: 0.88em;
       line-height: 1.55;
     }
+
+    /* Copy button — pinned top-right of wrapper, sticky on scroll */
+    .code-copy-btn {
+      position: absolute; top: 8px; right: 8px; z-index: 2;
+      position: sticky; top: 8px;
+      display: inline-flex; align-items: center;
+      background: rgba(30,30,30,0.9); border: 1px solid var(--border);
+      color: var(--text-dim); cursor: pointer;
+      padding: 5px 6px; border-radius: 4px;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .code-block-wrapper:hover .code-copy-btn { opacity: 1; }
+    .code-copy-btn:hover { color: var(--text); background: rgba(50,50,50,0.95); }
+    .code-copy-btn.copied { color: #22c55e; border-color: #22c55e40; }
+
+    /* Blockquote copy btn */
+    .copy-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(30,30,30,0.9); border: 1px solid var(--border);
+      color: var(--text-dim); font-size: 0.72rem; font-family: inherit;
+      cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: all 0.15s;
+    }
+    .copy-btn:hover { color: var(--text); background: rgba(50,50,50,0.95); }
+    .copy-btn.copied { color: #22c55e; }
     .msg-bubble table {
       border-collapse: collapse;
       margin: 0.5em 0;
@@ -835,6 +857,38 @@ function chatPage(user) {
       font-size: 0.8rem;
       color: var(--text-dim);
     }
+    /* Upload loading state */
+    .pending-attach.uploading { opacity: 0.5; pointer-events: none; }
+    .pending-attach-loading {
+      width: 56px; height: 56px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    }
+    .pending-attach-loading .spinner {
+      width: 20px; height: 20px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Drag overlay */
+    .drag-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(229,168,25,0.08);
+      border: 2px dashed var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none; opacity: 0; transition: opacity 0.15s;
+    }
+    .drag-overlay.visible { opacity: 1; }
+    .drag-overlay-label {
+      font-size: 1.1rem; font-weight: 600; color: var(--accent);
+      background: var(--bg-main); padding: 12px 24px; border-radius: 12px;
+    }
+
+    /* File-type doc chips (pending + message) */
+    .pending-attach-doc .file-icon { flex-shrink: 0; }
+    .msg-attach-chip .file-icon { flex-shrink: 0; }
+
     .pending-attach-remove {
       position: absolute;
       top: -6px;
@@ -1369,7 +1423,7 @@ function chatPage(user) {
       <div class="messages" id="messages">
         <div class="messages-inner" id="messages-inner">
           <div class="welcome-screen" id="welcome">
-            <div class="welcome-stars" id="welcome-stars"></div>
+            ${SPACETIME_HTML}
             <div class="welcome-logo"><span class="sparkle">\u2726</span> Ruhi</div>
             <div class="welcome-tagline" id="welcome-tagline"></div>
           </div>
@@ -1390,8 +1444,8 @@ function chatPage(user) {
             </button>
             <textarea id="msg-input" rows="1" placeholder="Talk to Ruhi..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
             <button class="compose-btn model-toggle" id="model-toggle" onclick="toggleModel()" title="Toggle model"></button>
-            <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled style="display:none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
             </button>
           </div>
           <div class="input-hint">Enter to send \u00b7 Shift+Enter for newline</div>
@@ -1399,6 +1453,9 @@ function chatPage(user) {
       </div>
     </main>
   </div>
+
+  <!-- Drag overlay -->
+  <div class="drag-overlay" id="drag-overlay"><div class="drag-overlay-label">Drop files here</div></div>
 
   <!-- File input (hidden) -->
   <input type="file" id="file-input" accept="image/*,application/pdf,text/plain,text/markdown,text/csv" multiple style="display:none" onchange="handleFileSelect(event)">
@@ -1434,7 +1491,7 @@ function chatPage(user) {
   <div class="toast" id="toast"></div>
 
   <!-- Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js"></script>
 
   <script>
@@ -1452,7 +1509,7 @@ function chatPage(user) {
     document.addEventListener('DOMContentLoaded', () => {
       initMarked();
       updateModelToggle();
-      initStarField();
+      initSpacetimeBg();
       setGreeting();
       loadConversations().then(() => {
         const match = window.location.pathname.match(/^\\/chat\\/([a-f0-9-]+)$/);
@@ -1471,32 +1528,70 @@ function chatPage(user) {
     });
 
     function initMarked() {
-      marked.setOptions({
-        highlight: function(code, lang) {
-          if (lang && hljs.getLanguage(lang)) {
-            try { return hljs.highlight(code, { language: lang }).value; } catch {}
-          }
-          return hljs.highlightAuto(code).value;
-        },
-        breaks: true,
-        gfm: true,
+      var copyIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+      var renderer = new marked.Renderer();
+      renderer.code = function(token) {
+        var code = token.text || token;
+        var lang = token.lang || '';
+        var highlighted;
+        if (lang && hljs.getLanguage(lang)) {
+          try { highlighted = hljs.highlight(code, { language: lang }).value; } catch(e) { highlighted = escapeHtml(code); }
+        } else {
+          try { highlighted = hljs.highlightAuto(code).value; } catch(e) { highlighted = escapeHtml(code); }
+        }
+        var langClass = lang ? ' language-' + escapeHtml(lang) : '';
+        return '<div class="code-block-wrapper">'
+          + '<button class="code-copy-btn" onclick="copyCodeBlock(this)">' + copyIcon + '</button>'
+          + '<pre><code class="hljs' + langClass + '" data-highlighted="true">' + highlighted + '</code></pre>'
+          + '</div>';
+      };
+      marked.setOptions({ renderer: renderer, breaks: true, gfm: true });
+    }
+
+    function addCopyToBlockquotes(container) {
+      container.querySelectorAll('blockquote').forEach(function(bq) {
+        if (bq.querySelector('.copy-btn')) return;
+        var btn = document.createElement('button');
+        btn.className = 'copy-btn';
+        btn.setAttribute('onclick', 'copyBlockquote(this)');
+        btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; // safe: hardcoded SVG
+        bq.appendChild(btn);
       });
     }
 
-    /* ==================== STAR FIELD ==================== */
-    function initStarField() {
-      const container = document.getElementById('welcome-stars');
-      if (!container) return;
-      for (let i = 0; i < 40; i++) {
-        const star = document.createElement('div');
-        star.className = 'welcome-star';
-        star.style.left = Math.random() * 100 + '%';
-        star.style.top = Math.random() * 100 + '%';
-        star.style.animationDuration = (8 + Math.random() * 12) + 's';
-        star.style.animationDelay = (Math.random() * 10) + 's';
-        star.style.width = star.style.height = (1 + Math.random() * 2) + 'px';
-        container.appendChild(star);
-      }
+    function copyBlockquote(btn) {
+      var bq = btn.closest('blockquote');
+      var text = bq.textContent.trim();
+      navigator.clipboard.writeText(text).then(function() {
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>'; // safe: hardcoded SVG
+        setTimeout(function() {
+          btn.classList.remove('copied');
+          btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; // safe: hardcoded SVG
+        }, 2000);
+      });
+    }
+
+    function copyCodeBlock(btn) {
+      var wrapper = btn.closest('.code-block-wrapper');
+      var codeEl = wrapper.querySelector('code');
+      var text = codeEl.textContent;
+      var copyIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+      var checkIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.classList.add('copied');
+        btn.innerHTML = checkIcon; // safe: hardcoded SVG
+        setTimeout(function() {
+          btn.classList.remove('copied');
+          btn.innerHTML = copyIcon; // safe: hardcoded SVG
+        }, 2000);
+      });
+    }
+
+    /* ==================== SPACETIME BACKGROUND ==================== */
+    function initSpacetimeBg() {
+      ${SPACETIME_JS}
     }
 
     /* ==================== GREETING ==================== */
@@ -1804,9 +1899,9 @@ function chatPage(user) {
       const welcome = document.createElement('div');
       welcome.className = 'welcome-screen';
       welcome.id = 'welcome';
-      const stars = document.createElement('div');
-      stars.className = 'welcome-stars';
-      stars.id = 'welcome-stars';
+      const stars = document.createElement('canvas');
+      stars.className = 'spacetime-canvas';
+      stars.id = 'spacetime-gl';
       const logo = document.createElement('div');
       logo.className = 'welcome-logo';
       const sparkle = document.createElement('span');
@@ -1821,7 +1916,7 @@ function chatPage(user) {
       welcome.appendChild(logo);
       welcome.appendChild(tagline);
       container.appendChild(welcome);
-      initStarField();
+      initSpacetimeBg();
       setGreeting();
       currentShareToken = null;
       updateShareUI();
@@ -1888,6 +1983,7 @@ function chatPage(user) {
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
       bubble.innerHTML = renderAttachments(attachments) + renderContent(role, content);
+      addCopyToBlockquotes(bubble);
 
       const replyBtn = document.createElement('button');
       replyBtn.className = 'msg-reply-btn';
@@ -1919,7 +2015,7 @@ function chatPage(user) {
           html += '<img class="msg-attach-img" src="' + escapeHtml(a.url) + '" alt="attachment" onclick="openLightbox(\\'' + escapeHtml(a.url) + '\\')">';
         } else {
           html += '<span class="msg-attach-chip">'
-            + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+            + '<span class="file-icon">' + getFileIcon(a.filename || 'file') + '</span>'
             + escapeHtml(a.filename || 'file') + '</span>';
         }
       });
@@ -1951,7 +2047,7 @@ function chatPage(user) {
       const welcome = document.getElementById('welcome');
       if (welcome) welcome.remove();
 
-      const attachments = pendingAttachments.map(a => ({ type: a.type, url: a.url, filename: a.filename }));
+      const attachments = pendingAttachments.map(a => ({ type: a.type, url: a.url, filename: a.filename, name: a.name, extracted_text: a.extracted_text || undefined }));
       const container = document.getElementById('messages-inner');
       container.appendChild(createMessageElement('user', content, attachments));
 
@@ -2074,9 +2170,6 @@ function chatPage(user) {
                 }
                 fullText += evt.text;
                 try { bubble.innerHTML = marked.parse(fullText); } catch { bubble.textContent = fullText; }
-                bubble.querySelectorAll('pre code').forEach(el => {
-                  if (!el.dataset.highlighted) { hljs.highlightElement(el); el.dataset.highlighted = 'true'; }
-                });
                 scrollToBottom(false);
               } else if (evt.type === 'title' && evt.title) {
                 document.getElementById('header-title').textContent = evt.title;
@@ -2093,6 +2186,7 @@ function chatPage(user) {
 
         if (bubble) {
           if (typeof renderMentionPills === 'function') bubble.innerHTML = renderMentionPills(bubble.innerHTML);
+          addCopyToBlockquotes(bubble);
           bubble.removeAttribute('id');
         }
         if (firstChunk) { const typing = document.getElementById('typing'); if (typing) typing.remove(); }
@@ -2271,9 +2365,23 @@ function chatPage(user) {
     }
 
     (function initDragDrop() {
+      var dragCounter = 0;
+      var overlay = document.getElementById('drag-overlay');
+      document.body.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) overlay.classList.add('visible');
+      });
+      document.body.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) { dragCounter = 0; overlay.classList.remove('visible'); }
+      });
       document.body.addEventListener('dragover', function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
       document.body.addEventListener('drop', async function(e) {
         e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('visible');
         var files = Array.from(e.dataTransfer.files);
         for (var f of files) await uploadFile(f);
       });
@@ -2283,6 +2391,18 @@ function chatPage(user) {
       const isImage = file.type.startsWith('image/');
       const maxSize = 10 * 1024 * 1024;
       if (file.size > maxSize) { showToast('File exceeds 10MB limit', 'error'); return; }
+
+      // Add placeholder immediately for visual feedback
+      const placeholderIdx = pendingAttachments.length;
+      pendingAttachments.push({
+        type: isImage ? 'image' : 'document',
+        url: null,
+        name: file.name,
+        filename: file.name,
+        preview: isImage ? URL.createObjectURL(file) : null,
+        uploading: true,
+      });
+      renderPendingAttachments();
 
       try {
         const base64 = await fileToBase64(file);
@@ -2305,17 +2425,21 @@ function chatPage(user) {
         }
 
         const result = await res.json();
-        pendingAttachments.push({
+        pendingAttachments[placeholderIdx] = {
           type: isImage ? 'image' : 'document',
           url: result.url,
           name: file.name,
           filename: file.name,
           preview: isImage ? URL.createObjectURL(file) : null,
           extracted_text: result.extracted_text || null,
-        });
+          uploading: false,
+        };
         renderPendingAttachments();
         updateSendBtn();
       } catch (err) {
+        // Remove the placeholder on failure
+        pendingAttachments.splice(placeholderIdx, 1);
+        renderPendingAttachments();
         showToast(err.message, 'error');
       }
     }
@@ -2329,30 +2453,69 @@ function chatPage(user) {
       });
     }
 
+    function getFileIcon(filename) {
+      var ext = (filename || '').split('.').pop().toLowerCase();
+      var svgBase = 'width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"';
+      var filePath = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>';
+      var icons = {
+        pdf:  '<svg ' + svgBase + ' stroke="#ef4444">' + filePath + '<path d="M9 15h2m-2-3h4"/></svg>',
+        csv:  '<svg ' + svgBase + ' stroke="#22c55e">' + filePath + '<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>',
+        md:   '<svg ' + svgBase + ' stroke="#a78bfa">' + filePath + '</svg>',
+        txt:  '<svg ' + svgBase + ' stroke="#94a3b8">' + filePath + '<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>',
+        json: '<svg ' + svgBase + ' stroke="#f59e0b">' + filePath + '</svg>',
+      };
+      return icons[ext] || '<svg ' + svgBase + ' stroke="currentColor">' + filePath + '</svg>';
+    }
+
     function renderPendingAttachments() {
-      const container = document.getElementById('pending-attachments');
+      var container = document.getElementById('pending-attachments');
       container.textContent = '';
-      pendingAttachments.forEach((a, i) => {
-        const wrap = document.createElement('div');
-        wrap.className = 'pending-attach';
+      pendingAttachments.forEach(function(a, i) {
+        var wrap = document.createElement('div');
+        wrap.className = 'pending-attach' + (a.uploading ? ' uploading' : '');
+
         if (a.type === 'image') {
-          const img = document.createElement('img');
+          var imgWrap = document.createElement('div');
+          imgWrap.style.cssText = 'position:relative;display:inline-block';
+          var img = document.createElement('img');
           img.className = 'pending-attach-img';
           img.src = a.preview || a.url;
           img.alt = a.filename;
-          wrap.appendChild(img);
+          imgWrap.appendChild(img);
+          if (a.uploading) {
+            var spinOverlay = document.createElement('div');
+            spinOverlay.className = 'pending-attach-loading';
+            spinOverlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.4)';
+            var sp = document.createElement('div'); sp.className = 'spinner';
+            spinOverlay.appendChild(sp);
+            imgWrap.appendChild(spinOverlay);
+          }
+          wrap.appendChild(imgWrap);
         } else {
-          const doc = document.createElement('div');
+          if (a.uploading) {
+            var loadBox = document.createElement('div');
+            loadBox.className = 'pending-attach-loading';
+            var sp2 = document.createElement('div'); sp2.className = 'spinner';
+            loadBox.appendChild(sp2);
+            wrap.appendChild(loadBox);
+          }
+          var doc = document.createElement('div');
           doc.className = 'pending-attach-doc';
-          doc.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+          var iconSpan = document.createElement('span');
+          iconSpan.className = 'file-icon';
+          iconSpan.innerHTML = getFileIcon(a.filename); // safe: hardcoded SVGs only
+          doc.appendChild(iconSpan);
           doc.appendChild(document.createTextNode(a.filename));
           wrap.appendChild(doc);
         }
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'pending-attach-remove';
-        removeBtn.textContent = 'x';
-        removeBtn.addEventListener('click', () => removePendingAttach(i));
-        wrap.appendChild(removeBtn);
+
+        if (!a.uploading) {
+          var removeBtn = document.createElement('button');
+          removeBtn.className = 'pending-attach-remove';
+          removeBtn.textContent = 'x';
+          removeBtn.addEventListener('click', function() { removePendingAttach(i); });
+          wrap.appendChild(removeBtn);
+        }
         container.appendChild(wrap);
       });
     }
@@ -2524,6 +2687,7 @@ function chatPage(user) {
       const input = document.getElementById('msg-input');
       const hasContent = input.value.trim() || pendingAttachments.length;
       btn.disabled = isStreaming || !hasContent;
+      btn.style.display = hasContent ? '' : 'none';
       btn.classList.toggle('has-content', !!hasContent && !isStreaming);
     }
 

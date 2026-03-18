@@ -167,10 +167,17 @@ router.post('/chat', async (req, res) => {
       console.warn('[RuhiChat] Intelligence injection failed:', intelErr.message);
     }
 
+    // Fetch user's custom instructions
+    let customInstructions = '';
+    if (currentUserId) {
+      const ciResult = await pool.query('SELECT custom_instructions FROM users WHERE id = $1', [currentUserId]);
+      customInstructions = ciResult.rows[0]?.custom_instructions || '';
+    }
+
     // Build system prompt with Ruhi persona
     const userName = obUser?.name || req.session?.user?.name || 'User';
     const userRole = obUser?.role || req.session?.user?.role || 'user';
-    const systemPrompt = buildSystemPrompt(userName, userRole, memoryContext + intelContext);
+    const systemPrompt = buildSystemPrompt(userName, userRole, memoryContext + intelContext, customInstructions);
 
     // Build OpenAI messages array
     const openaiMessages = [

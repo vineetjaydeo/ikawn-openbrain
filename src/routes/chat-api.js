@@ -810,7 +810,32 @@ router.put('/api/settings', async (req, res) => {
   }
 });
 
-// ── 9. Gallery: fetch user's image attachments across conversations ──
+// ── 9. Custom Instructions (per-user) ──
+
+router.get('/api/custom-instructions', async (req, res) => {
+  if (!req.session?.user?.id) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const { rows } = await pool.query('SELECT custom_instructions FROM users WHERE id = $1', [req.session.user.id]);
+    res.json({ custom_instructions: rows[0]?.custom_instructions || '' });
+  } catch (err) {
+    console.error('GET /api/custom-instructions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/api/custom-instructions', async (req, res) => {
+  if (!req.session?.user?.id) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const text = (req.body.custom_instructions || '').slice(0, 500);
+    await pool.query('UPDATE users SET custom_instructions = $1 WHERE id = $2', [text || null, req.session.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('PATCH /api/custom-instructions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 10. Gallery: fetch user's image attachments across conversations ──
 
 // Gallery endpoint moved to actions.js (unified: ikawn OS generations + chat attachments)
 

@@ -78,10 +78,14 @@ If {user_name} asks "what's the latest" or "what have I been working on":
 Example: If talking to Avinash and memory says "by vineet: [Commit] orbit analytics" → say "Vineet pushed orbit analytics" NOT "You've been working on orbit"
 `;
 
-function buildSystemPrompt(userName, userRole, memoryContext) {
+function buildSystemPrompt(userName, userRole, memoryContext, customInstructions) {
   let prompt = RUHI_SYSTEM_PROMPT
     .replace('{user_name}', userName || 'Unknown')
     .replace('{user_role}', userRole || 'user');
+
+  if (customInstructions) {
+    prompt += `\n\nUSER'S CUSTOM INSTRUCTIONS (from ${userName}):\n${customInstructions}`;
+  }
 
   if (memoryContext) {
     prompt += `\n\nRELEVANT MEMORY CONTEXT:\n${memoryContext}`;

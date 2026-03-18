@@ -84,6 +84,19 @@ app.get('/robots.txt', (req, res) => {
   res.type('text/plain').send('User-agent: *\nDisallow: /\n');
 });
 
+// Favicon
+const faviconPath = path.join(__dirname, '..', 'docs', 'ruhi-favicon-64.png');
+let faviconBuf;
+try { faviconBuf = fs.readFileSync(faviconPath); } catch (e) {}
+app.get('/favicon.png', (req, res) => {
+  if (!faviconBuf) return res.status(404).end();
+  res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' }).send(faviconBuf);
+});
+app.get('/favicon.ico', (req, res) => {
+  if (!faviconBuf) return res.status(404).end();
+  res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' }).send(faviconBuf);
+});
+
 // Health check — no auth
 const appVersion = require('../package.json').version;
 

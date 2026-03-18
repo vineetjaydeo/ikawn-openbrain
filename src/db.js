@@ -54,6 +54,11 @@ async function initSchema() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
     `);
 
+    // Custom instructions per user (appended to Ruhi's system prompt)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_instructions TEXT
+    `);
+
     // ── OpenBrain v2: Evolve memories table ──
     await client.query(`
       ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_level TEXT DEFAULT 'private';

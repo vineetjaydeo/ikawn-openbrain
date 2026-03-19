@@ -30,6 +30,7 @@ const sharedRoute = require('./routes/shared');
 const recallRoute = require('./routes/recall');
 const governanceRoute = require('./routes/governance');
 const brandsApiRoute = require('./routes/brands-api');
+const skillsRoute = require('./routes/skills');
 const intelligenceRoute = require('./routes/intelligence');
 const missionControlRoute = require('./routes/mission-control');
 const { startScheduler, triggerSync } = require('./scheduler');
@@ -132,6 +133,7 @@ app.use(requireAuthOrApiKey, brainHealthRoute);
 app.use(requireAuthOrApiKey, recallRoute);
 app.use(requireAuthOrApiKey, governanceRoute);
 app.use(requireAuthOrApiKey, brandsApiRoute);
+app.use(skillsRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);

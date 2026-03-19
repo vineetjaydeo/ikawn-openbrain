@@ -325,6 +325,12 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_conversations_source ON conversations(source) WHERE source IS NOT NULL;
     `);
 
+    // Unsaid words — draft text saved per conversation
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS draft_text TEXT;
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS draft_updated_at TIMESTAMPTZ;
+    `);
+
     // ── OpenBrain v3: edit_deltas — highest priority training data ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS edit_deltas (
@@ -867,7 +873,26 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_weekly_scorecards_brand_week ON weekly_scorecards(brand_id, week_start DESC);
     `);
 
-    console.log('Database schema initialized (v8.1 — agent platform + support tables)');
+    // ── OpenBrain v9: Skill Sessions (Brand Onboarding Wizard) ──
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS skill_sessions (
+        id TEXT PRIMARY KEY,
+        skill_name VARCHAR(50) NOT NULL,
+        org_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        current_step VARCHAR(50) NOT NULL DEFAULT 'init',
+        state_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_skill_sessions_org ON skill_sessions(org_id);
+      CREATE INDEX IF NOT EXISTS idx_skill_sessions_user ON skill_sessions(user_id);
+    `);
+
+    console.log('Database schema initialized (v9 — skill sessions + agent platform)');
   } finally {
     client.release();
   }

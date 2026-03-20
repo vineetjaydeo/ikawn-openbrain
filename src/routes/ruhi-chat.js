@@ -4,7 +4,7 @@ const { getEmbedding } = require('../embeddings');
 const { streamChatAnthropic } = require('../utils/llm');
 const { buildSystemPrompt } = require('../ruhi/persona');
 const { captureMessage } = require('../utils/capture');
-const { getTool, getTools } = require('../tools/registry');
+const { getTool, getTools, getToolSchemas } = require('../tools/registry');
 
 const router = Router();
 
@@ -194,16 +194,75 @@ router.post('/chat', async (req, res) => {
 
     let fullResponse = '';
 
-    await streamChatAnthropic(openaiMessages, {
-      model: 'claude-sonnet-4-6',
-      onChunk: (chunk) => {
-        fullResponse += chunk;
-        res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
-      },
-    });
+    // Build tool schemas for all registered tools
+    const allToolNames = [...getTools().keys()];
+    const toolSchemas = allToolNames.length > 0 ? getToolSchemas(allToolNames) : [];
+
+    // Tool execution loop: Claude may call tools, we execute them and continue
+    const MAX_TOOL_ROUNDS = 5;
+    let messages = [...openaiMessages];
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const result = await streamChatAnthropic(messages, {
+        model: 'claude-sonnet-4-6',
+        tools: toolSchemas.length > 0 ? toolSchemas : undefined,
+        onChunk: (chunk) => {
+          fullResponse += chunk;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+        },
+      });
+
+      // If Claude didn't request tool use, we're done
+      if (result.stopReason !== 'tool_use') break;
+
+      // Extract tool_use blocks from content
+      const toolUseBlocks = result.contentBlocks.filter(b => b.type === 'tool_use');
+      if (toolUseBlocks.length === 0) break;
+
+      // Build assistant message with all content blocks
+      const assistantContent = result.contentBlocks.map(b => {
+        if (b.type === 'text') return { type: 'text', text: b.text };
+        return { type: 'tool_use', id: b.id, name: b.name, input: b.input };
+      });
+      messages.push({ role: 'assistant', content: assistantContent });
+
+      // Execute each tool and build tool_result messages
+      const toolResults = [];
+      for (const block of toolUseBlocks) {
+        const tool = getTool(block.name);
+        let toolOutput;
+
+        // Notify client that a tool is running
+        res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: block.name })}\n\n`);
+
+        if (!tool) {
+          toolOutput = { error: `Unknown tool: ${block.name}` };
+        } else {
+          try {
+            const execResult = await tool.execute(
+              block.input || {},
+              { brandId: 'ikawn', userId: currentUserId, pool }
+            );
+            toolOutput = execResult?.summary || JSON.stringify(execResult?.data || execResult);
+          } catch (toolErr) {
+            console.error(`[RuhiChat] Tool ${block.name} failed:`, toolErr.message);
+            toolOutput = { error: `Tool ${block.name} failed: ${toolErr.message}` };
+          }
+        }
+
+        res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name })}\n\n`);
+
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput),
+        });
+      }
+
+      messages.push({ role: 'user', content: toolResults });
+    }
 
     // Save both sides to memories via captureMessage (idempotent, proper metadata, user-scoped)
-    const authorName = (obUser?.name || req.session?.user?.name || 'user').toLowerCase();
     captureMessage({
       brand_id: 'ikawn',
       channel: 'ruhi-chat',

@@ -1,3 +1,5 @@
+const { getTools } = require('../tools/registry');
+
 const RUHI_SYSTEM_PROMPT = `
 You are Ruhi, iKawn's internal intelligence layer and the closest thing to a
 founding team member who never forgets anything.
@@ -41,8 +43,11 @@ You can create and manage scheduled tasks. When someone asks you to do something
 periodically (e.g., "check my calendar every 2 hours", "send me a daily GA report"),
 use the manage_task tool to create a scheduled task.
 
-Available tools: calendar_read, gmail_read, ga_report, content_draft, ikawn_generate,
-notify, system_status, fly_status, manage_task.
+You have TOOLS you can call autonomously. When a user asks you to do something
+that requires a tool, USE IT — don't just talk about it. Claude will provide
+your available tools as function definitions. Call them directly.
+
+{tools_list}
 
 Schedule types: cron (complex schedules), interval (every N minutes), once (one-time), trigger (event-based).
 Tiers: direct (simple — no LLM, just calls the tool) or agent (complex — uses Claude to reason + call multiple tools).
@@ -79,9 +84,16 @@ Example: If talking to Avinash and memory says "by vineet: [Commit] orbit analyt
 `;
 
 function buildSystemPrompt(userName, userRole, memoryContext, customInstructions) {
+  // Build dynamic tool list from registry
+  const tools = getTools();
+  const toolsList = tools.size > 0
+    ? 'Available tools: ' + [...tools.values()].map(t => `${t.name} (${t.description || 'no description'})`).join(', ')
+    : 'No tools currently available.';
+
   let prompt = RUHI_SYSTEM_PROMPT
-    .replace('{user_name}', userName || 'Unknown')
-    .replace('{user_role}', userRole || 'user');
+    .replaceAll('{user_name}', userName || 'Unknown')
+    .replace('{user_role}', userRole || 'user')
+    .replace('{tools_list}', toolsList);
 
   if (customInstructions) {
     prompt += `\n\nUSER'S CUSTOM INSTRUCTIONS (from ${userName}):\n${customInstructions}`;

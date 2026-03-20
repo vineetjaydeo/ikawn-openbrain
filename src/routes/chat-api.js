@@ -4,7 +4,8 @@ const { pool } = require('../db');
 const { streamChat, chatCompletion } = require('../utils/llm');
 const { searchWeb } = require('../utils/web-search');
 const { readLink } = require('../utils/link-reader');
-const { extractText } = require('../utils/doc-parser');
+const { extractText, guessMimeFromFilename } = require('../utils/doc-parser');
+const { downloadFromUrl } = require('../utils/storage');
 const { getEmbedding } = require('../embeddings');
 const { captureMessage } = require('../utils/capture');
 const { getTool } = require('../tools/registry');
@@ -229,11 +230,12 @@ router.post('/api/chat/send', async (req, res) => {
     if (convRows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
     const convInternalId = convRows[0].id;
 
-    // Process attachments — resolve link content if needed
+    // Process attachments — extract text from documents and links
     const processedAttachments = [];
     if (attachments && Array.isArray(attachments)) {
       for (const att of attachments) {
         const processed = { ...att };
+
         if (att.type === 'link' && !att.extracted_text) {
           try {
             const linkData = await readLink(att.url);
@@ -247,7 +249,23 @@ router.post('/api/chat/send', async (req, res) => {
             console.error('readLink error:', err);
             processed.extracted_text = '[Failed to read link content]';
           }
+        } else if (att.type === 'document' && !att.extracted_text && att.url) {
+          // Document uploaded via presign (no server-side extraction at upload time)
+          try {
+            const buffer = await downloadFromUrl(att.url);
+            const mime = att.contentType || guessMimeFromFilename(att.filename || att.name);
+            const text = await extractText(buffer, mime, att.filename || att.name);
+            if (text) {
+              processed.extracted_text = text;
+            } else {
+              processed.extracted_text = `[Unsupported document format: ${att.filename || att.name}]`;
+            }
+          } catch (err) {
+            console.error('Document extraction error:', err.message);
+            processed.extracted_text = `[Failed to extract text from ${att.filename || att.name}: ${err.message}]`;
+          }
         }
+
         processedAttachments.push(processed);
       }
     }
@@ -392,6 +410,24 @@ ${memoryContext}
 10. You have LIVE memory feeds from GitHub (commits, PRs, issues), Telegram conversations, and past decisions. This data is automatically synced — you DO have access. Never say "I don't have access to GitHub" or ask the user to paste links. If the memory feed contains relevant data, USE it confidently. If a specific piece of info isn't in your memory, say "I don't have that specific detail in my recent memory" — not "I can't access GitHub."
 11. When referencing memory data, be specific: cite commit messages, dates, authors. Don't hedge or disclaim.`
       };
+    }
+
+    // Lazy-extract text from old document attachments that were saved without extracted_text
+    for (const msg of historyRows) {
+      if (msg.role === 'user' && msg.attachments && Array.isArray(msg.attachments)) {
+        for (const att of msg.attachments) {
+          if (att.type === 'document' && !att.extracted_text && att.url) {
+            try {
+              const buffer = await downloadFromUrl(att.url);
+              const mime = att.contentType || guessMimeFromFilename(att.filename || att.name);
+              att.extracted_text = await extractText(buffer, mime, att.filename || att.name);
+            } catch (err) {
+              console.error('Lazy document extraction failed:', err.message);
+              att.extracted_text = `[Failed to extract: ${att.filename || att.name}]`;
+            }
+          }
+        }
+      }
     }
 
     const openaiMessages = [systemPrompt, ...historyRows.map((msg) => {

@@ -187,14 +187,18 @@ function parseJSONSafe(text) {
 /**
  * Streaming chat completion via Anthropic Claude.
  * Converts OpenAI-style messages to Anthropic format.
+ * Supports tool_use: when tools are provided, returns structured content blocks
+ * and stop_reason so the caller can handle tool execution loops.
+ *
  * @param {Array} messages - OpenAI-style messages array (system extracted automatically)
- * @param {object} opts - { model, maxTokens, onChunk, onDone }
- * @returns {Promise<string>} Full response text
+ * @param {object} opts - { model, maxTokens, tools, onChunk, onDone }
+ * @returns {Promise<{ text: string, contentBlocks: Array, stopReason: string }>}
  */
 async function streamChatAnthropic(messages, opts = {}) {
   const client = getAnthropicClient();
   const model = opts.model || 'claude-sonnet-4-6';
   const maxTokens = opts.maxTokens || 4096;
+  const tools = opts.tools || undefined;
   const onChunk = opts.onChunk;
   const onDone = opts.onDone;
 
@@ -204,25 +208,62 @@ async function streamChatAnthropic(messages, opts = {}) {
   const chatMessages = messages.filter(m => m.role !== 'system');
 
   let fullText = '';
+  const contentBlocks = [];
+  let currentBlock = null;
+  let stopReason = 'end_turn';
+
+  const apiParams = {
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: chatMessages,
+  };
+  if (tools && tools.length > 0) {
+    apiParams.tools = tools;
+  }
 
   try {
-    const stream = await client.messages.stream({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: chatMessages,
-    });
+    const stream = await client.messages.stream(apiParams);
 
     for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-        const text = event.delta.text;
-        fullText += text;
-        if (onChunk) onChunk(text);
+      if (event.type === 'content_block_start') {
+        const block = event.content_block;
+        if (block.type === 'text') {
+          currentBlock = { type: 'text', text: '' };
+        } else if (block.type === 'tool_use') {
+          currentBlock = { type: 'tool_use', id: block.id, name: block.name, input: '' };
+        }
+      } else if (event.type === 'content_block_delta') {
+        if (event.delta?.type === 'text_delta' && currentBlock?.type === 'text') {
+          const text = event.delta.text;
+          currentBlock.text += text;
+          fullText += text;
+          if (onChunk) onChunk(text);
+        } else if (event.delta?.type === 'input_json_delta' && currentBlock?.type === 'tool_use') {
+          currentBlock.input += event.delta.partial_json;
+        }
+      } else if (event.type === 'content_block_stop') {
+        if (currentBlock) {
+          if (currentBlock.type === 'tool_use') {
+            // Parse accumulated JSON input
+            try {
+              currentBlock.input = JSON.parse(currentBlock.input || '{}');
+            } catch (_) {
+              currentBlock.input = {};
+            }
+          }
+          contentBlocks.push(currentBlock);
+          currentBlock = null;
+        }
+      } else if (event.type === 'message_delta') {
+        if (event.delta?.stop_reason) {
+          stopReason = event.delta.stop_reason;
+        }
       }
     }
 
     if (onDone) onDone(fullText);
-    return fullText;
+    return { text: fullText, contentBlocks, stopReason };
   } catch (err) {
     const status = err.status || err.statusCode;
     const msg = err.message || 'Unknown Anthropic error';

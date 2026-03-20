@@ -45,8 +45,8 @@ router.post('/webhooks/github', async (req, res) => {
         if (existing.rows.length === 0) {
           await pool.query(
             `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-             VALUES ($1, 'github', 'github_commit', $2, $3, $4, $5, 'internal', req.brand_id, 'pending')`,
-            [content, commit.id, commit.url, payload.repository?.name || '', commit.author?.name || 'unknown']
+             VALUES ($1, 'github', 'github_commit', $2, $3, $4, $5, 'internal', $6, 'pending')`,
+            [content, commit.id, commit.url, payload.repository?.name || '', commit.author?.name || 'unknown', req.brand_id]
           );
         }
       }
@@ -67,8 +67,8 @@ router.post('/webhooks/github', async (req, res) => {
       if (existing.rows.length === 0) {
         await pool.query(
           `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-           VALUES ($1, 'github', 'github_issue', $2, $3, $4, $5, 'internal', req.brand_id, 'pending')`,
-          [content, ref, issue.html_url, payload.repository?.name || '', issue.user?.login || 'unknown']
+           VALUES ($1, 'github', 'github_issue', $2, $3, $4, $5, 'internal', $6, 'pending')`,
+          [content, ref, issue.html_url, payload.repository?.name || '', issue.user?.login || 'unknown', req.brand_id]
         );
       } else {
         // Update existing — re-queue for async embedding
@@ -94,8 +94,8 @@ router.post('/webhooks/github', async (req, res) => {
       if (existing.rows.length === 0) {
         await pool.query(
           `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-           VALUES ($1, 'github', 'github_pr', $2, $3, $4, $5, 'internal', req.brand_id, 'pending')`,
-          [content, ref, pr.html_url, payload.repository?.name || '', pr.user?.login || 'unknown']
+           VALUES ($1, 'github', 'github_pr', $2, $3, $4, $5, 'internal', $6, 'pending')`,
+          [content, ref, pr.html_url, payload.repository?.name || '', pr.user?.login || 'unknown', req.brand_id]
         );
       } else {
         // Update existing — re-queue for async embedding

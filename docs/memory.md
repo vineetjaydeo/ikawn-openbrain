@@ -48,9 +48,24 @@ Ruhi tracks interaction quality across 4 dimensions:
 
 Rolling average (0.7 current / 0.3 historical) — helps Ruhi adapt her communication style.
 
+### Team Memory (this instance: ruhi.ikawn.in)
+
+On this instance, all iKawn team members share brand-wide memory. When Abhishek tells
+Ruhi something, Vineet can ask about it later — and vice versa. This is by design:
+the iKawn internal Ruhi is a shared team brain, not a collection of private silos.
+
+- Conversations are captured with `access_level = 'internal'` (team-visible)
+- RAG search surfaces memories from all team members within iKawn
+- Author attribution is preserved — Ruhi knows who said what and when
+- Personal user preferences (custom_instructions) remain private per user
+- Ruhi's own past responses are excluded from RAG to prevent echo pollution
+
+On Ruhi OS (enterprise), memory scoping will be per-brand: team members within a brand
+share data, but cross-brand data is invisible.
+
 ### Security
 
 - Ruhi never reveals AI model names, providers, architecture, or pricing
 - Probing detection: adversarial behavior is tracked (20 regex patterns)
 - Risk flagging at >= 3 probe attempts
-- All memories are user-scoped — no cross-user data leakage
+- Brand-scoped isolation: memories are partitioned by brand_id

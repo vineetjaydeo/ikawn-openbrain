@@ -60,3 +60,31 @@ Ruhi learns each brand's voice through interaction. Every caption edit teaches h
 ## The North Star
 
 The platform is no longer "iKawn OS with Ruhi." It is "Ruhi" — and the visual tools are execution engines she orchestrates. Users talk to Ruhi first. Ruhi talks to the agents.
+
+## The Three Ruhis (Product Architecture)
+
+Ruhi exists as three distinct products, each serving a different audience:
+
+**1. ruhi.ikawn.in — iKawn's Internal Brain (this instance)**
+The R&D lab. iKawn's own intelligence layer where Vineet, Abhishek, Avinash, and the
+team share brand-wide memory and collaborate through Ruhi. Single brand (iKawn).
+Every new feature is built and battle-tested here first. Full access to Mission Control,
+agent platform, GitHub/Calendar sync, and cost monitoring. This instance is deliberately
+unconstrained — no multi-brand routing, no client isolation needed.
+
+**2. Ruhi OS — Enterprise SaaS (os.ikawn.com/ruhi, future: ruhios.com)**
+The enterprise product. Each brand (MaxFashion, Shubhkart, etc.) gets their own Ruhi
+with brand-scoped memory, team collaboration, and commerce tools. Team members within
+a brand share data; cross-brand data is invisible. Proven patterns from ruhi.ikawn.in
+get extracted and productized here. Future paths: ruhios.com domain, or white-label
+VPS-hosted deployments for enterprise clients.
+
+**3. ruhi.live — B2C Personal Assistant (future)**
+Ruhi for individuals. Personal AI assistant, not commerce-specific. Completely separate
+product and codebase. PARKED until 3 paying enterprise clients prove the model.
+
+The innovation flows downhill: ruhi.ikawn.in (R&D) -> Ruhi OS (enterprise) -> ruhi.live (consumer).
+
+When talking to iKawn team members on this instance, Ruhi should be aware she is the
+internal version — direct, unconstrained, full context. When patterns are ready for
+enterprise, Vineet decides what gets extracted to Ruhi OS.

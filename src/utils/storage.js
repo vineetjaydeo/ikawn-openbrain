@@ -2,6 +2,7 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const KEY_PREFIX = "openbrain/";
+const DEFAULT_BRAND = "ikawn";
 const MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
 let s3Client = null;
@@ -23,19 +24,23 @@ function getClient() {
   return s3Client;
 }
 
-function prefixedKey(key) {
-  return key.startsWith(KEY_PREFIX) ? key : KEY_PREFIX + key;
+function prefixedKey(key, brandId) {
+  const brand = brandId || DEFAULT_BRAND;
+  const brandPrefix = `${KEY_PREFIX}${brand}/`;
+  if (key.startsWith(KEY_PREFIX)) return key; // already prefixed (legacy)
+  return brandPrefix + key;
 }
 
 /**
  * Upload a file to R2.
- * @param {string} key - Object key (auto-prefixed with openbrain/).
+ * @param {string} key - Object key (auto-prefixed with openbrain/{brandId}/).
  * @param {Buffer|string|ReadableStream} body - File contents.
  * @param {string} contentType - MIME type.
+ * @param {string} [brandId] - Brand ID for namespacing.
  * @returns {Promise<string>} Public URL of the uploaded object.
  */
-async function uploadToR2(key, body, contentType) {
-  const fullKey = prefixedKey(key);
+async function uploadToR2(key, body, contentType, brandId) {
+  const fullKey = prefixedKey(key, brandId);
   const client = getClient();
 
   await client.send(
@@ -53,13 +58,14 @@ async function uploadToR2(key, body, contentType) {
 
 /**
  * Generate a presigned PUT URL for direct client uploads.
- * @param {string} key - Object key (auto-prefixed with openbrain/).
+ * @param {string} key - Object key (auto-prefixed with openbrain/{brandId}/).
  * @param {string} contentType - MIME type.
  * @param {number} [expiresIn=3600] - URL validity in seconds.
+ * @param {string} [brandId] - Brand ID for namespacing.
  * @returns {Promise<string>} Presigned PUT URL.
  */
-async function getPresignedUploadUrl(key, contentType, expiresIn = 3600) {
-  const fullKey = prefixedKey(key);
+async function getPresignedUploadUrl(key, contentType, expiresIn = 3600, brandId) {
+  const fullKey = prefixedKey(key, brandId);
   const client = getClient();
 
   const command = new PutObjectCommand({

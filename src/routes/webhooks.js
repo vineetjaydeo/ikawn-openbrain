@@ -161,7 +161,7 @@ router.post('/webhooks/telegram/:token', async (req, res) => {
 
   // Capture message to OpenBrain DB (async, non-blocking for user)
   try {
-    await handleUpdate(body);
+    await handleUpdate(body, { brandId: req.brand_id });
   } catch (err) {
     console.error('Telegram webhook capture error:', err);
   }
@@ -349,7 +349,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     }
 
     // 3. Build system prompt — full Ruhi persona + memory + intelligence
-    const systemPrompt = buildSystemPrompt(userName, 'admin', memoryContext + intelContext);
+    const systemPrompt = await buildSystemPrompt(userName, 'admin', memoryContext + intelContext, null, req.brand_id);
 
     // 4. Get conversation history for context (last 20 messages)
     const historyResult = await pool.query(

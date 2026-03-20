@@ -40,7 +40,7 @@ function requireAuthOrApiKey(req, res, next) {
   // 2. Check DB-managed keys
   const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
   pool.query(
-    `SELECT id, name, user_id, org_id, expires_at, revoked_at FROM api_keys WHERE key_hash = $1`,
+    `SELECT id, name, user_id, org_id, brand_id, expires_at, revoked_at FROM api_keys WHERE key_hash = $1`,
     [keyHash]
   ).then(result => {
     const key = result.rows[0];
@@ -60,6 +60,7 @@ function requireAuthOrApiKey(req, res, next) {
     req.apiKeyName = key.name;
     req.userId = key.user_id || null;
     req.orgId = key.org_id || null;
+    req.brand_id_from_key = key.brand_id || null;
 
     // Update last_used_at + log usage (fire-and-forget)
     pool.query(`UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, [key.id]).catch(() => {});
@@ -77,8 +78,8 @@ function requireAuthOrApiKey(req, res, next) {
 }
 
 function requireBrand(req, res, next) {
-  // Resolution order: API key org_id → x-brand-id header → session → default 'ikawn'
-  const resolved = req.orgId || req.headers['x-brand-id'] || req.session?.brand_id || null;
+  // Resolution order: API key brand_id → API key org_id → x-brand-id header → session → default 'ikawn'
+  const resolved = req.brand_id_from_key || req.orgId || req.headers['x-brand-id'] || req.session?.brand_id || null;
   if (resolved) {
     req.brand_id = resolved;
   } else {
@@ -89,4 +90,38 @@ function requireBrand(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdmin, requireAuthOrApiKey, requireBrand };
+function requireBrandAccess(req, res, next) {
+  // Super-admin bypasses brand access check
+  if (req.session?.user?.role === 'admin') {
+    return next();
+  }
+
+  // API key authenticated requests — brand resolved via key, implicitly authorized
+  if (req.apiClient) {
+    return next();
+  }
+
+  // Check user belongs to the requested brand
+  const userId = req.session?.user?.id;
+  if (!userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  pool.query(
+    'SELECT role FROM brand_users WHERE brand_id = $1 AND user_id = $2',
+    [req.brand_id, userId]
+  ).then(result => {
+    if (result.rows.length === 0) {
+      // Default brand 'ikawn' is accessible to all authenticated users (backward compat)
+      if (req.brand_id === 'ikawn') return next();
+      return res.status(403).json({ error: 'Access denied to this brand' });
+    }
+    req.brand_role = result.rows[0].role || 'member';
+    next();
+  }).catch(err => {
+    console.error('Brand access check error:', err.message);
+    res.status(500).json({ error: 'Brand access check failed' });
+  });
+}
+
+module.exports = { requireAuth, requireAdmin, requireAuthOrApiKey, requireBrand, requireBrandAccess };

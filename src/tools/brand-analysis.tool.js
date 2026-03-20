@@ -8,16 +8,26 @@ const { analyzeBrand } = require('../skills/brand-analysis');
 
 module.exports = {
   name: 'analyze_brand',
-  description: 'Crawl a website and produce a full Brand DNA analysis — identity, voice, visuals, market context, competitors, and social profiles',
+  description: 'Crawl a website and produce a full Brand DNA analysis. This is a deep analysis that takes 1-2 minutes. Set confirm=true to execute, or omit it to get a preview of what will happen.',
   tier: 'direct',
   parameters: {
     url: { type: 'string', required: true, description: 'The brand website URL to analyze' },
     brand_type: { type: 'string', required: false, description: 'Brand type hint: product, service, saas, agency, personal, hybrid (default: hybrid)', enum: ['product', 'service', 'saas', 'agency', 'personal', 'hybrid'] },
+    confirm: { type: 'boolean', required: false, description: 'Set to true to execute the analysis. If false or omitted, returns a confirmation prompt instead.' },
   },
 
   async execute(config) {
     const url = config.url;
     if (!url) return { success: false, data: null, summary: 'URL is required.' };
+
+    // Confirmation gate: if confirm is not explicitly true, return a preview
+    if (config.confirm !== true) {
+      return {
+        success: true,
+        data: { awaiting_confirmation: true, url, brand_type: config.brand_type || 'hybrid' },
+        summary: `I'm about to run a deep Brand DNA analysis on ${url}. This will crawl the website, classify its pages, and analyze brand identity, voice, visuals, competitors, and social profiles. It takes 1-2 minutes. Want me to proceed? (I'll call this tool again with confirm=true)`,
+      };
+    }
 
     const brandType = config.brand_type || 'hybrid';
 

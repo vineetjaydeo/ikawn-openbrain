@@ -400,9 +400,29 @@ async function initSchema() {
       )
     `);
 
+    // P2.2: Per-brand persona columns
     await client.query(`
-      INSERT INTO brand_context (brand_id, industry) VALUES ('ikawn', 'AI SaaS / Commerce Tech')
-      ON CONFLICT (brand_id) DO NOTHING
+      ALTER TABLE brand_context ADD COLUMN IF NOT EXISTS display_name TEXT;
+      ALTER TABLE brand_context ADD COLUMN IF NOT EXISTS tone TEXT;
+      ALTER TABLE brand_context ADD COLUMN IF NOT EXISTS system_prompt_override TEXT;
+      ALTER TABLE brand_context ADD COLUMN IF NOT EXISTS context_injection TEXT;
+    `);
+
+    await client.query(`
+      INSERT INTO brand_context (brand_id, industry, display_name) VALUES ('ikawn', 'AI SaaS / Commerce Tech', 'iKawn Technologies')
+      ON CONFLICT (brand_id) DO UPDATE SET display_name = COALESCE(brand_context.display_name, 'iKawn Technologies')
+    `);
+
+    // ── P2.3: Per-brand knowledge base ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brand_knowledge (
+        id SERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL,
+        doc_type VARCHAR(50) NOT NULL,
+        content TEXT NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brand_id, doc_type)
+      )
     `);
 
     // ── OpenBrain v3: brand_ratings ──
@@ -465,6 +485,10 @@ async function initSchema() {
     // org_id on api_keys (Wave 2: multi-tenant org model)
     await client.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS org_id VARCHAR(100)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_api_keys_org_id ON api_keys(org_id) WHERE org_id IS NOT NULL`);
+
+    // brand_id on api_keys (P2.4: direct API key → brand mapping)
+    await client.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS brand_id VARCHAR(100) DEFAULT 'ikawn'`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_api_keys_brand_id ON api_keys(brand_id)`);
 
     // Index for fast hash lookups during auth
     await client.query(`
@@ -903,6 +927,16 @@ async function initSchema() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_skill_sessions_org ON skill_sessions(org_id);
       CREATE INDEX IF NOT EXISTS idx_skill_sessions_user ON skill_sessions(user_id);
+    `);
+
+    // ── Brand admin isolation: unique constraint + seed ──
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_brand_users_brand_user ON brand_users(brand_id, user_id);
+    `);
+    await client.query(`
+      INSERT INTO brand_users (brand_id, user_id, role)
+      SELECT 'ikawn', id, 'admin' FROM users WHERE email = 'v@ikawn.com'
+      ON CONFLICT (brand_id, user_id) DO NOTHING;
     `);
 
     console.log('Database schema initialized (v9 — skill sessions + agent platform)');

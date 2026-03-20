@@ -1,4 +1,12 @@
 const { getTools } = require('../tools/registry');
+const { pool } = require('../db');
+
+// In-memory brand context cache: brandId -> { data, fetchedAt }
+const brandContextCache = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// In-memory brand knowledge cache: brandId -> { data, fetchedAt }
+const brandKnowledgeCache = new Map();
 
 const RUHI_SYSTEM_PROMPT = `
 You are Ruhi, iKawn's internal intelligence layer and the closest thing to a
@@ -57,7 +65,7 @@ When creating tasks, choose the simplest tier that works. "Check calendar" = dir
 
 WHAT YOU DO NOT DO:
 - Hallucinate project status — if you're not sure, say so and offer to search
-- Say "I don't have internet access" or "I can't browse the web" — you CAN, use web_search
+- Say "I don't have internet access" or "I can't browse the web" — you CAN search the web
 - Share private information with people who shouldn't see it
 - Start responses with "Certainly!" or "Great question!" or any filler
 - Use bullet points for everything — have a conversation
@@ -83,17 +91,132 @@ If {user_name} asks "what's the latest" or "what have I been working on":
 Example: If talking to Avinash and memory says "by vineet: [Commit] orbit analytics" → say "Vineet pushed orbit analytics" NOT "You've been working on orbit"
 `;
 
-function buildSystemPrompt(userName, userRole, memoryContext, customInstructions) {
+/**
+ * Load brand context from DB with 5-min in-memory cache.
+ * Returns null if no brand-specific context exists (use default Ruhi persona).
+ */
+async function loadBrandContext(brandId) {
+  if (!brandId) return null;
+
+  const cached = brandContextCache.get(brandId);
+  if (cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT display_name, industry, tone_of_voice, tone, target_audience,
+              system_prompt_override, context_injection, brand_guidelines, preferences
+       FROM brand_context WHERE brand_id = $1`,
+      [brandId]
+    );
+
+    const data = rows.length > 0 ? rows[0] : null;
+    brandContextCache.set(brandId, { data, fetchedAt: Date.now() });
+    return data;
+  } catch (err) {
+    console.warn('[Persona] Failed to load brand context:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Load per-brand knowledge base (soul, memory, tools, user docs).
+ * Falls back to global docs/  files if no brand-specific rows exist.
+ * 5-min in-memory cache per brandId.
+ */
+async function loadBrandKnowledge(brandId) {
+  const key = brandId || 'ikawn';
+
+  const cached = brandKnowledgeCache.get(key);
+  if (cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT doc_type, content FROM brand_knowledge WHERE brand_id = $1`,
+      [key]
+    );
+
+    if (rows.length > 0) {
+      const knowledge = {};
+      for (const row of rows) {
+        knowledge[row.doc_type] = row.content;
+      }
+      // Fill any missing doc types from global fallback
+      const globalKb = global.ruhiKnowledge || {};
+      for (const docType of ['soul', 'memory', 'tools', 'user']) {
+        if (!knowledge[docType]) {
+          knowledge[docType] = globalKb[docType] || '';
+        }
+      }
+      brandKnowledgeCache.set(key, { data: knowledge, fetchedAt: Date.now() });
+      return knowledge;
+    }
+  } catch (err) {
+    console.warn('[Persona] Failed to load brand knowledge:', err.message);
+  }
+
+  // No brand-specific rows — fall back to global docs
+  const globalKb = global.ruhiKnowledge || {};
+  const fallback = {
+    soul: globalKb.soul || '',
+    memory: globalKb.memory || '',
+    tools: globalKb.tools || '',
+    user: globalKb.user || '',
+  };
+  brandKnowledgeCache.set(key, { data: fallback, fetchedAt: Date.now() });
+  return fallback;
+}
+
+async function buildSystemPrompt(userName, userRole, memoryContext, customInstructions, brandId) {
   // Build dynamic tool list from registry
   const tools = getTools();
   const toolsList = tools.size > 0
     ? 'Available tools: ' + [...tools.values()].map(t => `${t.name} (${t.description || 'no description'})`).join(', ')
     : 'No tools currently available.';
 
+  // Load brand-specific context
+  const brandCtx = brandId ? await loadBrandContext(brandId) : null;
+
+  // If brand has a full system prompt override, use it directly
+  if (brandCtx?.system_prompt_override) {
+    let prompt = brandCtx.system_prompt_override
+      .replaceAll('{user_name}', userName || 'Unknown')
+      .replaceAll('{user_role}', userRole || 'user')
+      .replaceAll('{tools_list}', toolsList);
+
+    if (customInstructions) {
+      prompt += `\n\nUSER'S CUSTOM INSTRUCTIONS (from ${userName}):\n${customInstructions}`;
+    }
+    if (memoryContext) {
+      prompt += `\n\nRELEVANT MEMORY CONTEXT:\n${memoryContext}`;
+    }
+    return prompt;
+  }
+
+  // Default Ruhi prompt
   let prompt = RUHI_SYSTEM_PROMPT
     .replaceAll('{user_name}', userName || 'Unknown')
     .replace('{user_role}', userRole || 'user')
     .replace('{tools_list}', toolsList);
+
+  // Inject brand context if available
+  if (brandCtx) {
+    const parts = [];
+    if (brandCtx.display_name) parts.push(`Brand: ${brandCtx.display_name}`);
+    if (brandCtx.industry) parts.push(`Industry: ${brandCtx.industry}`);
+    const tone = brandCtx.tone || brandCtx.tone_of_voice;
+    if (tone) parts.push(`Communication tone: ${tone}`);
+    if (brandCtx.target_audience) parts.push(`Target audience: ${brandCtx.target_audience}`);
+    if (parts.length > 0) {
+      prompt += `\n\nBRAND CONTEXT:\n${parts.join('\n')}`;
+    }
+    if (brandCtx.context_injection) {
+      prompt += `\n\n${brandCtx.context_injection}`;
+    }
+  }
 
   if (customInstructions) {
     prompt += `\n\nUSER'S CUSTOM INSTRUCTIONS (from ${userName}):\n${customInstructions}`;
@@ -106,4 +229,4 @@ function buildSystemPrompt(userName, userRole, memoryContext, customInstructions
   return prompt;
 }
 
-module.exports = { RUHI_SYSTEM_PROMPT, buildSystemPrompt };
+module.exports = { RUHI_SYSTEM_PROMPT, buildSystemPrompt, loadBrandContext, loadBrandKnowledge };

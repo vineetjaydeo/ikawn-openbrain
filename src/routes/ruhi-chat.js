@@ -180,7 +180,7 @@ router.post('/chat', async (req, res) => {
     // Build system prompt with Ruhi persona
     const userName = obUser?.name || req.session?.user?.name || 'User';
     const userRole = obUser?.role || req.session?.user?.role || 'user';
-    const systemPrompt = buildSystemPrompt(userName, userRole, memoryContext + intelContext, customInstructions);
+    const systemPrompt = await buildSystemPrompt(userName, userRole, memoryContext + intelContext, customInstructions, req.brand_id);
 
     // Build OpenAI messages array
     const openaiMessages = [

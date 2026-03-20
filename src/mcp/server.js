@@ -216,7 +216,7 @@ server.tool(
       }).join('\n\n');
     }
 
-    const systemPrompt = buildSystemPrompt('Vineet', 'owner', memoryContext);
+    const systemPrompt = await buildSystemPrompt('Vineet', 'owner', memoryContext, null, MCP_BRAND_ID);
 
     const response = await chatCompletion(
       [

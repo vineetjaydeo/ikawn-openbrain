@@ -9,6 +9,7 @@ const { downloadFromUrl } = require('../utils/storage');
 const { getEmbedding } = require('../embeddings');
 const { captureMessage } = require('../utils/capture');
 const { getTool, getTools } = require('../tools/registry');
+const { loadBrandKnowledge } = require('../ruhi/persona');
 
 /**
  * RAG: search memories for relevant context.
@@ -112,8 +113,8 @@ router.get('/api/conversations', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT uuid AS id, title, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 50',
-      [req.session.user.id]
+      'SELECT uuid AS id, title, updated_at FROM conversations WHERE user_id = $1 AND brand_id = $2 ORDER BY updated_at DESC LIMIT 50',
+      [req.session.user.id, req.brand_id]
     );
     res.json(rows);
   } catch (err) {
@@ -129,8 +130,8 @@ router.post('/api/conversations', async (req, res) => {
   try {
     const title = req.body.title || 'New conversation';
     const { rows } = await pool.query(
-      'INSERT INTO conversations (user_id, title) VALUES ($1, $2) RETURNING uuid AS id, title, created_at, updated_at',
-      [req.session.user.id, title]
+      'INSERT INTO conversations (user_id, title, brand_id) VALUES ($1, $2, $3) RETURNING uuid AS id, title, created_at, updated_at',
+      [req.session.user.id, title, req.brand_id]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -145,8 +146,8 @@ router.get('/api/conversations/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows: convRows } = await pool.query(
-      'SELECT * FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT * FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!convRows.length) return res.status(404).json({ error: 'Not found' });
     if (convRows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -170,8 +171,8 @@ router.delete('/api/conversations/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT id, user_id FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT id, user_id FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -192,8 +193,8 @@ router.patch('/api/conversations/:id', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT id, user_id FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT id, user_id FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -223,10 +224,10 @@ router.post('/api/chat/send', async (req, res) => {
   const content = rawContent || '';
 
   try {
-    // Verify conversation ownership (resolve UUID → internal ID)
+    // Verify conversation ownership (resolve UUID → internal ID, brand-scoped)
     const { rows: convRows } = await pool.query(
-      'SELECT * FROM conversations WHERE uuid = $1',
-      [conversation_id]
+      'SELECT * FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [conversation_id, req.brand_id]
     );
     if (!convRows.length) return res.status(404).json({ error: 'Conversation not found' });
     if (convRows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -385,7 +386,7 @@ RULES:
 - When referencing memory data, be specific: cite dates, authors. Don't hedge.`
       };
     } else {
-      const kb = global.ruhiKnowledge || {};
+      const kb = await loadBrandKnowledge(req.brand_id);
       systemPrompt = {
         role: 'system',
         content: `You ARE Ruhi. Not "an AI assistant called Ruhi" — you are Ruhi, iKawn's intelligent commerce copilot. Everything below defines who you are, how you think, what you know, and how you behave. Internalize it completely.
@@ -706,8 +707,8 @@ router.post('/api/conversations/:id/share', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT id, user_id, share_token FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT id, user_id, share_token FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -733,8 +734,8 @@ router.delete('/api/conversations/:id/share', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT id, user_id FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT id, user_id FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -756,8 +757,8 @@ router.get('/api/conversations/:id/markdown', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows: convRows } = await pool.query(
-      'SELECT * FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT * FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!convRows.length) return res.status(404).json({ error: 'Not found' });
     if (convRows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -862,8 +863,8 @@ async function saveDraft(req, res) {
   try {
     const { text } = req.body;
     const { rows } = await pool.query(
-      'SELECT id, user_id FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT id, user_id FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
@@ -887,8 +888,8 @@ router.post('/api/conversations/:id/generation', async (req, res) => {
     if (!urls || !urls.length) return res.status(400).json({ error: 'No URLs' });
 
     const { rows } = await pool.query(
-      'SELECT id, user_id FROM conversations WHERE uuid = $1',
-      [req.params.id]
+      'SELECT id, user_id FROM conversations WHERE uuid = $1 AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });

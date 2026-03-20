@@ -14,7 +14,7 @@ module.exports = {
   },
   async execute(config, context) {
     const auth = await getGoogleClient(context.brandId || 'ikawn', ['analytics.readonly']);
-    if (!auth) return { success: false, data: null, summary: 'Google Analytics not connected.' };
+    if (!auth) return { success: false, data: null, summary: 'Google Analytics is not connected yet. Ask your admin to set up the integration.' };
 
     const propertyId = config.property_id || process.env.GA4_PROPERTY_ID;
     if (!propertyId) return { success: false, data: null, summary: 'GA4 property ID not configured.' };

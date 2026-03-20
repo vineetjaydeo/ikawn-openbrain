@@ -12,8 +12,8 @@ module.exports = {
   },
   async execute(config, context) {
     const apiUrl = process.env.IKAWN_OS_API_URL || 'https://os.ikawn.com';
-    const apiKey = process.env.IKAWN_OS_API_KEY;
-    if (!apiKey) return { success: false, data: null, summary: 'IKAWN_OS_API_KEY not configured.' };
+    const apiKey = process.env.IKAWN_API_KEY;
+    if (!apiKey) return { success: false, data: null, summary: 'iKawn OS generation is not connected yet. Ask your admin to set up the integration.' };
 
     try {
       const body = { agent: config.agent, prompt: config.prompt };

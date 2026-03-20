@@ -34,8 +34,9 @@ router.post('/api/upload/presign', async (req, res, next) => {
     }
 
     const key = buildKey(req.session.user.id, filename);
-    const uploadUrl = await getPresignedUploadUrl(key, contentType);
-    const publicUrl = `${(process.env.R2_PUBLIC_URL || '').replace(/\/$/, '')}/openbrain/${key}`;
+    const uploadUrl = await getPresignedUploadUrl(key, contentType, 3600, req.brand_id);
+    const brandPrefix = `openbrain/${req.brand_id || 'ikawn'}/`;
+    const publicUrl = `${(process.env.R2_PUBLIC_URL || '').replace(/\/$/, '')}/${brandPrefix}${key}`;
 
     res.json({ uploadUrl, publicUrl, key });
   } catch (err) {
@@ -61,7 +62,7 @@ router.post('/api/upload/direct', async (req, res, next) => {
     const buffer = Buffer.from(data, 'base64');
     const key = buildKey(req.session.user.id, filename);
 
-    const url = await uploadToR2(key, buffer, contentType);
+    const url = await uploadToR2(key, buffer, contentType, req.brand_id);
 
     const result = { url, key };
 

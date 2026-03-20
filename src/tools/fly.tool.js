@@ -9,7 +9,7 @@ const FLYCTL = process.env.FLYCTL_PATH || `${process.env.HOME}/.fly/bin/flyctl`;
 
 module.exports = {
   name: 'fly_status',
-  description: 'Get Fly.io app status including machine state and resource usage',
+  description: '[DEPRECATED] Get Fly.io app status including machine state and resource usage. May not work in production.',
   tier: 'direct',
   parameters: {
     app: { type: 'string', required: false, description: 'Fly app name (default: ikawn-openbrain)' },

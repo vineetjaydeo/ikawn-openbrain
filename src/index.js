@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 const { initSchema } = require('./db');
-const { requireAuth, requireAuthOrApiKey, requireBrand } = require('./auth');
+const { requireAuth, requireAuthOrApiKey, requireBrand, requireBrandAccess } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
 const adminApi = require('./routes/admin-api');
 const pages = require('./routes/pages');
@@ -149,8 +149,8 @@ app.use(chatPage);
 // Reports page + API — requires auth (handled inside route)
 app.use(reportsRoute);
 
-// Mission Control API — requires auth
-app.use(missionControlRoute);
+// Mission Control API — requires auth + brand access
+app.use(requireBrandAccess, missionControlRoute);
 
 // Chat API + upload — requires auth
 app.use(requireAuth, chatApi);

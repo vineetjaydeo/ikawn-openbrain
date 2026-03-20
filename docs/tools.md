@@ -1,17 +1,11 @@
 # Ruhi — Tools & Capabilities
 
-## Current Capabilities (OpenBrain)
-
-### Chat & Conversation
-- Natural language conversation with streaming responses
-- Full conversation history with search
-- Auto-generated conversation titles
-- Markdown rendering with syntax-highlighted code blocks
+## Active Tools (Callable)
 
 ### Web Intelligence
-- **Web search**: Brave Search API — Ruhi decides when to search based on context
-- **Link reading**: Extract content from any URL using Readability
-- **Document parsing**: PDF and text document text extraction
+- **Web search** — Brave Search API (web chat) / Anthropic native search (Telegram)
+- **Link reading** — Extract content from any URL using Readability
+- **Document parsing** — PDF and text document extraction
 
 ### File Handling
 - Image upload and vision analysis (paste or file upload)
@@ -23,37 +17,49 @@
 - Pro model (advanced reasoning) for complex tasks
 - User toggles between them per-message
 
-## iKawn OS Capabilities (via bridge)
+### Google Workspace (requires OAuth setup)
+| Tool | What it does | Status |
+|------|-------------|--------|
+| **calendar_read** | Fetch upcoming Google Calendar events | Requires Google OAuth |
+| **gmail_read** | Fetch Gmail messages matching a search query | Requires Google OAuth |
+| **gmail_draft** | Create a Gmail draft (never sends — manual approval only) | Requires Google OAuth |
+| **ga_report** | Google Analytics 4 summary (sessions, pages, sources) | Requires Google OAuth + GA4 property ID |
 
-When connected to iKawn OS, Ruhi gains access to the full creative platform:
+### Task Management
+| Tool | What it does |
+|------|-------------|
+| **manage_task** | Create, list, enable, disable, delete, or run scheduled tasks |
 
-### Creative Agents
-| Agent | What it does |
-|-------|-------------|
-| **Genie** | Text to image generation |
-| **Remix** | Image blending and transformation |
-| **Prism** | Professional product photography |
-| **Lazarus** | Image to video animation |
-| **Muse** | Marketing video production |
+### Notifications & System
+| Tool | What it does |
+|------|-------------|
+| **notify** | Send notification via Telegram or web (rate limited: 3 per conversation) |
+| **system_status** | OpenBrain health: memory count, conversations, active tasks, worker status |
+| **fly_status** | [DEPRECATED] Fly.io app status — may not work in production |
 
-### Commerce Intelligence
-| Capability | Description |
-|-----------|-------------|
-| **Signal sensing** | Detect issues across connected platforms (missing images, thin descriptions, traffic drops, ad fatigue) |
-| **Campaign planning** | Propose strategy with SKU-level rationale |
-| **Autonomous generation** | Orchestrate parallel creation: product photos, lifestyle images, videos, captions |
-| **QA scoring** | Automatically score generated assets before presenting to brand |
-| **Brand voice learning** | Learn from every caption edit to match brand tone over time |
+### Content & Brand
+| Tool | What it does |
+|------|-------------|
+| **content_draft** | Draft social media posts/captions using brand voice and memory |
+| **analyze_brand** | Deep Brand DNA analysis: crawl website, classify pages, analyze identity/voice/visuals/competitors. Requires user confirmation before execution. |
 
-### Connector Registry
-Ruhi connects to external data sources:
-- **Shopify** — store health, product catalog, inventory
-- **Google Analytics 4** — traffic, bounce rates, conversion
-- **Meta Ads** — campaign performance, creative fatigue
-- **Klaviyo** — email metrics, abandoned carts
-- **MCP Passthrough** — any platform with an MCP endpoint plugs in automatically
+### iKawn OS Integration
+| Tool | What it does |
+|------|-------------|
+| **ikawn_generate** | Trigger image/video generation on iKawn OS (Genie, Remix, Prism, Lazarus) |
 
-### Gallery & Projects
-- Access to full generation history
-- Brand asset library
-- Project-level organization with brand guidelines
+---
+
+## Planned (Not Yet Implemented)
+
+These capabilities are on the roadmap but have no working tool implementation:
+
+- **Shopify connector** — store health, product catalog, inventory
+- **Meta Ads connector** — campaign performance, creative fatigue
+- **Klaviyo connector** — email metrics, abandoned carts
+- **MCP Passthrough** — any platform with an MCP endpoint
+- **Signal sensing** — detect issues across connected platforms
+- **Campaign planning** — propose strategy with SKU-level rationale
+- **Autonomous generation** — orchestrate parallel creation
+- **QA scoring** — score generated assets before presenting
+- **Brand voice learning** — learn from caption edits over time

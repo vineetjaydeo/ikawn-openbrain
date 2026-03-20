@@ -14,7 +14,7 @@ module.exports = {
   },
   async execute(config, context) {
     const auth = await getGoogleClient(context.brandId || 'ikawn', ['calendar.readonly']);
-    if (!auth) return { success: false, data: null, summary: 'Google Calendar not connected.' };
+    if (!auth) return { success: false, data: null, summary: 'Google Calendar is not connected yet. Ask your admin to set up the integration.' };
 
     const calendar = google.calendar({ version: 'v3', auth });
     const hours = config.hours || 24;

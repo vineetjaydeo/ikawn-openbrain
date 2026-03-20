@@ -14,7 +14,7 @@ module.exports = {
   },
   async execute(config, context) {
     const auth = await getGoogleClient(context.brandId || 'ikawn', ['gmail.readonly']);
-    if (!auth) return { success: false, data: null, summary: 'Gmail not connected.' };
+    if (!auth) return { success: false, data: null, summary: 'Gmail is not connected yet. Ask your admin to set up the integration.' };
 
     const gmail = google.gmail({ version: 'v1', auth });
     try {

@@ -35,13 +35,13 @@ async function downloadTelegramFile(fileId) {
 /**
  * Upload a Telegram file to R2 and return the public URL.
  */
-async function uploadTelegramFileToR2(fileId, prefix) {
+async function uploadTelegramFileToR2(fileId, prefix, brandId) {
   const file = await downloadTelegramFile(fileId);
   if (!file) return null;
 
   const ext = file.filePath.split('.').pop() || 'bin';
-  const key = `openclaw/${prefix}/${Date.now()}.${ext}`;
-  const url = await uploadToR2(key, file.buffer, file.mimeType);
+  const key = `telegram/${prefix}/${Date.now()}.${ext}`;
+  const url = await uploadToR2(key, file.buffer, file.mimeType, brandId);
   return { url, buffer: file.buffer, mimeType: file.mimeType, ext };
 }
 
@@ -68,7 +68,7 @@ async function transcribeAudio(buffer, ext) {
  * Process a single Telegram message into a structured entry.
  * Returns { sender, text, attachments: [{ type, url, extractedText? }] }
  */
-async function processMessage(msg) {
+async function processMessage(msg, brandId) {
   const isBot = msg.from?.is_bot;
   const sender = isBot ? 'Ruhi' : (msg.from?.first_name || 'Vineet');
   const entry = { sender, text: msg.text || msg.caption || '', attachments: [], timestamp: msg.date };
@@ -77,13 +77,13 @@ async function processMessage(msg) {
     // Photos — take largest resolution
     if (msg.photo?.length > 0) {
       const largest = msg.photo[msg.photo.length - 1];
-      const result = await uploadTelegramFileToR2(largest.file_id, 'images');
+      const result = await uploadTelegramFileToR2(largest.file_id, 'images', brandId);
       if (result) entry.attachments.push({ type: 'image', url: result.url });
     }
 
     // Documents
     if (msg.document) {
-      const result = await uploadTelegramFileToR2(msg.document.file_id, 'documents');
+      const result = await uploadTelegramFileToR2(msg.document.file_id, 'documents', brandId);
       if (result) {
         const attachment = { type: 'document', url: result.url, filename: msg.document.file_name || 'unknown' };
         // Try to extract text
@@ -95,7 +95,7 @@ async function processMessage(msg) {
 
     // Voice messages
     if (msg.voice) {
-      const result = await uploadTelegramFileToR2(msg.voice.file_id, 'voice');
+      const result = await uploadTelegramFileToR2(msg.voice.file_id, 'voice', brandId);
       if (result) {
         const attachment = { type: 'voice', url: result.url };
         const transcript = await transcribeAudio(result.buffer, result.ext);
@@ -109,7 +109,7 @@ async function processMessage(msg) {
 
     // Video
     if (msg.video) {
-      const result = await uploadTelegramFileToR2(msg.video.file_id, 'videos');
+      const result = await uploadTelegramFileToR2(msg.video.file_id, 'videos', brandId);
       if (result) entry.attachments.push({ type: 'video', url: result.url });
     }
 
@@ -226,12 +226,12 @@ async function saveMessageToDB(msg, entry) {
 /**
  * Handle an incoming Telegram webhook update.
  */
-async function handleUpdate(update) {
+async function handleUpdate(update, opts = {}) {
   const msg = update.message || update.edited_message;
   if (!msg) return;
 
   // Process the message (download media, transcribe voice, etc.)
-  const entry = await processMessage(msg);
+  const entry = await processMessage(msg, opts.brandId);
 
   // Save directly to DB — no buffering
   await saveMessageToDB(msg, entry);

@@ -2085,8 +2085,10 @@ function chatPage(user) {
           if (!res.ok) throw new Error('Failed to create conversation');
           const conv = await res.json();
           activeConvId = conv.id;
+          currentShareToken = null;
           history.pushState(null, '', '/chat/' + conv.id);
           await loadConversations();
+          updateShareUI();
         } catch (err) {
           showToast(err.message, 'error');
           return;

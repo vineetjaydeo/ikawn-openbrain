@@ -1,4 +1,4 @@
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 const path = require('path');
 
 const MAX_LENGTH = 15000;
@@ -70,7 +70,8 @@ async function extractText(buffer, mimeType, filename) {
   let text;
 
   if (resolvedMime === 'application/pdf') {
-    const result = await pdfParse(buffer);
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
     text = result.text;
   } else if (resolvedMime === 'text/html') {
     text = stripHtml(buffer.toString('utf-8'));

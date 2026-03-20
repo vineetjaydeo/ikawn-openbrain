@@ -35,12 +35,14 @@ async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn'
     let result;
     if (embedding) {
       // Fetch more candidates, then re-rank with recency
+      // Exclude author='ruhi' — Ruhi's own past responses pollute RAG with echoed denials
       result = await pool.query(
-        `SELECT content, memory_type, source, project, created_at,
+        `SELECT content, memory_type, source, project, author, user_id, created_at,
                 cosine_similarity(embedding, $1) AS similarity
          FROM memories
          WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
          AND brand_id = $2
+         AND author != 'ruhi'
          ${userFilter}
          ORDER BY cosine_similarity(embedding, $1) DESC
          LIMIT 30`,
@@ -49,11 +51,12 @@ async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn'
     } else {
       // Fallback to text search
       result = await pool.query(
-        `SELECT content, memory_type, source, project, created_at,
+        `SELECT content, memory_type, source, project, author, user_id, created_at,
                 0.5 AS similarity
          FROM memories
          WHERE content ILIKE '%' || $1 || '%' AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
          AND brand_id = $2
+         AND author != 'ruhi'
          ${userFilter}
          ORDER BY created_at DESC
          LIMIT 30`,
@@ -82,7 +85,8 @@ async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn'
         const date = new Date(m.created_at).toLocaleDateString();
         const src = m.source || 'unknown';
         const type = m.memory_type || 'note';
-        return `[${i + 1}] (${type}, ${src}, ${date}) ${m.content.slice(0, 600)}`;
+        const by = m.author ? `, by ${m.author}` : '';
+        return `[${i + 1}] (${type}, ${src}, ${date}${by}) ${m.content.slice(0, 600)}`;
       }).join('\n\n');
   } catch (err) {
     console.error('Memory RAG error:', err.message);

@@ -27,12 +27,13 @@ async function searchMemory(query, accessLevels, limit = 10, userId = null, bran
       : [embedding, ...accessLevels, brandId, limit];
 
   const result = await pool.query(
-    `SELECT id, content, memory_type, project, hashtags, author, created_at, cosine_similarity(embedding, $1) AS similarity
+    `SELECT id, content, memory_type, project, hashtags, author, user_id, created_at, cosine_similarity(embedding, $1) AS similarity
      FROM memories
      WHERE embedding IS NOT NULL
        AND (archived IS NULL OR archived = false)
        AND (access_level IS NULL OR access_level IN (${placeholders}))
        AND brand_id = $${brandParam}
+       AND author != 'ruhi'
        ${userFilter}
      ORDER BY cosine_similarity(embedding, $1) DESC
      LIMIT $${limitParam}`,

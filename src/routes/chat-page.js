@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { requireAuth } = require('../auth');
 const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
-const { SPACETIME_CSS, SPACETIME_HTML, SPACETIME_JS } = require('../utils/spacetime-bg');
+const { getSpacetimeBg } = require('../utils/spacetime-bg');
 
 const router = Router();
 
@@ -15,6 +15,7 @@ router.get('/chat/:id', requireAuth, (req, res) => {
 
 function chatPage(user) {
   const isAdmin = user.role === 'admin';
+  const { SPACETIME_CSS, SPACETIME_HTML, METEOR_JS } = getSpacetimeBg();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -126,6 +127,12 @@ function chatPage(user) {
     .rail-btn:hover { background: var(--bg-hover); color: var(--text); }
     .rail-btn.active { background: var(--bg-hover); color: var(--text); }
     .rail-btn svg { width: 18px; height: 18px; }
+    .report-badge, .report-badge-panel {
+      position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 8px;
+      background: #e5a819; color: #000; font-size: 10px; font-weight: 700; display: flex;
+      align-items: center; justify-content: center; padding: 0 4px; line-height: 1;
+    }
+    .report-badge-panel { position: static; margin-left: auto; }
 
     .rail-bottom {
       margin-top: auto;
@@ -1330,7 +1337,7 @@ function chatPage(user) {
 
     <!-- Icon Rail (always visible on desktop) -->
     <nav class="sidebar-rail" id="sidebar-rail" onclick="toggleSidebar()">
-      <div class="rail-logo" title="Ruhi">
+      <div class="rail-logo" title="Ruhi" onclick="event.stopPropagation(); goHome()" style="cursor:pointer">
         \u2726
       </div>
 
@@ -1340,6 +1347,10 @@ function chatPage(user) {
         </button>
         <button class="rail-btn" onclick="event.stopPropagation(); toggleSidebar()" title="History">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </button>
+        <button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/reports'" title="Reports" style="position:relative">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span class="report-badge" id="report-badge" style="display:none"></span>
         </button>
         ${isAdmin ? `<button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/mission'" title="Mission Control">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -1367,6 +1378,11 @@ function chatPage(user) {
         <button class="panel-nav-item active" onclick="goHome(); closeSidebar();">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Chat
+        </button>
+        <button class="panel-nav-item" onclick="window.location.href='/reports'" style="position:relative">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Reports
+          <span class="report-badge-panel" id="report-badge-panel" style="display:none"></span>
         </button>
         ${isAdmin ? `<button class="panel-nav-item" onclick="window.location.href='/mission'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -1500,6 +1516,7 @@ function chatPage(user) {
   <script>
     /* ==================== STATE ==================== */
     const USER = ${JSON.stringify({ id: user.id, email: user.email, name: user.name, role: user.role })};
+    const SPACETIME_BG_HTML = ${JSON.stringify(SPACETIME_HTML)};
     let conversations = [];
     let activeConvId = null;
     let pendingAttachments = [];
@@ -1512,7 +1529,6 @@ function chatPage(user) {
     document.addEventListener('DOMContentLoaded', () => {
       initMarked();
       updateModelToggle();
-      initSpacetimeBg();
       setGreeting();
       loadConversations().then(() => {
         const match = window.location.pathname.match(/^\\/chat\\/([a-f0-9-]+)$/);
@@ -1527,7 +1543,20 @@ function chatPage(user) {
 
       const input = document.getElementById('msg-input');
       input.addEventListener('paste', handlePaste);
-      input.addEventListener('input', () => updateSendBtn());
+      input.addEventListener('input', () => { updateSendBtn(); saveDraftLocal(); });
+      restoreDraft();
+
+      // Fetch unread reports count for badge
+      fetch('/api/reports/unread-count', { headers: { 'Accept': 'application/json' } })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && data.count > 0) {
+            const b1 = document.getElementById('report-badge');
+            const b2 = document.getElementById('report-badge-panel');
+            if (b1) { b1.textContent = data.count > 9 ? '9+' : data.count; b1.style.display = 'flex'; }
+            if (b2) { b2.textContent = data.count > 9 ? '9+' : data.count; b2.style.display = 'flex'; }
+          }
+        }).catch(() => {});
     });
 
     function initMarked() {
@@ -1590,11 +1619,6 @@ function chatPage(user) {
           btn.innerHTML = copyIcon; // safe: hardcoded SVG
         }, 2000);
       });
-    }
-
-    /* ==================== SPACETIME BACKGROUND ==================== */
-    function initSpacetimeBg() {
-      ${SPACETIME_JS}
     }
 
     /* ==================== GREETING ==================== */
@@ -1707,12 +1731,18 @@ function chatPage(user) {
     }
 
     function goHome() {
-      if (!activeConvId) return;
+      saveDraftLocal(); // save current conv draft before switching
       activeConvId = null;
       clearMessages();
       history.pushState(null, '', '/');
       renderConversationList();
       closeSidebar();
+      // Restore home draft
+      const input = document.getElementById('msg-input');
+      const homeDraft = getLocalDraft();
+      input.value = (homeDraft && homeDraft.text) || '';
+      autoGrow(input);
+      updateSendBtn();
     }
 
     /* ==================== CONVERSATIONS ==================== */
@@ -1824,6 +1854,8 @@ function chatPage(user) {
         closeSidebar();
         return;
       }
+      // Save current draft before switching
+      saveDraftLocal();
       try {
         const res = await fetch('/api/conversations/' + id);
         if (!res.ok) throw new Error('Failed to load conversation');
@@ -1839,6 +1871,21 @@ function chatPage(user) {
         updateShareUI();
         closeSidebar();
         scrollToBottom(true);
+        // Restore draft — pick whichever is newer (local vs server)
+        const input = document.getElementById('msg-input');
+        const local = getLocalDraft();
+        const localTs = local ? local.ts : 0;
+        const serverTs = data.draft_updated_at ? new Date(data.draft_updated_at).getTime() : 0;
+        if (local && local.text && localTs >= serverTs) {
+          input.value = local.text;
+        } else if (data.draft_text) {
+          input.value = data.draft_text;
+          saveDraftLocal(); // persist server version locally
+        } else {
+          input.value = '';
+        }
+        autoGrow(input);
+        updateSendBtn();
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -1902,9 +1949,9 @@ function chatPage(user) {
       const welcome = document.createElement('div');
       welcome.className = 'welcome-screen';
       welcome.id = 'welcome';
-      const stars = document.createElement('canvas');
-      stars.className = 'spacetime-canvas';
-      stars.id = 'spacetime-gl';
+      const bgWrapper = document.createElement('div');
+      bgWrapper.insertAdjacentHTML('afterbegin', SPACETIME_BG_HTML);
+      const bg = bgWrapper.firstChild;
       const logo = document.createElement('div');
       logo.className = 'welcome-logo';
       const sparkle = document.createElement('span');
@@ -1915,11 +1962,10 @@ function chatPage(user) {
       const tagline = document.createElement('div');
       tagline.className = 'welcome-tagline';
       tagline.id = 'welcome-tagline';
-      welcome.appendChild(stars);
+      welcome.appendChild(bg);
       welcome.appendChild(logo);
       welcome.appendChild(tagline);
       container.appendChild(welcome);
-      initSpacetimeBg();
       setGreeting();
       currentShareToken = null;
       updateShareUI();
@@ -2054,6 +2100,8 @@ function chatPage(user) {
       const container = document.getElementById('messages-inner');
       container.appendChild(createMessageElement('user', content, attachments));
 
+      localStorage.removeItem('ruhi_draft_home'); // clear home draft (won't be caught by clearDraft after conv creation)
+      clearDraft();
       input.value = '';
       autoGrow(input);
       clearPendingAttachments();
@@ -2285,6 +2333,14 @@ function chatPage(user) {
           const imageUrls = data.resultUrls || data.urls || [];
           if ((data.status === 'complete' || data.status === 'completed') && imageUrls.length > 0) {
             updateGenCard(cardId, 'completed', imageUrls, null, generationId);
+            // Persist generation results so they survive page reload
+            if (activeConvId) {
+              fetch('/api/conversations/' + activeConvId + '/generation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ generationId, urls: imageUrls, agent: data.agent })
+              }).catch(() => {});
+            }
           } else if (data.status === 'failed' || data.status === 'error') {
             updateGenCard(cardId, 'error', null, data.error || 'Generation failed');
           } else {
@@ -2318,7 +2374,7 @@ function chatPage(user) {
           img.src = url;
           img.alt = 'Generated image';
           img.loading = 'lazy';
-          img.addEventListener('click', () => window.open(url, '_blank'));
+          img.addEventListener('click', () => openLightbox(url));
           imagesEl.appendChild(img);
         });
 
@@ -2694,6 +2750,74 @@ function chatPage(user) {
       btn.classList.toggle('has-content', !!hasContent && !isStreaming);
     }
 
+    /* ==================== UNSAID WORDS (Draft Persistence) ==================== */
+    let draftSyncTimer = null;
+    let draftDirty = false;
+
+    function draftKey() {
+      return activeConvId ? 'ruhi_draft_' + activeConvId : 'ruhi_draft_home';
+    }
+
+    function saveDraftLocal() {
+      const text = document.getElementById('msg-input').value;
+      const key = draftKey();
+      if (text) {
+        localStorage.setItem(key, JSON.stringify({ text, ts: Date.now() }));
+      } else {
+        localStorage.removeItem(key);
+      }
+      draftDirty = true;
+    }
+
+    function getLocalDraft() {
+      try {
+        const raw = localStorage.getItem(draftKey());
+        if (!raw) return null;
+        // Handle legacy plain-text format
+        if (raw[0] !== '{') return { text: raw, ts: 0 };
+        return JSON.parse(raw);
+      } catch { return null; }
+    }
+
+    function restoreDraft() {
+      const input = document.getElementById('msg-input');
+      const local = getLocalDraft();
+      if (local && local.text) {
+        input.value = local.text;
+        autoGrow(input);
+        updateSendBtn();
+      }
+    }
+
+    function clearDraft() {
+      localStorage.removeItem(draftKey());
+      draftDirty = false;
+    }
+
+    // Background sync to server every 30s (only for active conversations)
+    function startDraftSync() {
+      if (draftSyncTimer) clearInterval(draftSyncTimer);
+      draftSyncTimer = setInterval(() => {
+        if (!activeConvId || !draftDirty) return;
+        const text = document.getElementById('msg-input').value;
+        draftDirty = false;
+        fetch('/api/conversations/' + activeConvId + '/draft', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text || null })
+        }).catch(() => {});
+      }, 30000);
+    }
+    startDraftSync();
+
+    // Save draft to server immediately when leaving page
+    window.addEventListener('beforeunload', () => {
+      if (!activeConvId || !draftDirty) return;
+      const text = document.getElementById('msg-input').value;
+      navigator.sendBeacon('/api/conversations/' + activeConvId + '/draft',
+        new Blob([JSON.stringify({ text: text || null })], { type: 'application/json' }));
+    });
+
     /* ==================== LIGHTBOX ==================== */
     function openLightbox(url) {
       document.getElementById('lightbox-img').src = url;
@@ -2988,6 +3112,7 @@ function chatPage(user) {
       return renderMentionPills(_origRenderContent(role, content));
     };
   </script>
+  <script>${METEOR_JS}</script>
 </body>
 </html>`;
 }

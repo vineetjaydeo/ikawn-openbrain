@@ -258,8 +258,8 @@ router.post('/api/chat/send', async (req, res) => {
       [convInternalId, 'user', content, JSON.stringify(processedAttachments.length ? processedAttachments : [])]
     );
 
-    // Update conversation updated_at
-    await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [convInternalId]);
+    // Update conversation updated_at + clear draft
+    await pool.query('UPDATE conversations SET updated_at = NOW(), draft_text = NULL, draft_updated_at = NULL WHERE id = $1', [convInternalId]);
 
     // Count existing messages to determine if this is the first user message
     const { rows: countRows } = await pool.query(
@@ -835,7 +835,72 @@ router.patch('/api/custom-instructions', async (req, res) => {
   }
 });
 
-// ── 10. Gallery: fetch user's image attachments across conversations ──
+// ── 10. Unsaid Words — save/load draft text per conversation ──
+
+// Accept both PUT (normal) and POST (sendBeacon on page unload)
+router.put('/api/conversations/:id/draft', saveDraft);
+router.post('/api/conversations/:id/draft', saveDraft);
+
+async function saveDraft(req, res) {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { text } = req.body;
+    const { rows } = await pool.query(
+      'SELECT id, user_id FROM conversations WHERE uuid = $1',
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
+    await pool.query(
+      'UPDATE conversations SET draft_text = $1, draft_updated_at = NOW() WHERE id = $2',
+      [text || null, rows[0].id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('save draft error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ── 11. Save completed generation as a persistent message ──
+
+router.post('/api/conversations/:id/generation', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { generationId, urls, agent } = req.body;
+    if (!urls || !urls.length) return res.status(400).json({ error: 'No URLs' });
+
+    const { rows } = await pool.query(
+      'SELECT id, user_id FROM conversations WHERE uuid = $1',
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const convInternalId = rows[0].id;
+    const attachments = urls.map(url => ({ type: 'image', url }));
+
+    // Check if we already saved this generation (idempotent)
+    const { rows: existing } = await pool.query(
+      "SELECT id FROM messages WHERE conversation_id = $1 AND content LIKE $2",
+      [convInternalId, `%${generationId}%`]
+    );
+    if (existing.length > 0) return res.json({ success: true, existing: true });
+
+    const content = `*Generated with ${(agent || 'genie').toUpperCase()}*`;
+    await pool.query(
+      'INSERT INTO messages (conversation_id, role, content, attachments) VALUES ($1, $2, $3, $4)',
+      [convInternalId, 'assistant', content, JSON.stringify(attachments)]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/conversations/:id/generation error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 12. Gallery: fetch user's image attachments across conversations ──
 
 // Gallery endpoint moved to actions.js (unified: ikawn OS generations + chat attachments)
 

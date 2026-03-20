@@ -797,6 +797,9 @@ async function initSchema() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs (task_id, started_at DESC);
     `);
+    await client.query(`
+      ALTER TABLE task_runs ADD COLUMN IF NOT EXISTS viewed_at TIMESTAMPTZ;
+    `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS domain_agents (

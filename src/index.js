@@ -30,9 +30,11 @@ const sharedRoute = require('./routes/shared');
 const recallRoute = require('./routes/recall');
 const governanceRoute = require('./routes/governance');
 const brandsApiRoute = require('./routes/brands-api');
+const brandApiRoute = require('./routes/brand-api');
 const skillsRoute = require('./routes/skills');
 const intelligenceRoute = require('./routes/intelligence');
 const missionControlRoute = require('./routes/mission-control');
+const reportsRoute = require('./routes/reports');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
 const { loadTools } = require('./tools/registry');
@@ -112,6 +114,9 @@ app.use(sharedRoute);
 // GitHub webhook — no session auth (uses signature verification)
 app.use(webhooksRoute);
 
+// Brand Analysis API — public, no auth (has own rate limiter)
+app.use(brandApiRoute);
+
 // Auth routes — no auth required
 app.use(authRoutes);
 
@@ -137,6 +142,9 @@ app.use(skillsRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);
+
+// Reports page + API — requires auth (handled inside route)
+app.use(reportsRoute);
 
 // Mission Control API — requires auth
 app.use(missionControlRoute);

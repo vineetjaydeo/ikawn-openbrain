@@ -7,6 +7,7 @@ const { executeAgentTask } = require('./agent/executor');
 const { calculateNextRun, isInActiveWindow } = require('./utils/schedule');
 const { sendTelegramMessage } = require('./utils/telegram');
 const eventBus = require('./utils/event-bus');
+const { captureMessage } = require('./utils/capture');
 
 let githubInterval = null;
 let calendarInterval = null;
@@ -122,6 +123,57 @@ async function runTaskScheduler() {
 /**
  * Execute a single scheduled task (Tier 1 or Tier 2).
  */
+/**
+ * Deliver a task result to the user's "Ruhi Updates" conversation.
+ * Creates the conversation if it doesn't exist yet.
+ * Also captures to memories for RAG searchability.
+ */
+async function deliverTaskResultToChat(task, result, runId) {
+  if (!task.user_id) return; // No user to deliver to
+  try {
+    // Find or create "Ruhi Updates" conversation for this user
+    let convResult = await pool.query(
+      `SELECT id FROM conversations WHERE user_id = $1 AND title = 'Ruhi Updates' LIMIT 1`,
+      [task.user_id]
+    );
+    let convId;
+    if (convResult.rows.length > 0) {
+      convId = convResult.rows[0].id;
+    } else {
+      const newConv = await pool.query(
+        `INSERT INTO conversations (user_id, title, uuid) VALUES ($1, 'Ruhi Updates', gen_random_uuid()) RETURNING id`,
+        [task.user_id]
+      );
+      convId = newConv.rows[0].id;
+    }
+
+    const summary = result?.summary || 'Task completed with no summary.';
+    const content = `**Scheduled Task: ${task.name}**\n\n${summary}`;
+
+    // Insert as assistant message in the conversation (visible in chat UI)
+    await pool.query(
+      'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+      [convId, 'assistant', content]
+    );
+
+    // Update conversation activity
+    await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [convId]);
+
+    // Also capture to memories for RAG searchability
+    captureMessage({
+      brand_id: task.brand_id || 'ikawn',
+      channel: 'ruhi-task',
+      direction: 'outbound',
+      content,
+      source_ref: `task_result_${runId}_${Date.now()}`,
+      metadata: { project: 'ruhi-tasks', task_name: task.name },
+      user_id: task.user_id,
+    });
+  } catch (err) {
+    console.error(`[TaskScheduler] Failed to deliver result to chat for task "${task.name}":`, err.message);
+  }
+}
+
 async function executeTask(task) {
   const startedAt = new Date();
 
@@ -250,6 +302,9 @@ async function executeTask(task) {
 
     console.log(`[TaskScheduler] Task "${task.name}" completed: ${result.summary}`);
     eventBus.emit('task.completed', { taskId: task.id, name: task.name, status: 'completed' });
+
+    // Deliver result to user's chat
+    deliverTaskResultToChat(task, result, run.id);
 
   } catch (err) {
     console.error(`[TaskScheduler] Task "${task.name}" failed:`, err.message);

@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { requireAuth, requireAdmin } = require('../auth');
 const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
-const { SPACETIME_CSS, SPACETIME_HTML, SPACETIME_JS } = require('../utils/spacetime-bg');
+const { getSpacetimeBg } = require('../utils/spacetime-bg');
 
 const router = Router();
 
@@ -33,6 +33,7 @@ const GOOGLE_FONTS = `
 `;
 
 function loginPage() {
+  const { SPACETIME_CSS, SPACETIME_HTML, METEOR_JS } = getSpacetimeBg();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -138,7 +139,7 @@ function loginPage() {
       } catch { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
     }
   </script>
-  <script>${SPACETIME_JS}</script>
+  <script>${METEOR_JS}</script>
 </body>
 </html>`;
 }

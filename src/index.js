@@ -31,6 +31,7 @@ const recallRoute = require('./routes/recall');
 const governanceRoute = require('./routes/governance');
 const brandsApiRoute = require('./routes/brands-api');
 const brandApiRoute = require('./routes/brand-api');
+const brandChatApiRoute = require('./routes/brand-chat-api');
 const skillsRoute = require('./routes/skills');
 const intelligenceRoute = require('./routes/intelligence');
 const missionControlRoute = require('./routes/mission-control');
@@ -119,6 +120,9 @@ app.use(webhooksRoute);
 
 // Brand Analysis API — public, no auth (has own rate limiter)
 app.use(brandApiRoute);
+
+// Brand Chat API — ikawn-v3 proxy (has own API key auth)
+app.use(brandChatApiRoute);
 
 // Auth routes — no auth required
 app.use(authRoutes);

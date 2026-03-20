@@ -218,9 +218,7 @@ router.patch('/api/conversations/:id', async (req, res) => {
 
 // ── 6. Send chat message (SSE streaming) ──
 
-router.post('/api/chat/send', async (req, res) => {
-  if (!requireAuth(req, res)) return;
-
+async function handleChatSend(req, res) {
   const { conversation_id, content: rawContent, attachments, use_secondary } = req.body;
 
   const hasAttachments = attachments && Array.isArray(attachments) && attachments.length > 0;
@@ -647,8 +645,8 @@ ${memoryContext}
       [convInternalId, 'assistant', fullResponse, model]
     );
 
-    // Send done event
-    res.write(`data: ${JSON.stringify({ type: 'done', message_id: assistantMsgRows[0].id })}\n\n`);
+    // Send done event (include conversation_id for brand API callers)
+    res.write(`data: ${JSON.stringify({ type: 'done', message_id: assistantMsgRows[0].id, conversation_id: conversation_id })}\n\n`);
 
     // Capture both sides to memories (fire-and-forget, never blocks)
     const brandId = req.brand_id;
@@ -706,6 +704,11 @@ ${memoryContext}
       res.status(500).json({ error: 'Internal server error' });
     }
   }
+}
+
+router.post('/api/chat/send', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  return handleChatSend(req, res);
 });
 
 // ── 6b. Create/get share link ──
@@ -927,5 +930,8 @@ router.post('/api/conversations/:id/generation', async (req, res) => {
 // ── 12. Gallery: fetch user's image attachments across conversations ──
 
 // Gallery endpoint moved to actions.js (unified: ikawn OS generations + chat attachments)
+
+// Export handleChatSend for brand-chat-api.js to reuse
+router.handleChatSend = handleChatSend;
 
 module.exports = router;

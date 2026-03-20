@@ -2792,6 +2792,14 @@ function chatPage(user) {
     function clearDraft() {
       localStorage.removeItem(draftKey());
       draftDirty = false;
+      // Also clear server-side draft to prevent ghost restoration on next session
+      if (activeConvId) {
+        fetch('/api/conversations/' + activeConvId + '/draft', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: null })
+        }).catch(() => {});
+      }
     }
 
     // Background sync to server every 30s (only for active conversations)
@@ -2814,8 +2822,10 @@ function chatPage(user) {
     window.addEventListener('beforeunload', () => {
       if (!activeConvId || !draftDirty) return;
       const text = document.getElementById('msg-input').value;
+      // Only save if there's actual text — don't overwrite a cleared draft with null
+      if (!text) return;
       navigator.sendBeacon('/api/conversations/' + activeConvId + '/draft',
-        new Blob([JSON.stringify({ text: text || null })], { type: 'application/json' }));
+        new Blob([JSON.stringify({ text })], { type: 'application/json' }));
     });
 
     /* ==================== LIGHTBOX ==================== */

@@ -939,7 +939,32 @@ async function initSchema() {
       ON CONFLICT (brand_id, user_id) DO NOTHING;
     `);
 
-    console.log('Database schema initialized (v9 — skill sessions + agent platform)');
+    // ── OpenBrain v10: User Tasks (Ruhi task relay) ──
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_tasks (
+        id SERIAL PRIMARY KEY,
+        uuid UUID DEFAULT gen_random_uuid(),
+        brand_id TEXT DEFAULT 'ikawn',
+        title TEXT NOT NULL,
+        description TEXT,
+        assigned_to INTEGER REFERENCES users(id),
+        created_by INTEGER REFERENCES users(id),
+        created_by_name TEXT,
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
+        priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+        source TEXT DEFAULT 'ruhi',
+        conversation_id UUID,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_tasks_assigned ON user_tasks(assigned_to, status);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_tasks_uuid ON user_tasks(uuid);
+    `);
+
+    console.log('Database schema initialized (v10 — user tasks + agent platform)');
   } finally {
     client.release();
   }

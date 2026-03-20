@@ -8,19 +8,23 @@ const { getTool, getTools, getToolSchemas } = require('../tools/registry');
 
 const router = Router();
 
-async function searchMemory(query, accessLevels, limit = 10, userId = null, brandId = 'ikawn') {
+async function searchMemory(query, accessLevels, limit = 10, userId = null, brandId = 'ikawn', isAdmin = false) {
   const embedding = await getEmbedding(query);
 
   const placeholders = accessLevels.map((_, i) => `$${i + 2}`).join(', ');
-  // Brand isolation + user isolation
+  // Brand isolation + user isolation (admin sees all team memories)
   const brandParam = accessLevels.length + 2; // next param after access levels
   const limitParam = brandParam + 1;
-  const userFilter = userId
-    ? ` AND (user_id = $${limitParam + 1} OR access_level NOT IN ('private') OR user_id IS NULL)`
-    : '';
-  const params = userId
-    ? [embedding, ...accessLevels, brandId, limit, userId]
-    : [embedding, ...accessLevels, brandId, limit];
+  const userFilter = isAdmin
+    ? ''
+    : userId
+      ? ` AND (user_id = $${limitParam + 1} OR access_level NOT IN ('private') OR user_id IS NULL)`
+      : '';
+  const params = isAdmin
+    ? [embedding, ...accessLevels, brandId, limit]
+    : userId
+      ? [embedding, ...accessLevels, brandId, limit, userId]
+      : [embedding, ...accessLevels, brandId, limit];
 
   const result = await pool.query(
     `SELECT id, content, memory_type, project, hashtags, author, created_at, cosine_similarity(embedding, $1) AS similarity
@@ -137,7 +141,8 @@ router.post('/chat', async (req, res) => {
     }
 
     // Search memory for context (RAG) — scoped to requesting user
-    const memoryResults = await searchMemory(message, userAccessLevels, 10, currentUserId, req.brand_id);
+    const isAdminUser = req.session?.user?.role === 'admin';
+    const memoryResults = await searchMemory(message, userAccessLevels, 10, currentUserId, req.brand_id, isAdminUser);
     let memoryContext = '';
     if (memoryResults.length > 0) {
       memoryContext = memoryResults.map((m, i) => {

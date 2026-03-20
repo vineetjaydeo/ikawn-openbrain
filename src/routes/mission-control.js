@@ -235,6 +235,55 @@ router.get('/api/mission/tools', requireAuth, async (req, res) => {
   }
 });
 
+// ─── API: User Tasks ──────────────────────────────────────────────────────────
+
+router.get('/api/mission/user-tasks', requireAuth, async (req, res) => {
+  try {
+    const { status, assigned_to } = req.query;
+    let sql = `SELECT ut.uuid, ut.title, ut.description, ut.status, ut.priority,
+      ut.created_by_name, ut.source, ut.created_at, ut.updated_at,
+      u.name as assigned_to_name, u.email as assigned_to_email
+      FROM user_tasks ut
+      LEFT JOIN users u ON u.id = ut.assigned_to
+      WHERE ut.brand_id = $1`;
+    const params = [req.brand_id];
+
+    if (status && status !== 'all') {
+      params.push(status);
+      sql += ` AND ut.status = $${params.length}`;
+    }
+    if (assigned_to) {
+      params.push(parseInt(assigned_to));
+      sql += ` AND ut.assigned_to = $${params.length}`;
+    }
+
+    sql += ' ORDER BY ut.created_at DESC';
+    const { rows } = await pool.query(sql, params);
+    res.json({ tasks: rows });
+  } catch (err) {
+    console.error('GET /api/mission/user-tasks error:', err);
+    res.status(500).json({ error: 'Failed to fetch user tasks' });
+  }
+});
+
+router.put('/api/mission/user-tasks/:uuid', requireAuth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!status || !['pending', 'in_progress', 'completed', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Valid status required' });
+    }
+    const { rowCount } = await pool.query(
+      `UPDATE user_tasks SET status = $1, updated_at = NOW() WHERE uuid = $2 AND brand_id = $3`,
+      [status, req.params.uuid, req.brand_id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Task not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('PUT /api/mission/user-tasks error:', err);
+    res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
 // ─── HTML: Mission Control Page ────────────────────────────────────────────────
 
 router.get('/mission', requireAuth, (req, res) => {
@@ -516,6 +565,7 @@ function missionPage(isAdmin) {
       <h1>Mission Control</h1>
       <div class="nav-links">
         <a class="nav-link active" data-tab="tasks" onclick="switchTab('tasks', this)">Tasks</a>
+        <a class="nav-link" data-tab="user-tasks" onclick="switchTab('user-tasks', this)">User Tasks</a>
         <a class="nav-link" data-tab="org" onclick="switchTab('org', this)">Organization</a>
       </div>
     </div>
@@ -551,6 +601,41 @@ function missionPage(isAdmin) {
             </thead>
             <tbody id="tasks-body">
               <tr><td colspan="9" class="empty-state">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-user-tasks" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>User Tasks</h2>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select class="form-select" id="filter-ut-status" onchange="loadUserTasks()" style="width:auto; padding:4px 10px; font-size:0.78rem;">
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Assigned To</th>
+                <th>From</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="user-tasks-body">
+              <tr><td colspan="7" class="empty-state">Select the User Tasks tab to load...</td></tr>
             </tbody>
           </table>
         </div>
@@ -634,9 +719,11 @@ function missionPage(isAdmin) {
 
   function switchTab(tab, el) {
     document.getElementById('tab-tasks').style.display = tab === 'tasks' ? '' : 'none';
+    document.getElementById('tab-user-tasks').style.display = tab === 'user-tasks' ? '' : 'none';
     document.getElementById('tab-org').style.display = tab === 'org' ? '' : 'none';
     document.querySelectorAll('.nav-link').forEach(function(l) { l.classList.remove('active'); });
     el.classList.add('active');
+    if (tab === 'user-tasks') loadUserTasks();
     if (tab === 'org') loadOrg();
   }
 
@@ -1070,6 +1157,168 @@ function missionPage(isAdmin) {
 
       grid.appendChild(card);
     });
+  }
+
+  // ── User Tasks ──
+  var userTasksData = [];
+
+  async function loadUserTasks() {
+    var status = document.getElementById('filter-ut-status').value;
+    var qs = status !== 'all' ? '?status=' + encodeURIComponent(status) : '';
+    try {
+      var res = await fetch('/api/mission/user-tasks' + qs);
+      var data = await res.json();
+      userTasksData = data.tasks || [];
+      renderUserTasks();
+    } catch (err) {
+      var tbody = document.getElementById('user-tasks-body');
+      while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+      var tr = document.createElement('tr');
+      var td = document.createElement('td');
+      td.colSpan = 7;
+      td.className = 'empty-state';
+      td.textContent = 'Failed to load user tasks';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+  }
+
+  function priorityBadgeClass(p) {
+    if (p === 'urgent') return 'badge-danger';
+    if (p === 'high') return 'badge-warning';
+    if (p === 'normal') return 'badge-accent';
+    return 'badge-dim';
+  }
+
+  function statusBadgeClass(s) {
+    if (s === 'completed') return 'badge-success';
+    if (s === 'in_progress') return 'badge-accent';
+    if (s === 'cancelled') return 'badge-dim';
+    return 'badge-warning';
+  }
+
+  function renderUserTasks() {
+    var tbody = document.getElementById('user-tasks-body');
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+    if (userTasksData.length === 0) {
+      var tr = document.createElement('tr');
+      var td = document.createElement('td');
+      td.colSpan = 7;
+      td.className = 'empty-state';
+      td.textContent = 'No user tasks yet. Ruhi creates these when you ask her to relay work to someone.';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+
+    userTasksData.forEach(function(t) {
+      var tr = document.createElement('tr');
+
+      // Title + description
+      var tdTitle = document.createElement('td');
+      var titleStrong = document.createElement('strong');
+      titleStrong.textContent = t.title;
+      tdTitle.appendChild(titleStrong);
+      if (t.description) {
+        var descDiv = document.createElement('div');
+        descDiv.style.cssText = 'font-size:0.75rem;color:var(--text-dim);margin-top:2px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        descDiv.textContent = t.description;
+        tdTitle.appendChild(descDiv);
+      }
+      tr.appendChild(tdTitle);
+
+      // Assigned To
+      var tdAssigned = document.createElement('td');
+      tdAssigned.textContent = t.assigned_to_name || 'Unassigned';
+      tr.appendChild(tdAssigned);
+
+      // From
+      var tdFrom = document.createElement('td');
+      var fromBadge = document.createElement('span');
+      fromBadge.className = 'badge badge-dim';
+      fromBadge.textContent = t.created_by_name || t.source || 'ruhi';
+      tdFrom.appendChild(fromBadge);
+      tr.appendChild(tdFrom);
+
+      // Priority
+      var tdPriority = document.createElement('td');
+      var priBadge = document.createElement('span');
+      priBadge.className = 'badge ' + priorityBadgeClass(t.priority);
+      priBadge.textContent = t.priority;
+      tdPriority.appendChild(priBadge);
+      tr.appendChild(tdPriority);
+
+      // Status
+      var tdStatus = document.createElement('td');
+      var stBadge = document.createElement('span');
+      stBadge.className = 'badge ' + statusBadgeClass(t.status);
+      stBadge.textContent = t.status.replace('_', ' ');
+      tdStatus.appendChild(stBadge);
+      tr.appendChild(tdStatus);
+
+      // Created
+      var tdCreated = document.createElement('td');
+      tdCreated.style.cssText = 'font-size:0.75rem;color:var(--text-dim);';
+      tdCreated.textContent = new Date(t.created_at).toLocaleDateString();
+      tr.appendChild(tdCreated);
+
+      // Actions
+      var tdActions = document.createElement('td');
+      var actionsWrap = document.createElement('div');
+      actionsWrap.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;';
+
+      if (t.status === 'pending') {
+        var startBtn = document.createElement('button');
+        startBtn.className = 'btn btn-outline btn-sm';
+        startBtn.textContent = 'Start';
+        startBtn.onclick = (function(uuid) { return function() { updateUserTask(uuid, 'in_progress'); }; })(t.uuid);
+        actionsWrap.appendChild(startBtn);
+      }
+      if (t.status === 'pending' || t.status === 'in_progress') {
+        var doneBtn = document.createElement('button');
+        doneBtn.className = 'btn btn-primary btn-sm';
+        doneBtn.textContent = 'Done';
+        doneBtn.onclick = (function(uuid) { return function() { updateUserTask(uuid, 'completed'); }; })(t.uuid);
+        actionsWrap.appendChild(doneBtn);
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-danger btn-sm';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.onclick = (function(uuid) { return function() { updateUserTask(uuid, 'cancelled'); }; })(t.uuid);
+        actionsWrap.appendChild(cancelBtn);
+      }
+      if (t.status === 'completed' || t.status === 'cancelled') {
+        var reopenBtn = document.createElement('button');
+        reopenBtn.className = 'btn btn-outline btn-sm';
+        reopenBtn.textContent = 'Reopen';
+        reopenBtn.onclick = (function(uuid) { return function() { updateUserTask(uuid, 'pending'); }; })(t.uuid);
+        actionsWrap.appendChild(reopenBtn);
+      }
+
+      tdActions.appendChild(actionsWrap);
+      tr.appendChild(tdActions);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function updateUserTask(uuid, status) {
+    try {
+      var res = await fetch('/api/mission/user-tasks/' + encodeURIComponent(uuid), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: status }),
+      });
+      if (!res.ok) {
+        var data = await res.json();
+        alert(data.error || 'Failed to update task');
+        return;
+      }
+      loadUserTasks();
+    } catch (err) {
+      alert('Failed to update task');
+    }
   }
 
   // ── Init ──

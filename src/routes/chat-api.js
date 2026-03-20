@@ -16,7 +16,7 @@ const { loadBrandKnowledge } = require('../ruhi/persona');
  * Uses hybrid scoring: semantic similarity + recency boost.
  * Recent memories get a significant boost so "latest" queries return fresh results.
  */
-async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn') {
+async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn', isAdmin = false) {
   try {
     let embedding = null;
     try {
@@ -25,10 +25,12 @@ async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn'
       console.error('RAG embedding failed, falling back to text search:', err.message);
     }
 
-    // User isolation: show user's own memories + non-private shared memories
-    const userFilter = userId
-      ? `AND (user_id = ${parseInt(userId)} OR access_level NOT IN ('private') OR user_id IS NULL)`
-      : '';
+    // Admin users see all team memories; regular users see own + non-private shared
+    const userFilter = isAdmin
+      ? ''
+      : userId
+        ? `AND (user_id = ${parseInt(userId)} OR access_level NOT IN ('private') OR user_id IS NULL)`
+        : '';
 
     let result;
     if (embedding) {
@@ -353,7 +355,8 @@ router.post('/api/chat/send', async (req, res) => {
     historyRows.reverse();
 
     // RAG: search memories for context relevant to the user's message (scoped to user + brand)
-    const memoryContext = content ? await searchMemories(content, 5, req.session.user.id, req.brand_id) : '';
+    const isAdmin = req.session.user.role === 'admin';
+    const memoryContext = content ? await searchMemories(content, 5, req.session.user.id, req.brand_id, isAdmin) : '';
 
     // @mention detection — check if user is addressing a specific agent
     let mentionedAgent = null;

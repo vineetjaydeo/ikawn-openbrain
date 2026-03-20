@@ -35,17 +35,16 @@ router.post('/api/actions/review', async (req, res) => {
 // Pending actions — GET /api/actions/pending
 router.get('/api/actions/pending', async (req, res) => {
   try {
-    const brandId = req.query.brand_id || req.brandId;
     const { rows } = await pool.query(`
       SELECT id, brand_id, user_id, action_type, sub_type, payload,
              estimated_cost_credits, confidence, reasoning, governance_result,
              governance_reason, expires_at, created_at
       FROM action_queue
-      WHERE ($1::text IS NULL OR brand_id = $1)
+      WHERE brand_id = $1
         AND governance_result IN ('pending', 'awaiting_human')
       ORDER BY created_at DESC
       LIMIT 50
-    `, [brandId || null]);
+    `, [req.brand_id]);
 
     res.json({ actions: rows });
   } catch (err) {
@@ -57,7 +56,6 @@ router.get('/api/actions/pending', async (req, res) => {
 // Action history — GET /api/actions/history
 router.get('/api/actions/history', async (req, res) => {
   try {
-    const brandId = req.query.brand_id || req.brandId;
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const { rows } = await pool.query(`
       SELECT q.id, q.brand_id, q.user_id, q.action_type, q.payload,
@@ -67,10 +65,10 @@ router.get('/api/actions/history', async (req, res) => {
              l.actual_cost_credits, l.cost_breakdown, l.outcome_status, l.outcome_details
       FROM action_queue q
       LEFT JOIN action_log l ON l.action_queue_id = q.id
-      WHERE ($1::text IS NULL OR q.brand_id = $1)
+      WHERE q.brand_id = $1
       ORDER BY q.created_at DESC
       LIMIT $2
-    `, [brandId || null, limit]);
+    `, [req.brand_id, limit]);
 
     res.json({ actions: rows });
   } catch (err) {
@@ -82,10 +80,9 @@ router.get('/api/actions/history', async (req, res) => {
 // Budget status — GET /api/budgets
 router.get('/api/budgets', async (req, res) => {
   try {
-    const brandId = req.query.brand_id || req.brandId;
     const { rows } = await pool.query(`
-      SELECT * FROM brand_budgets WHERE ($1::text IS NULL OR brand_id = $1)
-    `, [brandId || null]);
+      SELECT * FROM brand_budgets WHERE brand_id = $1
+    `, [req.brand_id]);
 
     res.json({ budgets: rows });
   } catch (err) {

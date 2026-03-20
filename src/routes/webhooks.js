@@ -45,7 +45,7 @@ router.post('/webhooks/github', async (req, res) => {
         if (existing.rows.length === 0) {
           await pool.query(
             `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-             VALUES ($1, 'github', 'github_commit', $2, $3, $4, $5, 'internal', 'ikawn', 'pending')`,
+             VALUES ($1, 'github', 'github_commit', $2, $3, $4, $5, 'internal', req.brand_id, 'pending')`,
             [content, commit.id, commit.url, payload.repository?.name || '', commit.author?.name || 'unknown']
           );
         }
@@ -67,7 +67,7 @@ router.post('/webhooks/github', async (req, res) => {
       if (existing.rows.length === 0) {
         await pool.query(
           `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-           VALUES ($1, 'github', 'github_issue', $2, $3, $4, $5, 'internal', 'ikawn', 'pending')`,
+           VALUES ($1, 'github', 'github_issue', $2, $3, $4, $5, 'internal', req.brand_id, 'pending')`,
           [content, ref, issue.html_url, payload.repository?.name || '', issue.user?.login || 'unknown']
         );
       } else {
@@ -94,7 +94,7 @@ router.post('/webhooks/github', async (req, res) => {
       if (existing.rows.length === 0) {
         await pool.query(
           `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-           VALUES ($1, 'github', 'github_pr', $2, $3, $4, $5, 'internal', 'ikawn', 'pending')`,
+           VALUES ($1, 'github', 'github_pr', $2, $3, $4, $5, 'internal', req.brand_id, 'pending')`,
           [content, ref, pr.html_url, payload.repository?.name || '', pr.user?.login || 'unknown']
         );
       } else {
@@ -190,16 +190,16 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
         const { rows: [run] } = await pool.query(
           `SELECT tr.*, st.name AS task_name, st.agent_slug
            FROM task_runs tr JOIN scheduled_tasks st ON st.id = tr.task_id
-           WHERE tr.id = $1`, [runId]
+           WHERE tr.id = $1 AND st.brand_id = $2`, [runId, req.brand_id]
         );
         if (run) {
           if (action === 'approve') {
-            await pool.query("UPDATE task_runs SET status = 'approved', approved_by = 'telegram', approved_at = NOW() WHERE id = $1", [runId]);
+            await pool.query("UPDATE task_runs SET status = 'approved', approved_by = 'telegram', approved_at = NOW() WHERE id = $1 AND brand_id = $2", [runId, req.brand_id]);
             await sendTelegramMessage(`\u2705 Approved: "${run.task_name}"`, { chatId: cqChatId });
           } else {
-            await pool.query("UPDATE task_runs SET status = 'rejected', approved_by = 'telegram', approved_at = NOW() WHERE id = $1", [runId]);
+            await pool.query("UPDATE task_runs SET status = 'rejected', approved_by = 'telegram', approved_at = NOW() WHERE id = $1 AND brand_id = $2", [runId, req.brand_id]);
             captureMessage({
-              brand_id: 'ikawn', channel: 'agent', direction: 'inbound',
+              brand_id: req.brand_id, channel: 'agent', direction: 'inbound',
               content: `[CORRECTION] Task "${run.task_name}" (${run.agent_slug}) rejected via Telegram. Action: ${run.result?.summary || 'unknown'}`,
               source_ref: `correction_${runId}`,
               metadata: { project: 'agent-platform', memory_type: 'CORRECTION' },
@@ -291,8 +291,8 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       const dateLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const newConv = await pool.query(
         `INSERT INTO conversations (user_id, title, source, brand_id)
-         VALUES ($1, $2, $3, 'ikawn') RETURNING id, uuid`,
-        [userId, `Telegram — ${dateLabel}`, sourceKey]
+         VALUES ($1, $2, $3, $4) RETURNING id, uuid`,
+        [userId, `Telegram — ${dateLabel}`, sourceKey, req.brand_id]
       );
       convId = newConv.rows[0].id;
       convUuid = newConv.rows[0].uuid;
@@ -302,7 +302,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     // Save user message to messages table
     await pool.query(
       'INSERT INTO messages (conversation_id, role, content, brand_id) VALUES ($1, $2, $3, $4)',
-      [convId, 'user', userText, 'ikawn']
+      [convId, 'user', userText, req.brand_id]
     );
 
     // 1. RAG — search memory for relevant context (scoped to this user)
@@ -315,10 +315,11 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
          FROM memories
          WHERE embedding IS NOT NULL
            AND (archived IS NULL OR archived = false)
-           AND (user_id = $2 OR access_level NOT IN ('private') OR user_id IS NULL)
+           AND brand_id = $2
+           AND (user_id = $3 OR access_level NOT IN ('private') OR user_id IS NULL)
          ORDER BY cosine_similarity(embedding, $1) DESC
          LIMIT 10`,
-        [embedding, userId]
+        [embedding, req.brand_id, userId]
       );
       if (memResult.rows.length > 0) {
         memoryContext = memResult.rows.map((m, i) => {
@@ -371,14 +372,16 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       }
     }
 
-    // 5. Call Anthropic with web search + manage_task tools
+    // 5. Call Anthropic with web search + all registry tools
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // Build tool definitions — manage_task from registry + web_search server tool
-    const manageTaskSchemas = getToolSchemas(['manage_task']);
+    // Build tool definitions — all registry tools + web_search (Anthropic native server tool)
+    const { getTools: getAllTools } = require('../tools/registry');
+    const allRegistryTools = getAllTools();
+    const registrySchemas = getToolSchemas([...allRegistryTools.keys()]);
     const allTools = [
-      ...manageTaskSchemas,
+      ...registrySchemas,
       { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
     ];
 
@@ -413,7 +416,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
         let result;
         if (tool) {
           try {
-            result = await tool.execute(toolBlock.input || {}, { brandId: 'ikawn', userId, pool });
+            result = await tool.execute(toolBlock.input || {}, { brandId: req.brand_id, userId, conversationId: String(chatId), pool });
           } catch (err) {
             result = { success: false, data: null, summary: `Tool error: ${err.message}` };
           }
@@ -430,7 +433,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     // 6. Save assistant reply to messages table + update conversation
     await pool.query(
       "INSERT INTO messages (conversation_id, role, content, model, brand_id) VALUES ($1, 'assistant', $2, $3, $4)",
-      [convId, ruhiReply, 'claude-sonnet-4-6', 'ikawn']
+      [convId, ruhiReply, 'claude-sonnet-4-6', req.brand_id]
     );
     await pool.query(
       'UPDATE conversations SET updated_at = NOW() WHERE id = $1',
@@ -445,7 +448,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
 
     // 8. Capture both messages to memories for RAG (fire-and-forget, user-scoped)
     captureMessage({
-      brand_id: 'ikawn',
+      brand_id: req.brand_id,
       channel: 'telegram-ruhi',
       direction: 'inbound',
       content: userText,
@@ -454,7 +457,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       user_id: userId
     });
     captureMessage({
-      brand_id: 'ikawn',
+      brand_id: req.brand_id,
       channel: 'telegram-ruhi',
       direction: 'outbound',
       content: ruhiReply,
@@ -540,13 +543,13 @@ router.post('/webhooks/intelligence-telegram-callback/:token', async (req, res) 
       return;
     }
 
-    // Fetch the task run
+    // Fetch the task run (brand-scoped to prevent cross-brand approval)
     const { rows: [run] } = await pool.query(
       `SELECT tr.*, st.name AS task_name, st.agent_slug
        FROM task_runs tr
        JOIN scheduled_tasks st ON st.id = tr.task_id
-       WHERE tr.id = $1`,
-      [runId]
+       WHERE tr.id = $1 AND st.brand_id = $2`,
+      [runId, req.brand_id]
     );
 
     if (!run) {
@@ -557,18 +560,18 @@ router.post('/webhooks/intelligence-telegram-callback/:token', async (req, res) 
 
     if (action === 'approve') {
       await pool.query(
-        "UPDATE task_runs SET status = 'approved', approved_by = 'telegram', approved_at = NOW() WHERE id = $1",
-        [runId]
+        "UPDATE task_runs SET status = 'approved', approved_by = 'telegram', approved_at = NOW() WHERE id = $1 AND brand_id = $2",
+        [runId, req.brand_id]
       );
       await sendTelegramMessage(`\u2705 Approved: "${run.task_name}"`, { chatId });
     } else {
       await pool.query(
-        "UPDATE task_runs SET status = 'rejected', approved_by = 'telegram', approved_at = NOW() WHERE id = $1",
-        [runId]
+        "UPDATE task_runs SET status = 'rejected', approved_by = 'telegram', approved_at = NOW() WHERE id = $1 AND brand_id = $2",
+        [runId, req.brand_id]
       );
       // Capture rejection as CORRECTION memory for future learning
       captureMessage({
-        brand_id: 'ikawn',
+        brand_id: req.brand_id,
         channel: 'agent',
         direction: 'inbound',
         content: `[CORRECTION] Task "${run.task_name}" (${run.agent_slug}) rejected by user via Telegram. Action was: ${run.result?.summary || 'unknown'}`,

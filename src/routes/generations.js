@@ -8,17 +8,12 @@ const router = Router();
 // GET /generations — list generations
 router.get('/generations', requireAuthOrApiKey, async (req, res) => {
   try {
-    const { brand_id, agent, status, limit } = req.query;
+    const { agent, status, limit } = req.query;
     const searchLimit = Math.min(parseInt(limit) || 50, 200);
 
-    let query = 'SELECT * FROM generations WHERE deleted_at IS NULL';
-    const params = [];
-    let paramIdx = 1;
-
-    if (brand_id) {
-      query += ` AND brand_id = $${paramIdx++}`;
-      params.push(brand_id);
-    }
+    let query = 'SELECT * FROM generations WHERE deleted_at IS NULL AND brand_id = $1';
+    const params = [req.brand_id];
+    let paramIdx = 2;
     if (agent) {
       query += ` AND agent_name = $${paramIdx++}`;
       params.push(agent);
@@ -43,8 +38,8 @@ router.get('/generations', requireAuthOrApiKey, async (req, res) => {
 router.get('/generations/:id', requireAuthOrApiKey, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM generations WHERE id = $1 AND deleted_at IS NULL',
-      [req.params.id]
+      'SELECT * FROM generations WHERE id = $1 AND deleted_at IS NULL AND brand_id = $2',
+      [req.params.id, req.brand_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Generation not found' });

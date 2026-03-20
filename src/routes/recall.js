@@ -18,14 +18,14 @@ const router = Router();
  */
 router.get('/api/memory/recall', async (req, res) => {
   try {
-    const { q, brand_id, user_id, types, source, limit, reasoning } = req.query;
+    const { q, user_id, types, source, limit, reasoning } = req.query;
 
     if (!q) {
       return res.status(400).json({ error: 'q query parameter is required' });
     }
 
     const result = await recall({
-      brandId: brand_id || 'ikawn',
+      brandId: req.brand_id,
       userId: user_id || undefined,
       query: q,
       memoryTypes: types ? types.split(',') : undefined,

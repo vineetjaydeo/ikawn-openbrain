@@ -6,7 +6,7 @@ const router = Router();
 
 router.get('/search', async (req, res) => {
   try {
-    const { q, type, project, hashtag, access_level, author, from, to, limit, brand_id, user_id } = req.query;
+    const { q, type, project, hashtag, access_level, author, from, to, limit, user_id } = req.query;
     if (!q) {
       return res.status(400).json({ error: 'q query parameter is required' });
     }
@@ -43,11 +43,9 @@ router.get('/search', async (req, res) => {
       paramIdx = 2;
     }
 
-    // Brand filter
-    if (brand_id) {
-      query += ` AND brand_id = $${paramIdx++}`;
-      params.push(brand_id);
-    }
+    // Brand filter — always enforced via middleware
+    query += ` AND brand_id = $${paramIdx++}`;
+    params.push(req.brand_id);
 
     if (type) {
       query += ` AND memory_type = $${paramIdx++}`;

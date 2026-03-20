@@ -8,17 +8,19 @@ const { getTool, getTools, getToolSchemas } = require('../tools/registry');
 
 const router = Router();
 
-async function searchMemory(query, accessLevels, limit = 10, userId = null) {
+async function searchMemory(query, accessLevels, limit = 10, userId = null, brandId = 'ikawn') {
   const embedding = await getEmbedding(query);
 
   const placeholders = accessLevels.map((_, i) => `$${i + 2}`).join(', ');
-  // User isolation: show user's own memories + shared memories at their access level (excluding other users' private memories)
+  // Brand isolation + user isolation
+  const brandParam = accessLevels.length + 2; // next param after access levels
+  const limitParam = brandParam + 1;
   const userFilter = userId
-    ? ` AND (user_id = $${accessLevels.length + 3} OR access_level NOT IN ('private') OR user_id IS NULL)`
+    ? ` AND (user_id = $${limitParam + 1} OR access_level NOT IN ('private') OR user_id IS NULL)`
     : '';
   const params = userId
-    ? [embedding, ...accessLevels, limit, userId]
-    : [embedding, ...accessLevels, limit];
+    ? [embedding, ...accessLevels, brandId, limit, userId]
+    : [embedding, ...accessLevels, brandId, limit];
 
   const result = await pool.query(
     `SELECT id, content, memory_type, project, hashtags, author, created_at, cosine_similarity(embedding, $1) AS similarity
@@ -26,9 +28,10 @@ async function searchMemory(query, accessLevels, limit = 10, userId = null) {
      WHERE embedding IS NOT NULL
        AND (archived IS NULL OR archived = false)
        AND (access_level IS NULL OR access_level IN (${placeholders}))
+       AND brand_id = $${brandParam}
        ${userFilter}
      ORDER BY cosine_similarity(embedding, $1) DESC
-     LIMIT $${accessLevels.length + 2}`,
+     LIMIT $${limitParam}`,
     params
   );
 
@@ -106,7 +109,7 @@ router.post('/chat', async (req, res) => {
         try {
           const result = await tool.execute(
             toolArgs ? { query: toolArgs, prompt: toolArgs } : {},
-            { brandId: 'ikawn', userId: currentUserId, pool }
+            { brandId: req.brand_id, userId: currentUserId, pool }
           );
 
           const summary = result?.summary || JSON.stringify(result?.data || result, null, 2);
@@ -117,8 +120,8 @@ router.post('/chat', async (req, res) => {
 
           // Save to conversation
           const authorName = (obUser?.name || req.session?.user?.name || 'user').toLowerCase();
-          captureMessage({ brand_id: 'ikawn', channel: 'ruhi-chat', direction: 'inbound', content: message, source_ref: `ruhi_in_${convId}_${Date.now()}`, metadata: { project: 'ruhi-chat' }, user_id: currentUserId });
-          captureMessage({ brand_id: 'ikawn', channel: 'ruhi-chat', direction: 'outbound', content: formatted, source_ref: `ruhi_out_${convId}_${Date.now()}`, metadata: { project: 'ruhi-chat', tool: toolName }, user_id: currentUserId });
+          captureMessage({ brand_id: req.brand_id, channel: 'ruhi-chat', direction: 'inbound', content: message, source_ref: `ruhi_in_${convId}_${Date.now()}`, metadata: { project: 'ruhi-chat' }, user_id: currentUserId });
+          captureMessage({ brand_id: req.brand_id, channel: 'ruhi-chat', direction: 'outbound', content: formatted, source_ref: `ruhi_out_${convId}_${Date.now()}`, metadata: { project: 'ruhi-chat', tool: toolName }, user_id: currentUserId });
           await pool.query('UPDATE ob_conversations SET last_activity = NOW() WHERE id = $1', [convId]);
 
           res.write(`data: ${JSON.stringify({ type: 'done', conversation_id: convId })}\n\n`);
@@ -134,7 +137,7 @@ router.post('/chat', async (req, res) => {
     }
 
     // Search memory for context (RAG) — scoped to requesting user
-    const memoryResults = await searchMemory(message, userAccessLevels, 10, currentUserId);
+    const memoryResults = await searchMemory(message, userAccessLevels, 10, currentUserId, req.brand_id);
     let memoryContext = '';
     if (memoryResults.length > 0) {
       memoryContext = memoryResults.map((m, i) => {
@@ -241,7 +244,7 @@ router.post('/chat', async (req, res) => {
           try {
             const execResult = await tool.execute(
               block.input || {},
-              { brandId: 'ikawn', userId: currentUserId, pool }
+              { brandId: req.brand_id, userId: currentUserId, pool }
             );
             toolOutput = execResult?.summary || JSON.stringify(execResult?.data || execResult);
           } catch (toolErr) {
@@ -264,7 +267,7 @@ router.post('/chat', async (req, res) => {
 
     // Save both sides to memories via captureMessage (idempotent, proper metadata, user-scoped)
     captureMessage({
-      brand_id: 'ikawn',
+      brand_id: req.brand_id,
       channel: 'ruhi-chat',
       direction: 'inbound',
       content: message,
@@ -273,7 +276,7 @@ router.post('/chat', async (req, res) => {
       user_id: currentUserId
     });
     captureMessage({
-      brand_id: 'ikawn',
+      brand_id: req.brand_id,
       channel: 'ruhi-chat',
       direction: 'outbound',
       content: fullResponse,

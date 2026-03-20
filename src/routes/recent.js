@@ -12,10 +12,8 @@ router.get('/recent', async (req, res) => {
     const params = [];
     let paramIdx = 1;
 
-    if (req.query.brand_id) {
-      query += ` AND brand_id = $${paramIdx++}`;
-      params.push(req.query.brand_id);
-    }
+    query += ` AND brand_id = $${paramIdx++}`;
+    params.push(req.brand_id);
     if (type) {
       query += ` AND memory_type = $${paramIdx++}`;
       params.push(type);

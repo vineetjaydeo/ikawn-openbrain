@@ -800,6 +800,16 @@ async function initSchema() {
     await client.query(`
       ALTER TABLE task_runs ADD COLUMN IF NOT EXISTS viewed_at TIMESTAMPTZ;
     `);
+    await client.query(`
+      ALTER TABLE task_runs ADD COLUMN IF NOT EXISTS brand_id VARCHAR(100);
+    `);
+    await client.query(`
+      UPDATE task_runs SET brand_id = (SELECT brand_id FROM scheduled_tasks WHERE id = task_runs.task_id)
+      WHERE brand_id IS NULL;
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_task_runs_brand ON task_runs(brand_id);
+    `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS domain_agents (

@@ -5,6 +5,9 @@ const { pool, initSchema } = require('../db');
 const { getEmbedding } = require('../embeddings');
 const { suggestHashtags } = require('../utils/hashtags');
 
+// MCP brand context — configurable via env, defaults to 'ikawn'
+const MCP_BRAND_ID = process.env.MCP_BRAND_ID || 'ikawn';
+
 const server = new McpServer({
   name: 'ikawn-openbrain',
   version: '2.0.0',
@@ -31,8 +34,8 @@ server.tool(
 
     const result = await pool.query(
       `INSERT INTO memories (content, source, memory_type, project, hashtags, access_level, author, brand_id, embedding_status)
-       VALUES ($1, 'mcp', $2, $3, $4, $5, 'vineet', 'ikawn', 'pending') RETURNING id, content, memory_type, project, hashtags, created_at`,
-      [content, type || 'note', project || null, allHashtags.length > 0 ? allHashtags : null, access_level || 'private']
+       VALUES ($1, 'mcp', $2, $3, $4, $5, 'vineet', $6, 'pending') RETURNING id, content, memory_type, project, hashtags, created_at`,
+      [content, type || 'note', project || null, allHashtags.length > 0 ? allHashtags : null, access_level || 'private', MCP_BRAND_ID]
     );
 
     return { content: [{ type: 'text', text: JSON.stringify(result.rows[0]) }] };
@@ -56,9 +59,9 @@ server.tool(
     const searchLimit = Math.min(limit || 10, 50);
 
     let sql = `SELECT id, content, source, memory_type, project, hashtags, author, access_level, created_at, cosine_similarity(embedding, $1) AS similarity
-       FROM memories WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false)`;
-    const params = [embedding];
-    let idx = 2;
+       FROM memories WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND brand_id = $2`;
+    const params = [embedding, MCP_BRAND_ID];
+    let idx = 3;
 
     if (type) { sql += ` AND memory_type = $${idx++}`; params.push(type); }
     if (project) { sql += ` AND project = $${idx++}`; params.push(project); }
@@ -84,9 +87,9 @@ server.tool(
   },
   async ({ limit, type, project }) => {
     const recentLimit = Math.min(limit || 20, 100);
-    let sql = 'SELECT id, content, source, memory_type, project, hashtags, author, created_at FROM memories WHERE (archived IS NULL OR archived = false)';
-    const params = [];
-    let idx = 1;
+    let sql = 'SELECT id, content, source, memory_type, project, hashtags, author, created_at FROM memories WHERE (archived IS NULL OR archived = false) AND brand_id = $1';
+    const params = [MCP_BRAND_ID];
+    let idx = 2;
 
     if (type) { sql += ` AND memory_type = $${idx++}`; params.push(type); }
     if (project) { sql += ` AND project = $${idx++}`; params.push(project); }
@@ -109,9 +112,9 @@ server.tool(
     to: z.string().optional(),
   },
   async ({ project, signed_off_by, from, to }) => {
-    let sql = 'SELECT * FROM ob_decisions WHERE 1=1';
-    const params = [];
-    let idx = 1;
+    let sql = 'SELECT * FROM ob_decisions WHERE brand_id = $1';
+    const params = [MCP_BRAND_ID];
+    let idx = 2;
 
     if (project) { sql += ` AND project = $${idx++}`; params.push(project); }
     if (signed_off_by) { sql += ` AND signed_off_by = $${idx++}`; params.push(signed_off_by); }
@@ -138,8 +141,8 @@ server.tool(
   async ({ decision, context, project, signed_off_by, hashtags }) => {
     const memoryResult = await pool.query(
       `INSERT INTO memories (content, source, memory_type, project, author, signed_off_by, access_level, hashtags, brand_id, embedding_status)
-       VALUES ($1, 'decision', 'decision', $2, $3, $4, 'management', $5, 'ikawn', 'pending') RETURNING id`,
-      [context ? `${decision}\n\nContext: ${context}` : decision, project || null, signed_off_by || 'vineet', signed_off_by || null, hashtags || null]
+       VALUES ($1, 'decision', 'decision', $2, $3, $4, 'management', $5, $6, 'pending') RETURNING id`,
+      [context ? `${decision}\n\nContext: ${context}` : decision, project || null, signed_off_by || 'vineet', signed_off_by || null, hashtags || null, MCP_BRAND_ID]
     );
 
     const result = await pool.query(
@@ -154,14 +157,15 @@ server.tool(
 
 // 6. get_stats
 server.tool('get_stats', {}, async () => {
+  const brandFilter = [MCP_BRAND_ID];
   const [countResult, sourcesResult, typesResult, projectsResult, hashtagResult, ingestionResult, weekResult] = await Promise.all([
-    pool.query('SELECT COUNT(*) AS total FROM memories WHERE (archived IS NULL OR archived = false)'),
-    pool.query('SELECT source, COUNT(*) AS count FROM memories WHERE (archived IS NULL OR archived = false) GROUP BY source ORDER BY count DESC'),
-    pool.query('SELECT memory_type, COUNT(*) AS count FROM memories WHERE (archived IS NULL OR archived = false) GROUP BY memory_type ORDER BY count DESC'),
-    pool.query('SELECT project, COUNT(*) AS count FROM memories WHERE project IS NOT NULL AND (archived IS NULL OR archived = false) GROUP BY project ORDER BY count DESC'),
-    pool.query('SELECT unnest(hashtags) AS tag, COUNT(*) AS count FROM memories WHERE hashtags IS NOT NULL AND (archived IS NULL OR archived = false) GROUP BY tag ORDER BY count DESC LIMIT 30'),
+    pool.query('SELECT COUNT(*) AS total FROM memories WHERE (archived IS NULL OR archived = false) AND brand_id = $1', brandFilter),
+    pool.query('SELECT source, COUNT(*) AS count FROM memories WHERE (archived IS NULL OR archived = false) AND brand_id = $1 GROUP BY source ORDER BY count DESC', brandFilter),
+    pool.query('SELECT memory_type, COUNT(*) AS count FROM memories WHERE (archived IS NULL OR archived = false) AND brand_id = $1 GROUP BY memory_type ORDER BY count DESC', brandFilter),
+    pool.query('SELECT project, COUNT(*) AS count FROM memories WHERE project IS NOT NULL AND (archived IS NULL OR archived = false) AND brand_id = $1 GROUP BY project ORDER BY count DESC', brandFilter),
+    pool.query('SELECT unnest(hashtags) AS tag, COUNT(*) AS count FROM memories WHERE hashtags IS NOT NULL AND (archived IS NULL OR archived = false) AND brand_id = $1 GROUP BY tag ORDER BY count DESC LIMIT 30', brandFilter),
     pool.query('SELECT source, MAX(ran_at) AS last_run FROM ob_ingestion_log GROUP BY source'),
-    pool.query(`SELECT COUNT(*) AS count FROM memories WHERE created_at > NOW() - INTERVAL '7 days' AND (archived IS NULL OR archived = false)`),
+    pool.query(`SELECT COUNT(*) AS count FROM memories WHERE created_at > NOW() - INTERVAL '7 days' AND (archived IS NULL OR archived = false) AND brand_id = $1`, brandFilter),
   ]);
 
   const stats = {
@@ -199,9 +203,9 @@ server.tool(
     const embedding = await getEmbedding(message);
     const memoryResults = await pool.query(
       `SELECT content, memory_type, created_at, cosine_similarity(embedding, $1) AS similarity
-       FROM memories WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false)
+       FROM memories WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND brand_id = $2
        ORDER BY cosine_similarity(embedding, $1) DESC LIMIT 10`,
-      [embedding]
+      [embedding, MCP_BRAND_ID]
     );
 
     let memoryContext = '';

@@ -5,9 +5,9 @@ const router = Router();
 
 router.get('/stats', async (req, res) => {
   try {
-    const brandId = req.query.brand_id || null;
-    const brandClause = brandId ? ' AND brand_id = $1' : '';
-    const brandParams = brandId ? [brandId] : [];
+    const brandId = req.brand_id;
+    const brandClause = ' AND brand_id = $1';
+    const brandParams = [brandId];
     const baseWhere = `(archived IS NULL OR archived = false) AND deleted_at IS NULL${brandClause}`;
 
     const [countResult, sourcesResult, typesResult, projectsResult, hashtagResult, ingestionResult, recentResult, weekResult] = await Promise.all([

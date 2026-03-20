@@ -8,14 +8,14 @@ const { extractText, guessMimeFromFilename } = require('../utils/doc-parser');
 const { downloadFromUrl } = require('../utils/storage');
 const { getEmbedding } = require('../embeddings');
 const { captureMessage } = require('../utils/capture');
-const { getTool } = require('../tools/registry');
+const { getTool, getTools } = require('../tools/registry');
 
 /**
  * RAG: search memories for relevant context.
  * Uses hybrid scoring: semantic similarity + recency boost.
  * Recent memories get a significant boost so "latest" queries return fresh results.
  */
-async function searchMemories(query, limit = 8, userId = null) {
+async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn') {
   try {
     let embedding = null;
     try {
@@ -37,10 +37,11 @@ async function searchMemories(query, limit = 8, userId = null) {
                 cosine_similarity(embedding, $1) AS similarity
          FROM memories
          WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
+         AND brand_id = $2
          ${userFilter}
          ORDER BY cosine_similarity(embedding, $1) DESC
          LIMIT 30`,
-        [embedding]
+        [embedding, brandId]
       );
     } else {
       // Fallback to text search
@@ -49,10 +50,11 @@ async function searchMemories(query, limit = 8, userId = null) {
                 0.5 AS similarity
          FROM memories
          WHERE content ILIKE '%' || $1 || '%' AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
+         AND brand_id = $2
          ${userFilter}
          ORDER BY created_at DESC
          LIMIT 30`,
-        [query]
+        [query, brandId]
       );
     }
     if (result.rows.length === 0) return '';
@@ -306,7 +308,7 @@ router.post('/api/chat/send', async (req, res) => {
         try {
           const result = await tool.execute(
             toolArgs ? { query: toolArgs, prompt: toolArgs } : {},
-            { brandId: 'ikawn', userId: req.session.user.id, pool }
+            { brandId: req.brand_id, userId: req.session.user.id, pool }
           );
 
           const summary = result?.summary || JSON.stringify(result?.data || result, null, 2);
@@ -349,8 +351,8 @@ router.post('/api/chat/send', async (req, res) => {
     );
     historyRows.reverse();
 
-    // RAG: search memories for context relevant to the user's message (scoped to this user)
-    const memoryContext = content ? await searchMemories(content, 5, req.session.user.id) : '';
+    // RAG: search memories for context relevant to the user's message (scoped to user + brand)
+    const memoryContext = content ? await searchMemories(content, 5, req.session.user.id, req.brand_id) : '';
 
     // @mention detection — check if user is addressing a specific agent
     let mentionedAgent = null;
@@ -358,8 +360,8 @@ router.post('/api/chat/send', async (req, res) => {
     if (mentionMatch) {
       const slug = mentionMatch[1].toLowerCase();
       const { rows } = await pool.query(
-        'SELECT slug, name, role, persona FROM domain_agents WHERE LOWER(slug) = $1 AND enabled = true',
-        [slug]
+        'SELECT slug, name, role, persona FROM domain_agents WHERE LOWER(slug) = $1 AND enabled = true AND brand_id = $2',
+        [slug, req.brand_id]
       );
       if (rows.length > 0) mentionedAgent = rows[0];
     }
@@ -465,8 +467,10 @@ ${memoryContext}
     // JSONB value comes back as parsed JSON, so a stored '"gpt-4o"' returns the string 'gpt-4o'
     const model = settingsRows.length ? settingsRows[0].value : undefined;
 
-    // Define tools
+    // Build tools from registry (OpenAI function-calling format) + web_search (Brave, handled separately)
+    const registryTools = getTools();
     const tools = [
+      // web_search stays hardcoded — uses Brave API, not the registry
       {
         type: 'function',
         function: {
@@ -474,35 +478,29 @@ ${memoryContext}
           description: 'Search the web for current information',
           parameters: {
             type: 'object',
-            properties: {
-              query: { type: 'string' }
-            },
-            required: ['query']
-          }
-        }
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
+        },
       },
-      {
-        type: 'function',
-        function: {
-          name: 'generate_image',
-          description: 'Generate images using iKawn creative agents. Use this when the user asks you to create, generate, design, or make images, wallpapers, photos, visuals, etc. Always use this tool — never just describe what you would generate.',
-          parameters: {
-            type: 'object',
-            properties: {
-              agent: {
-                type: 'string',
-                enum: ['genie', 'remix', 'prism', 'lazarus'],
-                description: 'Which agent to use. genie = text-to-image (default), remix = image transformation, prism = product photography, lazarus = image-to-video'
-              },
-              prompt: {
-                type: 'string',
-                description: 'Detailed visual prompt describing what to generate. Be specific about style, lighting, composition, colors.'
-              }
-            },
-            required: ['prompt']
-          }
+      // All registry tools converted to OpenAI format
+      ...[...registryTools.values()].map(tool => {
+        const properties = {};
+        const required = [];
+        for (const [key, def] of Object.entries(tool.parameters || {})) {
+          properties[key] = { type: def.type, description: def.description };
+          if (def.enum) properties[key].enum = def.enum;
+          if (def.required) required.push(key);
         }
-      }
+        return {
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: { type: 'object', properties, required },
+          },
+        };
+      }),
     ];
 
     // Set up SSE
@@ -522,9 +520,12 @@ ${memoryContext}
       messagesForStream.push(toolMsg);
 
       for (const toolCall of toolCheckResult.tool_calls) {
-        if (toolCall.function.name === 'web_search') {
+        const toolName = toolCall.function.name;
+        const args = JSON.parse(toolCall.function.arguments || '{}');
+
+        if (toolName === 'web_search') {
+          // Web search: Brave API (stays separate from registry)
           try {
-            const args = JSON.parse(toolCall.function.arguments);
             const searchResults = await searchWeb(args.query);
             messagesForStream.push({
               role: 'tool',
@@ -539,80 +540,59 @@ ${memoryContext}
               content: '[Web search failed]'
             });
           }
-        } else if (toolCall.function.name === 'generate_image') {
-          try {
-            const args = JSON.parse(toolCall.function.arguments);
-            const agent = args.agent || 'genie';
-            const prompt = args.prompt;
-
-            const IKAWN_API_URL = process.env.IKAWN_API_URL || 'https://os.ikawn.com';
-            const IKAWN_API_KEY = process.env.IKAWN_API_KEY;
-
-            if (!IKAWN_API_KEY) {
-              messagesForStream.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: '[Generation failed: IKAWN_API_KEY not configured]'
-              });
-              continue;
-            }
-
-            const genResponse = await fetch(`${IKAWN_API_URL}/api/external/generate`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${IKAWN_API_KEY}`,
-              },
-              body: JSON.stringify({ agent, prompt }),
+        } else {
+          // All other tools: route through registry
+          const registryTool = getTool(toolName);
+          if (!registryTool) {
+            messagesForStream.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `[Unknown tool: ${toolName}]`
             });
+            continue;
+          }
 
-            const genData = await genResponse.json();
+          try {
+            const context = {
+              brandId: req.brand_id,
+              userId: req.session?.user?.id,
+              conversationId: conversation_id,
+              pool,
+            };
+            const result = await registryTool.execute(args, context);
 
-            if (!genResponse.ok) {
-              messagesForStream.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: `[Generation failed: ${genData.error || 'Unknown error'}]`
-              });
-              continue;
-            }
+            // Special handling for ikawn_generate: emit generation_started SSE events
+            if (toolName === 'ikawn_generate' && result.success && result.data?.generationId) {
+              const agent = args.agent || 'genie';
+              const batchSize = ['genie', 'remix'].includes(agent) ? 4 : 1;
 
-            const batchSize = ['genie', 'remix'].includes(agent) ? 4 : 1;
-
-            // Record in OpenBrain DB
-            if (genData.generationId) {
+              // Record in OpenBrain DB
               pool.query(`
                 INSERT INTO generations (brand_id, agent_name, prompt, output_type, status, ikawn_generation_id, batch_size)
                 VALUES ($1, $2, $3, $4, 'pending', $5, $6)
                 ON CONFLICT DO NOTHING
-              `, ['ikawn', agent, prompt, agent === 'lazarus' ? 'video' : 'image', genData.generationId, batchSize])
+              `, [req.brand_id, agent, args.prompt, agent === 'lazarus' ? 'video' : 'image', result.data.generationId, batchSize])
                 .catch(err => console.warn('[Chat] Failed to record generation:', err.message));
+
+              pendingGenerations.push({
+                generationId: result.data.generationId,
+                agent,
+                prompt: args.prompt,
+                batchSize,
+              });
             }
 
-            pendingGenerations.push({
-              generationId: genData.generationId,
-              agent,
-              prompt,
-              batchSize,
-            });
-
             messagesForStream.push({
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: JSON.stringify({
-                success: true,
-                generationId: genData.generationId,
-                agent,
-                batch_size: batchSize,
-                message: `Generation triggered successfully with ${agent}. ${batchSize} image(s) are being created and will appear in the chat shortly.`
-              })
+              content: JSON.stringify(result)
             });
           } catch (err) {
-            console.error('generate_image error:', err);
+            console.error(`[Chat] Tool ${toolName} error:`, err);
             messagesForStream.push({
               role: 'tool',
               tool_call_id: toolCall.id,
-              content: `[Generation failed: ${err.message}]`
+              content: JSON.stringify({ success: false, data: null, summary: `Tool error: ${err.message}` })
             });
           }
         }
@@ -663,7 +643,7 @@ ${memoryContext}
     res.write(`data: ${JSON.stringify({ type: 'done', message_id: assistantMsgRows[0].id })}\n\n`);
 
     // Capture both sides to memories (fire-and-forget, never blocks)
-    const brandId = req.session?.brand_id || 'ikawn';
+    const brandId = req.brand_id;
     const msgId = assistantMsgRows[0].id;
     captureMessage({
       brand_id: brandId,

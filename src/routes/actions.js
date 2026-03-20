@@ -58,7 +58,7 @@ router.post('/api/actions/trigger', requireAuthOrApiKey, async (req, res) => {
           INSERT INTO generations (brand_id, agent_name, prompt, output_type, status, ikawn_generation_id, batch_size)
           VALUES ($1, $2, $3, $4, 'pending', $5, $6)
           ON CONFLICT DO NOTHING
-        `, ['ikawn', selectedAgent, prompt, selectedAgent === 'lazarus' ? 'video' : 'image', data.generationId, batchSize])
+        `, [req.brand_id, selectedAgent, prompt, selectedAgent === 'lazarus' ? 'video' : 'image', data.generationId, batchSize])
           .catch(err => console.warn('[Actions] Failed to record generation:', err.message));
       }
 
@@ -120,7 +120,7 @@ router.post('/api/actions/complete', requireAuthOrApiKey, async (req, res) => {
     const genStatus = status || 'completed';
     const urlList = outputUrls.length > 0 ? ` URLs: ${outputUrls.join(', ')}` : '';
     captureMessage({
-      brand_id: 'ikawn',
+      brand_id: req.brand_id,
       channel: 'api',
       direction: 'outbound',
       content: `Generation ${genStatus}. Agent: ${agent}.${urlList}`,

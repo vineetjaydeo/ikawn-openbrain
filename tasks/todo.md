@@ -1,26 +1,66 @@
-# OpenBrain v2 — Remaining TODO
+# Multi-Tenant Data Isolation — Implementation Status
 
-## Next Session
+## Phase P0 — Stop the Bleeding ✅ COMPLETE
 
-- [x] **Connect OpenClaw to Ruhi** — DONE (commit b5dbfb7, deployed 2026-03-05)
-  - Telegram webhook captures all OpenClaw conversations automatically
-  - Rich media: images/docs → R2, voice → Whisper transcription, video → R2
-  - 30-min conversation grouping, auto-hashtags, dedup by source_ref
-  - Self-report endpoint: POST /api/ingest/openclaw (API key auth)
-  - Fly secrets: TELEGRAM_BOT_TOKEN, OPENBRAIN_API_KEY
+- [x] P0.1: Mount `requireBrand` middleware globally in `index.js`
+- [x] P0.2: Enhance `requireBrand` with resolution order + fallback warning
+- [x] P0.3: Enforce brand_id in all read endpoints (search, recent, decisions, generations, edit-deltas, stats, governance, recall)
+- [x] P0.4: Enforce brand_id in RAG searches (chat-api.js, ruhi-chat.js, webhooks.js)
+- [x] P0.5: Enforce brand_id in agent mention lookup (chat-api.js)
+- [x] P0.6: Enforce brand_id in write endpoints (decisions POST, capture, edit-deltas)
 
-- [x] **Fix OpenClaw sync timeout** — MOOT (OpenClaw via Telegram replaces local OpenClaw sync)
+## Phase P1 — Structural Fixes ✅ COMPLETE
 
-- [x] **GitHub webhook setup** — DONE (2026-03-13). Webhooks registered on both vineonardo/ikawn-visual-os-v1 (#600490070) and ikawn-openbrain (#600490061). Events: push, issues, pull_request → `https://ikawn-openbrain.fly.dev/webhooks/github`
+- [x] P1.1: Add `brand_id` column to `task_runs` + propagate in scheduler
+- [x] P1.2: Scope Mission Control — all 8 hardcoded 'ikawn' replaced with `req.brand_id`
+- [x] P1.3: Scope `captureMessage()` callers (chat-api.js, ruhi-chat.js, webhooks.js)
+- [x] P1.4: Scope tool execution context (chat-api.js, ruhi-chat.js, webhooks.js)
+- [x] P1.5: Scope webhook approval with brand_id JOIN
+- [x] P1.6: MCP server — configurable brand via `MCP_BRAND_ID` env var
+- [x] BONUS: Scoped actions.js (generation recording + captureMessage)
+- [x] BONUS: Scoped all MCP queries (search, recent, stats, decisions, ask_ruhi RAG)
 
-- [x] **Intelligence Layer (Phases 1-4)** — DONE (2026-03-13). 4 new tables (memory_events, distilled_memory, session_summaries, learning_velocity), distillation worker (daily 3am UTC), recall API, Anthropic client, worker guards ($5/day ceiling). Deployed to Fly.
+## Phase P2 — Scale Prep (FUTURE — after first external brand onboards)
 
-- [ ] **Anthropic Claude upgrade** — Optional: switch Ruhi from GPT-4o to Claude Sonnet for better persona adherence
+- [ ] P2.1: R2 storage brand namespacing
+- [ ] P2.2: Per-brand persona
+- [ ] P2.3: Per-brand knowledge base
+- [ ] P2.4: API key → brand mapping
+- [ ] P2.5: Conversation-level brand scoping
+- [ ] P2.6: Brand admin isolation
 
-## Completed (this session)
-- [x] All 14 v2 brief steps — schema, connectors, Ruhi persona, MCP, deploy, verify
-- [x] GitHub sync working (120 memories ingested)
-- [x] Ruhi chat working with RAG
-- [x] Claude Code MCP integration (openbrain server in ~/.claude.json)
-- [x] CLAUDE.md rule for auto-capture
-- [x] OpenClaw sync script (works but machine timeout issue)
+## Files Modified (18 files)
+
+### P0
+1. `src/auth.js` — enhanced `requireBrand` with resolution order + warning
+2. `src/index.js` — mounted `requireBrand` globally
+3. `src/routes/search.js` — mandatory brand filter
+4. `src/routes/recent.js` — mandatory brand filter
+5. `src/routes/decisions.js` — brand filter on GET + POST
+6. `src/routes/generations.js` — brand filter on list + get
+7. `src/routes/edit-deltas.js` — brand filter on GET + POST
+8. `src/routes/stats.js` — mandatory brand filter
+9. `src/routes/governance.js` — brand filter on 3 endpoints
+10. `src/routes/recall.js` — use req.brand_id
+
+### P0 (RAG critical)
+11. `src/routes/chat-api.js` — RAG brand filter + agent mention + tool context + captureMessage
+12. `src/routes/ruhi-chat.js` — RAG brand filter + tool context + captureMessage
+13. `src/routes/webhooks.js` — RAG brand filter + captureMessage + tool context + approval
+
+### P1
+14. `src/db.js` — task_runs brand_id column + index + backfill
+15. `src/scheduler.js` — propagate brand_id to task_runs
+16. `src/routes/mission-control.js` — 8 hardcoded 'ikawn' → req.brand_id
+17. `src/routes/actions.js` — generation recording + captureMessage
+18. `src/mcp/server.js` — configurable MCP_BRAND_ID + all queries scoped
+
+## Verification Checklist
+
+- [ ] Deploy to production
+- [ ] Verify web chat RAG returns relevant memories
+- [ ] Verify Telegram bot responds correctly
+- [ ] Verify Mission Control shows tasks/agents
+- [ ] Check logs for `[BrandFallback]` warnings
+- [ ] Test `/search?q=test` only returns brand-scoped results
+- [ ] Test `/decisions` only returns brand-scoped decisions

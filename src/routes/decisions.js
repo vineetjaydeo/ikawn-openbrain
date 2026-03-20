@@ -12,7 +12,7 @@ router.post('/decisions', async (req, res) => {
     // Insert into memories — embedding handled async by worker
     const memoryResult = await pool.query(
       `INSERT INTO memories (content, source, memory_type, project, author, signed_off_by, access_level, hashtags, brand_id, embedding_status)
-       VALUES ($1, 'decision', 'decision', $2, $3, $4, $5, $6, 'ikawn', 'pending') RETURNING id`,
+       VALUES ($1, 'decision', 'decision', $2, $3, $4, $5, $6, $7, 'pending') RETURNING id`,
       [
         context ? `${decision}\n\nContext: ${context}` : decision,
         project || null,
@@ -20,13 +20,14 @@ router.post('/decisions', async (req, res) => {
         signed_off_by || null,
         access_level || 'management',
         hashtags || null,
+        req.brand_id,
       ]
     );
 
     // Insert into ob_decisions
     const decisionResult = await pool.query(
-      `INSERT INTO ob_decisions (decision, context, decided_by, signed_off_by, project, access_level, hashtags, memory_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO ob_decisions (decision, context, decided_by, signed_off_by, project, access_level, hashtags, memory_id, brand_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         decision,
         context || null,
@@ -36,6 +37,7 @@ router.post('/decisions', async (req, res) => {
         access_level || 'management',
         hashtags || null,
         memoryResult.rows[0].id,
+        req.brand_id,
       ]
     );
 
@@ -49,9 +51,9 @@ router.post('/decisions', async (req, res) => {
 router.get('/decisions', async (req, res) => {
   try {
     const { project, signed_off_by, from, to, limit } = req.query;
-    let query = 'SELECT * FROM ob_decisions WHERE 1=1';
-    const params = [];
-    let paramIdx = 1;
+    let query = 'SELECT * FROM ob_decisions WHERE brand_id = $1';
+    const params = [req.brand_id];
+    let paramIdx = 2;
 
     if (project) {
       query += ` AND project = $${paramIdx++}`;

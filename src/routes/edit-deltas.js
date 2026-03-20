@@ -27,7 +27,7 @@ router.post('/edit-delta', requireAuthOrApiKey, async (req, res) => {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING id, delta_type, agent_name, created_at
     `, [
-      brand_id || 'ikawn',
+      req.brand_id || brand_id || 'ikawn',
       agent_name, generation_id || null, session_id || null,
       delta_type, original_prompt || null, revised_prompt || null,
       original_output || null, edited_output || null,
@@ -45,17 +45,12 @@ router.post('/edit-delta', requireAuthOrApiKey, async (req, res) => {
 // GET /edit-deltas — list deltas by brand/agent
 router.get('/edit-deltas', requireAuthOrApiKey, async (req, res) => {
   try {
-    const { brand_id, agent, type, limit } = req.query;
+    const { agent, type, limit } = req.query;
     const searchLimit = Math.min(parseInt(limit) || 50, 200);
 
-    let query = 'SELECT * FROM edit_deltas WHERE deleted_at IS NULL';
-    const params = [];
-    let paramIdx = 1;
-
-    if (brand_id) {
-      query += ` AND brand_id = $${paramIdx++}`;
-      params.push(brand_id);
-    }
+    let query = 'SELECT * FROM edit_deltas WHERE deleted_at IS NULL AND brand_id = $1';
+    const params = [req.brand_id];
+    let paramIdx = 2;
     if (agent) {
       query += ` AND agent_name = $${paramIdx++}`;
       params.push(agent);

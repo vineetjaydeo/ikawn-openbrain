@@ -13,7 +13,8 @@ router.get('/api/mission/mentions', requireAuth, async (req, res) => {
   try {
     const [agentsResult, usersResult] = await Promise.all([
       pool.query(
-        `SELECT slug, name, role FROM domain_agents WHERE enabled = true AND brand_id = 'ikawn' ORDER BY name`
+        `SELECT slug, name, role FROM domain_agents WHERE enabled = true AND brand_id = $1 ORDER BY name`,
+        [req.brand_id]
       ),
       pool.query(
         `SELECT name, email, role FROM ob_users ORDER BY name`
@@ -48,8 +49,8 @@ router.get('/api/mission/tasks', requireAuth, async (req, res) => {
       cron_expression, interval_minutes, enabled, next_run_at, last_run_at,
       last_status, last_error, run_count, consecutive_failures, requires_approval,
       created_at, updated_at
-      FROM scheduled_tasks WHERE brand_id = 'ikawn'`;
-    const params = [];
+      FROM scheduled_tasks WHERE brand_id = $1`;
+    const params = [req.brand_id];
 
     if (agent_slug) {
       params.push(agent_slug);
@@ -88,10 +89,10 @@ router.post('/api/mission/tasks', requireAdmin, async (req, res) => {
 
     const { rows } = await pool.query(
       `INSERT INTO scheduled_tasks (name, description, agent_slug, tool, tier, schedule_type, cron_expression, interval_minutes, next_run_at, brand_id, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ikawn', $10)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING uuid, name, agent_slug, tool, schedule_type, enabled, next_run_at, created_at`,
       [name, description || null, agent_slug || 'ruhi', tool, tier || 'direct', schedule_type,
-       cron_expression || null, interval_minutes || null, nextRun, req.session.user.id]
+       cron_expression || null, interval_minutes || null, nextRun, req.brand_id, req.session.user.id]
     );
 
     res.json({ task: rows[0] });
@@ -124,8 +125,9 @@ router.put('/api/mission/tasks/:uuid', requireAdmin, async (req, res) => {
 
     updates.push('updated_at = NOW()');
     params.push(req.params.uuid);
+    params.push(req.brand_id);
     const { rowCount } = await pool.query(
-      `UPDATE scheduled_tasks SET ${updates.join(', ')} WHERE uuid = $${params.length} AND brand_id = 'ikawn'`,
+      `UPDATE scheduled_tasks SET ${updates.join(', ')} WHERE uuid = $${params.length - 1} AND brand_id = $${params.length}`,
       params
     );
 
@@ -141,7 +143,7 @@ router.delete('/api/mission/tasks/:uuid', requireAdmin, async (req, res) => {
   try {
     // Delete runs first, then task
     const taskResult = await pool.query(
-      `SELECT id FROM scheduled_tasks WHERE uuid = $1 AND brand_id = 'ikawn'`, [req.params.uuid]
+      `SELECT id FROM scheduled_tasks WHERE uuid = $1 AND brand_id = $2`, [req.params.uuid, req.brand_id]
     );
     if (taskResult.rows.length === 0) return res.status(404).json({ error: 'Task not found' });
 
@@ -163,10 +165,10 @@ router.get('/api/mission/tasks/:uuid/runs', requireAuth, async (req, res) => {
               tr.error, tr.cost_usd, tr.tokens_used
        FROM task_runs tr
        JOIN scheduled_tasks st ON st.id = tr.task_id
-       WHERE st.uuid = $1 AND st.brand_id = 'ikawn'
+       WHERE st.uuid = $1 AND st.brand_id = $2
        ORDER BY tr.started_at DESC
        LIMIT 20`,
-      [req.params.uuid]
+      [req.params.uuid, req.brand_id]
     );
     res.json({ runs: rows });
   } catch (err) {
@@ -181,7 +183,8 @@ router.get('/api/mission/agents', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT slug, name, role, tools, memory_tags, enabled, created_at
-       FROM domain_agents WHERE brand_id = 'ikawn' ORDER BY name`
+       FROM domain_agents WHERE brand_id = $1 ORDER BY name`,
+      [req.brand_id]
     );
     res.json({ agents: rows });
   } catch (err) {
@@ -196,8 +199,8 @@ router.put('/api/mission/agents/:slug', requireAdmin, async (req, res) => {
     if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be boolean' });
 
     const { rowCount } = await pool.query(
-      `UPDATE domain_agents SET enabled = $1 WHERE slug = $2 AND brand_id = 'ikawn'`,
-      [enabled, req.params.slug]
+      `UPDATE domain_agents SET enabled = $1 WHERE slug = $2 AND brand_id = $3`,
+      [enabled, req.params.slug, req.brand_id]
     );
     if (rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
     res.json({ ok: true });

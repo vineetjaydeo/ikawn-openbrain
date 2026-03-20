@@ -177,12 +177,12 @@ async function deliverTaskResultToChat(task, result, runId) {
 async function executeTask(task) {
   const startedAt = new Date();
 
-  // Create task_run record
+  // Create task_run record (propagate brand_id from scheduled_task)
   const { rows: [run] } = await pool.query(`
-    INSERT INTO task_runs (task_id, agent_slug, tier, started_at)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO task_runs (task_id, agent_slug, tier, started_at, brand_id)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING id
-  `, [task.id, task.agent_slug, task.tier, startedAt]);
+  `, [task.id, task.agent_slug, task.tier, startedAt, task.brand_id || 'ikawn']);
 
   // Set status to 'running' immediately
   await pool.query(

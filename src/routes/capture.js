@@ -66,7 +66,7 @@ router.post('/capture', async (req, res) => {
         author || 'vineet',
         signed_off_by || null,
         source_ref || null,
-        brand_id || 'ikawn',
+        req.brand_id || brand_id || 'ikawn',
       ]
     );
 

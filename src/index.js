@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 const { initSchema } = require('./db');
-const { requireAuth, requireAuthOrApiKey } = require('./auth');
+const { requireAuth, requireAuthOrApiKey, requireBrand } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
 const adminApi = require('./routes/admin-api');
 const pages = require('./routes/pages');
@@ -81,6 +81,9 @@ app.use('/search',              rateLimit({ windowMs: 60000, max: 120, message: 
 app.use('/api/chat',            rateLimit({ windowMs: 60000, max: 20,  message: 'Chat rate limit exceeded' }));
 app.use('/auth/login',          rateLimit({ windowMs: 60000, max: 5,   message: 'Too many login attempts', skipSuccessfulRequests: true }));
 app.use('/api/actions/trigger',  rateLimit({ windowMs: 60000, max: 10,  message: 'Generation rate limit exceeded', skip: skipIfApiKey }));
+
+// ── Brand scoping (sets req.brand_id on every request) ──
+app.use(requireBrand);
 
 // robots.txt — block all crawlers from the entire site
 app.get('/robots.txt', (req, res) => {

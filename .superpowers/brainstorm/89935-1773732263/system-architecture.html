@@ -1,0 +1,126 @@
+<h2>Ruhi Agent Architecture — System View</h2>
+<p class="subtitle">How all the pieces connect inside OpenBrain</p>
+
+<div class="mockup">
+  <div class="mockup-header">System Architecture</div>
+  <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6; padding: 24px; background: #0d1117; color: #c9d1d9;">
+<pre style="margin:0; white-space: pre; overflow-x: auto;">
+                    INPUTS                          OPENBRAIN CORE                         OUTPUTS
+              ┌─────────────┐                 ┌──────────────────────────┐          ┌──────────────────┐
+              │  Telegram    │─── webhook ────▶│                          │─── msg ─▶│  Telegram Reply  │
+              │  @ruhi_bot   │                 │      CHAT HANDLER        │          │  (+ inline btns) │
+              └─────────────┘                 │  (webhooks.js/ruhi-chat) │          └──────────────────┘
+              ┌─────────────┐                 │                          │          ┌──────────────────┐
+              │  Web Chat    │─── SSE/API ───▶│  Claude Sonnet 4.6       │─── SSE ─▶│  Web Chat Reply  │
+              │  ruhi.ikawn  │                 │  + tool_use:             │          └──────────────────┘
+              └─────────────┘                 │    - manage_task         │
+              ┌─────────────┐                 │    - web_search          │
+              │  MCP Server  │─── stdio ─────▶│    - recall_memory       │
+              │  Claude Desk │                 │    - notify              │
+              └─────────────┘                 └───────────┬──────────────┘
+                                                          │
+                                                 task CRUD ops
+                                                          │
+                                                          ▼
+                                              ┌──────────────────────┐
+                                              │   SCHEDULED_TASKS    │◀──── Conversational
+                                              │   (Postgres table)   │      create/stop/list
+                                              └──────────┬───────────┘
+                                                         │
+                                                   every 30s
+                                                         │
+                                                         ▼
+                                              ┌──────────────────────┐
+                                              │   TASK SCHEDULER     │
+                                              │   (scheduler.js)     │
+                                              │                      │
+                                              │  due? → route:       │
+                                              └───┬────────────┬─────┘
+                                                  │            │
+                                          TIER 1  │            │  TIER 2
+                                          (direct)│            │  (agent)
+                                                  ▼            ▼
+                                    ┌──────────────┐  ┌──────────────────┐
+                                    │ TOOL RUNNER   │  │ AGENT EXECUTOR   │
+                                    │               │  │                  │
+                                    │ tool.execute()│  │ Claude + Tools   │
+                                    │ No LLM cost   │  │ Plan → Execute   │
+                                    │ Fast & cheap   │  │ Approval gates   │
+                                    └───────┬───────┘  └────────┬─────────┘
+                                            │                   │
+                                            └─────────┬─────────┘
+                                                      │
+                                                      ▼
+                                         ┌─────────────────────────┐
+                                         │      TOOL REGISTRY      │
+                                         │   src/tools/*.tool.js   │
+                                         ├─────────────────────────┤
+                                         │ calendar_read   (GCal)  │
+                                         │ calendar_create (GCal)  │
+                                         │ gmail_read      (Gmail) │
+                                         │ gmail_draft     (Gmail) │
+                                         │ gmail_send      (Gmail) │
+                                         │ ga_report       (GA4)   │
+                                         │ ga_analyze      (GA4)   │
+                                         │ ikawn_generate  (OS)    │
+                                         │ web_search    (Claude)  │
+                                         │ content_draft  (Claude) │
+                                         │ notify       (Telegram) │
+                                         │ system_status  (self)   │
+                                         └─────────┬───────────────┘
+                                                   │
+                                    ┌──────────────┼──────────────┐
+                                    ▼              ▼              ▼
+                            ┌─────────────┐ ┌──────────┐ ┌──────────────┐
+                            │ Google APIs  │ │ ikawn OS │ │  Anthropic   │
+                            │ Calendar     │ │ External │ │  Claude API  │
+                            │ Gmail       │ │ Generate │ │  (+ OpenAI   │
+                            │ Analytics   │ │ API      │ │   fallback)  │
+                            └─────────────┘ └──────────┘ └──────────────┘
+
+                                         ┌─────────────────────────┐
+                                         │      TASK_RUNS          │
+                                         │   (execution log)       │
+                                         │                         │
+                                         │ Every run logged:       │
+                                         │ - result/error          │
+                                         │ - cost_usd/tokens       │
+                                         │ - approval status       │
+                                         │ - artifacts created     │
+                                         └─────────────────────────┘
+
+                                         ┌─────────────────────────┐
+                                         │   EXISTING WORKERS      │
+                                         │   (unchanged)           │
+                                         ├─────────────────────────┤
+                                         │ Embedding    (5s)       │
+                                         │ Moderation   (30s)      │
+                                         │ Distillation (3am)      │
+                                         │ Mothership   (2am)      │
+                                         │ Intelligence (6h)       │
+                                         └─────────────────────────┘
+</pre>
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>Key Design Decisions</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Single Process</h4>
+      <p style="margin: 0; font-size: 14px;">Everything runs in the same Express process. No separate worker process, no Redis, no message broker. Fly.io's single machine handles it. Scale later if needed.</p>
+    </div>
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Postgres is the Queue</h4>
+      <p style="margin: 0; font-size: 14px;">No Bull, no BeeQueue, no Redis. <code>scheduled_tasks</code> + <code>next_run_at</code> + polling = good enough for dozens of tasks. Advisory locks prevent double-execution.</p>
+    </div>
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Tools are Files</h4>
+      <p style="margin: 0; font-size: 14px;">Drop a <code>.tool.js</code> file → it's available to both scheduler and Claude. Standard interface means browser extension is just another tool file.</p>
+    </div>
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Approval is Async</h4>
+      <p style="margin: 0; font-size: 14px;">Tier 2 tasks that need approval don't block the scheduler. They pause, notify via Telegram, and resume when the user responds. Callback via Telegram inline buttons.</p>
+    </div>
+  </div>
+</div>

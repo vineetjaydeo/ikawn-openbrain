@@ -1,7 +1,7 @@
 {
   "name": "ikawn-openbrain",
-  "version": "2.3.0",
-  "description": "Personal AI memory system with vector database and MCP server",
+  "version": "2.3.4",
+  "description": "iKawn's Enterprise AI Intelligence Layer — memory, RAG, chat, agent platform",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

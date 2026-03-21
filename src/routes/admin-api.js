@@ -1,11 +1,87 @@
 const { Router } = require('express');
 const bcrypt = require('bcryptjs');
-const { requireAdmin } = require('../auth');
+const { requireAdmin, requireAuthOrApiKey } = require('../auth');
 const { pool } = require('../db');
+const { getEmbedding } = require('../embeddings');
 
 const router = Router();
 
-// All admin routes require admin role
+// ── Cross-Brain Sync endpoint (API key auth, not admin) ──
+router.post('/api/sync/receive', requireAuthOrApiKey, async (req, res) => {
+  const { memories } = req.body;
+  if (!Array.isArray(memories) || memories.length === 0) {
+    return res.status(400).json({ error: 'memories array required' });
+  }
+
+  const CONFIDENCE_FACTOR = 0.8; // Reduce confidence for synced knowledge
+  const SIMILARITY_THRESHOLD = 0.85;
+  let accepted = 0;
+  let skipped = 0;
+
+  for (const mem of memories) {
+    if (!mem.content || !mem.memory_type) {
+      skipped++;
+      continue;
+    }
+
+    const adjustedConfidence = Math.round((mem.confidence || 0.5) * CONFIDENCE_FACTOR * 100) / 100;
+    const sourceRef = mem.source_ref || `lucy-sync-${new Date().toISOString().slice(0, 10)}`;
+
+    try {
+      // Generate embedding for similarity check
+      let embedding;
+      try {
+        embedding = await getEmbedding(mem.content);
+      } catch {
+        // Insert without embedding, let worker pick it up
+        await pool.query(`
+          INSERT INTO distilled_memory (
+            brand_id, user_id, memory_type, content, confidence,
+            source_event_ids, reasoning, embedding_status
+          ) VALUES ('ikawn', NULL, $1, $2, $3, $4, $5, 'pending')
+        `, [mem.memory_type, mem.content, adjustedConfidence, [sourceRef], mem.reasoning || '']);
+        accepted++;
+        continue;
+      }
+
+      // Check for similar existing memories
+      const embeddingStr = `{${embedding.join(',')}}`;
+      const { rows: similar } = await pool.query(`
+        SELECT id, cosine_similarity(embedding, $1::float8[]) AS similarity
+        FROM distilled_memory
+        WHERE memory_type = $2
+          AND superseded_by IS NULL
+          AND embedding IS NOT NULL
+          AND user_id IS NULL
+        ORDER BY cosine_similarity(embedding, $1::float8[]) DESC
+        LIMIT 1
+      `, [embeddingStr, mem.memory_type]);
+
+      if (similar.length > 0 && similar[0].similarity > SIMILARITY_THRESHOLD) {
+        skipped++; // Already know this
+        continue;
+      }
+
+      await pool.query(`
+        INSERT INTO distilled_memory (
+          brand_id, user_id, memory_type, content, confidence,
+          source_event_ids, reasoning, embedding, embedding_status
+        ) VALUES ('ikawn', NULL, $1, $2, $3, $4, $5, $6::float8[], 'done')
+      `, [
+        mem.memory_type, mem.content, adjustedConfidence,
+        [sourceRef], mem.reasoning || '', embeddingStr,
+      ]);
+      accepted++;
+    } catch (err) {
+      console.error('[SyncReceive] Failed to process memory:', err.message);
+      skipped++;
+    }
+  }
+
+  res.json({ accepted, skipped, total: memories.length });
+});
+
+// All admin routes below require admin role
 router.use(requireAdmin);
 
 // List all users

@@ -232,7 +232,7 @@ Extract durable knowledge that should persist beyond these individual events.
 Return ONLY a JSON array (no markdown, no preamble):
 [
   {
-    "memory_type": "<one of: USER_PREFERENCE, BRAND_VOICE_RULE, BUSINESS_INSIGHT, WORKFLOW_PATTERN, CORRECTION, CREATIVE_PATTERN, CONTENT_STRATEGY, AUDIENCE_INSIGHT, PERFORMANCE_INSIGHT>",
+    "memory_type": "<one of: USER_PREFERENCE, BRAND_VOICE_RULE, BUSINESS_INSIGHT, WORKFLOW_PATTERN, CORRECTION, CREATIVE_PATTERN, CONTENT_STRATEGY, AUDIENCE_INSIGHT, PERFORMANCE_INSIGHT, MARKET_INTELLIGENCE, SEO_UPDATE, AD_STRATEGY, PLATFORM_UPDATE>",
     "content": "clear, actionable statement",
     "confidence": <number 0.3-0.95>,
     "reasoning": "what evidence supports this"
@@ -420,7 +420,10 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
     }
 
     // Per-type cap: max 30 voice rules, 20 creative patterns, 50 total per brand
-    const TYPE_CAPS = { BRAND_VOICE_RULE: 30, CREATIVE_PATTERN: 20 };
+    const TYPE_CAPS = {
+      BRAND_VOICE_RULE: 30, CREATIVE_PATTERN: 20,
+      MARKET_INTELLIGENCE: 20, SEO_UPDATE: 20, AD_STRATEGY: 20, PLATFORM_UPDATE: 20,
+    };
     const typeCap = TYPE_CAPS[insight.memory_type];
     if (typeCap) {
       const capParams = effectiveUserId != null ? [brandId, insight.memory_type, effectiveUserId] : [brandId, insight.memory_type];

@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { requireAuth } = require('../auth');
-const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
+const { RUHI_FAVICON_LINK, RUHI_ICON_URL, INSTANCE_NAME } = require('../utils/ruhi-assets');
 const { getSpacetimeBg } = require('../utils/spacetime-bg');
 
 const router = Router();
@@ -22,7 +22,7 @@ function chatPage(user) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="robots" content="noindex, nofollow">
-  <title>OpenBrain | Ruhi by iKawn</title>
+  <title>Lucy | iKawn Intelligence</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -365,6 +365,10 @@ function chatPage(user) {
       flex-direction: column;
       min-width: 0;
       position: relative;
+      background: var(--bg);
+    }
+    .main.in-chat {
+      background: linear-gradient(to bottom, rgb(30,30,30), rgb(22,22,22));
     }
 
     .main-header {
@@ -408,9 +412,7 @@ function chatPage(user) {
       flex: 1;
       overflow-y: auto;
       padding: 0;
-      background:
-        radial-gradient(ellipse 120% 40% at 50% 57%, rgba(25,25,35,0.5) 0%, rgba(5,5,5,0) 70%),
-        var(--bg);
+      background: transparent;
     }
     .messages::-webkit-scrollbar { width: 5px; }
     .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -825,7 +827,7 @@ function chatPage(user) {
     .input-area {
       position: sticky;
       bottom: 0;
-      background: linear-gradient(transparent, var(--bg) 20%);
+      background: linear-gradient(transparent, rgb(14,14,14) 20%);
       padding: 8px 20px 20px;
     }
 
@@ -923,15 +925,15 @@ function chatPage(user) {
       display: flex;
       align-items: flex-end;
       gap: 8px;
-      background: var(--bg-input);
-      border: 1px solid var(--border);
+      background: rgb(5,5,5);
+      border: 1px solid rgb(35,35,35);
       border-radius: 24px;
       padding: 10px 14px;
       transition: all 0.2s ease;
     }
     .compose:focus-within {
-      border-color: rgb(70,70,70);
-      box-shadow: 0 0 0 2px rgba(255,255,255,0.04);
+      border-color: rgb(55,55,55);
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.03);
     }
 
     .compose-btn {
@@ -1337,7 +1339,7 @@ function chatPage(user) {
 
     <!-- Icon Rail (always visible on desktop) -->
     <nav class="sidebar-rail" id="sidebar-rail" onclick="toggleSidebar()">
-      <div class="rail-logo" title="Ruhi" onclick="event.stopPropagation(); goHome()" style="cursor:pointer">
+      <div class="rail-logo" title="Lucy" onclick="event.stopPropagation(); goHome()" style="cursor:pointer">
         \u2726
       </div>
 
@@ -1370,7 +1372,7 @@ function chatPage(user) {
     <!-- Expanded Sidebar Panel (toggled) -->
     <aside class="sidebar-panel" id="sidebar-panel">
       <div class="panel-header">
-        <div class="panel-brand"><span class="sparkle">\u2726</span> Ruhi</div>
+        <div class="panel-brand"><span class="sparkle">\u2726</span> ${INSTANCE_NAME}</div>
         <button class="panel-collapse" onclick="closeSidebar()" title="Collapse">&laquo;</button>
       </div>
 
@@ -1443,7 +1445,7 @@ function chatPage(user) {
         <div class="messages-inner" id="messages-inner">
           <div class="welcome-screen" id="welcome">
             ${SPACETIME_HTML}
-            <div class="welcome-logo"><span class="sparkle">\u2726</span> Ruhi</div>
+            <div class="welcome-logo"><span class="sparkle">\u2726</span> Lucy</div>
             <div class="welcome-tagline" id="welcome-tagline"></div>
           </div>
         </div>
@@ -1461,7 +1463,7 @@ function chatPage(user) {
             <button class="compose-btn" onclick="openGalleryPicker()" title="Choose from gallery">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             </button>
-            <textarea id="msg-input" rows="1" placeholder="Talk to Ruhi..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
+            <textarea id="msg-input" rows="1" placeholder="Talk to ${INSTANCE_NAME}..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
             <button class="compose-btn model-toggle" id="model-toggle" onclick="toggleModel()" title="Toggle model"></button>
             <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled style="display:none">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
@@ -1862,6 +1864,7 @@ function chatPage(user) {
         const data = await res.json();
         activeConvId = id;
         currentShareToken = data.share_token || null;
+        document.querySelector('.main').classList.add('in-chat');
         renderMessages(data.messages || []);
         document.getElementById('header-title').textContent = data.title || 'New Chat';
         if (window.location.pathname !== '/chat/' + id) {
@@ -1944,6 +1947,7 @@ function chatPage(user) {
 
     /* ==================== MESSAGES ==================== */
     function clearMessages() {
+      document.querySelector('.main').classList.remove('in-chat');
       const container = document.getElementById('messages-inner');
       container.textContent = '';
       const welcome = document.createElement('div');
@@ -1958,7 +1962,7 @@ function chatPage(user) {
       sparkle.className = 'sparkle';
       sparkle.textContent = '\\u2726';
       logo.appendChild(sparkle);
-      logo.appendChild(document.createTextNode(' Ruhi'));
+      logo.appendChild(document.createTextNode(' ${INSTANCE_NAME}'));
       const tagline = document.createElement('div');
       tagline.className = 'welcome-tagline';
       tagline.id = 'welcome-tagline';
@@ -1986,7 +1990,7 @@ function chatPage(user) {
       replyToContent = content;
       replyToRole = role;
       const container = document.getElementById('reply-preview-container');
-      const sender = role === 'assistant' ? 'Ruhi' : 'You';
+      const sender = role === 'assistant' ? '${INSTANCE_NAME}' : 'You';
       const preview = content.replace(/<[^>]*>/g, '').slice(0, 120);
 
       container.textContent = '';
@@ -2022,7 +2026,7 @@ function chatPage(user) {
       const row = document.createElement('div');
       row.className = 'msg-row ' + role;
 
-      const avatarChar = role === 'assistant' ? 'R' : (USER.name ? USER.name[0].toUpperCase() : USER.email[0].toUpperCase());
+      const avatarChar = role === 'assistant' ? '${INSTANCE_NAME[0]}' : (USER.name ? USER.name[0].toUpperCase() : USER.email[0].toUpperCase());
       const avatarClass = role === 'assistant' ? 'assistant-avatar' : 'user-avatar';
 
       const avatar = document.createElement('div');
@@ -2096,7 +2100,7 @@ function chatPage(user) {
       }
 
       const welcome = document.getElementById('welcome');
-      if (welcome) welcome.remove();
+      if (welcome) { welcome.remove(); document.querySelector('.main').classList.add('in-chat'); }
 
       const attachments = pendingAttachments.map(a => ({ type: a.type, url: a.url, filename: a.filename, name: a.name, extracted_text: a.extracted_text || undefined }));
       const container = document.getElementById('messages-inner');
@@ -2113,7 +2117,7 @@ function chatPage(user) {
 
       var mentionMatch = content.match(/@(\\w+)/);
       var mentionAgent = mentionMatch ? mentionList.find(function(m) { return m.slug.toLowerCase() === mentionMatch[1].toLowerCase() && m.type === 'agent'; }) : null;
-      var typingAvatar = mentionAgent ? mentionAgent.name[0].toUpperCase() : 'R';
+      var typingAvatar = mentionAgent ? mentionAgent.name[0].toUpperCase() : '${INSTANCE_NAME[0]}';
       var typingLabel = mentionAgent ? mentionAgent.name + ' is thinking' : 'Thinking';
       if (mentionAgent) window._currentAgentIdentity = { slug: mentionAgent.slug, name: mentionAgent.name, role: mentionAgent.role };
 
@@ -2153,7 +2157,7 @@ function chatPage(user) {
           body: JSON.stringify({
             conversation_id: activeConvId,
             content: replyToContent
-              ? '[Replying to ' + (replyToRole === 'assistant' ? 'Ruhi' : 'my previous message') + ': "' + replyToContent.slice(0, 200) + '"]\\n\\n' + content
+              ? '[Replying to ' + (replyToRole === 'assistant' ? '${INSTANCE_NAME}' : 'my previous message') + ': "' + replyToContent.slice(0, 200) + '"]\\n\\n' + content
               : content,
             attachments,
             use_secondary: useSecondaryModel,
@@ -2199,6 +2203,20 @@ function chatPage(user) {
                   if (label) label.textContent = evt.name + ' is thinking';
                 }
                 window._currentAgentIdentity = evt;
+              } else if (evt.type === 'tool_start') {
+                // Show tool activity indicator
+                const typing = document.getElementById('typing');
+                if (typing) {
+                  const label = typing.querySelector('.typing-label');
+                  if (label) label.textContent = 'Working on it...';
+                }
+              } else if (evt.type === 'tool_done') {
+                // Tool finished — typing indicator will be replaced by response
+                const typing = document.getElementById('typing');
+                if (typing) {
+                  const label = typing.querySelector('.typing-label');
+                  if (label) label.textContent = 'Finishing up...';
+                }
               } else if (evt.type === 'chunk' && evt.text) {
                 if (firstChunk) {
                   firstChunk = false;
@@ -2207,7 +2225,7 @@ function chatPage(user) {
                   assistantRow = document.createElement('div');
                   assistantRow.className = 'msg-row assistant';
                   const agentId = window._currentAgentIdentity;
-                  const avatarChar = agentId ? agentId.name[0].toUpperCase() : 'R';
+                  const avatarChar = agentId ? agentId.name[0].toUpperCase() : '${INSTANCE_NAME[0]}';
                   const avatarEl = document.createElement('div');
                   avatarEl.className = 'msg-avatar assistant-avatar';
                   avatarEl.textContent = avatarChar;
@@ -2266,7 +2284,7 @@ function chatPage(user) {
 
       const avatar = document.createElement('div');
       avatar.className = 'msg-avatar assistant-avatar';
-      avatar.textContent = 'R';
+      avatar.textContent = '${INSTANCE_NAME[0]}';
 
       const genCard = document.createElement('div');
       genCard.className = 'gen-card';

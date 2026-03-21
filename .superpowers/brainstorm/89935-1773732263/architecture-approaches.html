@@ -1,0 +1,91 @@
+<h2>Ruhi Agent Architecture: 3 Approaches</h2>
+<p class="subtitle">How to evolve OpenBrain from a memory/chat system into an autonomous agent platform</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Task Queue + Worker Pool</h3>
+      <p><strong>Pattern:</strong> Like a job queue (Bull/BeeQueue style) but in-process with Postgres as the backing store.</p>
+      <ul>
+        <li><strong>DB table:</strong> <code>tasks</code> — stores scheduled, triggered, and on-demand tasks with cron expressions, status, next_run_at</li>
+        <li><strong>Task Runner:</strong> Single interval (every 30s) checks for due tasks, executes them sequentially</li>
+        <li><strong>Tools:</strong> Each task type maps to a tool function (gmail_read, calendar_create, ikawn_generate, web_search)</li>
+        <li><strong>LLM decides:</strong> Task execution calls Claude with tool definitions — LLM picks which tools to use and chains them</li>
+        <li><strong>Approval gate:</strong> Tasks with <code>requires_approval</code> pause and notify via Telegram before executing</li>
+      </ul>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Simple — fits existing Express + Postgres stack</li>
+          <li>No new infrastructure (no Redis, no queues)</li>
+          <li>Easy to inspect/debug (just query the tasks table)</li>
+          <li>Approval flow is just a status change</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Sequential execution — one slow task blocks others</li>
+          <li>Single process = single point of failure</li>
+          <li>No parallel task execution without complexity</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Agent Loop with Tool Belt</h3>
+      <p><strong>Pattern:</strong> Like OpenClaw's agent architecture — a persistent reasoning loop that wakes on schedule or trigger, thinks, acts, reports.</p>
+      <ul>
+        <li><strong>Agent Loop:</strong> A dedicated "Ruhi Agent" process that runs continuously, checking a schedule table + event triggers</li>
+        <li><strong>Tool Belt:</strong> Modular tool registry — each tool is a file (gmail.tool.js, calendar.tool.js, ikawn-os.tool.js) with a standard interface</li>
+        <li><strong>Planner LLM:</strong> When a task fires, Claude gets the task context + available tools + memory → produces an execution plan</li>
+        <li><strong>Executor:</strong> Runs the plan step by step, pausing at approval gates</li>
+        <li><strong>Sessions:</strong> Each task execution gets its own conversation context (like OpenClaw's isolated sessions)</li>
+      </ul>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>True agent behavior — Ruhi reasons about HOW to accomplish tasks</li>
+          <li>Tool belt is extensible (add browser tool later, just drop in a file)</li>
+          <li>Session isolation prevents cross-task contamination</li>
+          <li>Natural path to full autonomy (A-mode)</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>More complex — agent loop, planner, executor are new abstractions</li>
+          <li>Higher LLM cost per task (planning step + execution)</li>
+          <li>Harder to debug when agent makes bad plans</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid: Simple Scheduler + LLM Agent for Complex Tasks</h3>
+      <p><strong>Pattern:</strong> Two-tier system. Simple tasks run directly (no LLM). Complex tasks get the full agent treatment.</p>
+      <ul>
+        <li><strong>Tier 1 (Direct):</strong> Cron-style tasks that don't need reasoning — "fetch calendar every 2h", "check GA daily", "send cost report". Just run the function.</li>
+        <li><strong>Tier 2 (Agent):</strong> Tasks that need thinking — "research competitors", "draft social content", "analyze this GA anomaly". These get Claude + tools + approval gates.</li>
+        <li><strong>Scheduler:</strong> Postgres-backed, checks every 30s, routes to Tier 1 or Tier 2 based on task type</li>
+        <li><strong>Tool Registry:</strong> Same modular tool files as Approach B, but Tier 1 tasks call tools directly without LLM</li>
+        <li><strong>Conversational control:</strong> "Schedule X" / "Stop X" parsed by Claude in chat → creates/modifies task rows</li>
+      </ul>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Cost efficient — simple tasks cost $0 in LLM calls</li>
+          <li>Fast — Tier 1 tasks execute instantly, no planning overhead</li>
+          <li>Reliable — calendar fetch doesn't need Claude to succeed</li>
+          <li>Still gets full agent intelligence for complex work</li>
+          <li>Tool belt ready for browser extension later</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Must classify each task as Tier 1 or Tier 2 upfront</li>
+          <li>Two execution paths = two sets of error handling</li>
+        </ul></div>
+      </div>
+      <p style="margin-top: 12px; padding: 8px 12px; background: rgba(255, 192, 28, 0.1); border-left: 3px solid #FFC01C; border-radius: 4px;">
+        <strong>Recommended.</strong> This is how production agent systems work. Don't burn tokens fetching a calendar. Save the intelligence for decisions.
+      </p>
+    </div>
+  </div>
+</div>

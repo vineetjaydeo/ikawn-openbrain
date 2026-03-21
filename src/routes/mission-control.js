@@ -3,7 +3,7 @@ const { pool } = require('../db');
 const { requireAuth, requireAdmin } = require('../auth');
 const { getTools } = require('../tools/registry');
 const { calculateNextRun } = require('../utils/schedule');
-const { RUHI_FAVICON_LINK } = require('../utils/ruhi-assets');
+const { RUHI_FAVICON_LINK, INSTANCE_NAME } = require('../utils/ruhi-assets');
 
 const router = Router();
 
@@ -304,7 +304,7 @@ function missionPage(isAdmin) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>OpenBrain | Mission Control</title>
+  <title>${INSTANCE_NAME} | Mission Control</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -569,7 +569,7 @@ function missionPage(isAdmin) {
         <a class="nav-link" data-tab="org" onclick="switchTab('org', this)">Organization</a>
       </div>
     </div>
-    <a class="back-link" href="/">&larr; Back to Ruhi</a>
+    <a class="back-link" href="/">&larr; Back to ${INSTANCE_NAME}</a>
   </nav>
 
   <div class="container">
@@ -1206,7 +1206,7 @@ function missionPage(isAdmin) {
       var td = document.createElement('td');
       td.colSpan = 7;
       td.className = 'empty-state';
-      td.textContent = 'No user tasks yet. Ruhi creates these when you ask her to relay work to someone.';
+      td.textContent = 'No user tasks yet. ${INSTANCE_NAME} creates these when you ask her to relay work to someone.';
       tr.appendChild(td);
       tbody.appendChild(tr);
       return;

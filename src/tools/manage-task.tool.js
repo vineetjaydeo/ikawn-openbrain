@@ -6,16 +6,16 @@ const { calculateNextRun } = require('../utils/schedule');
 
 module.exports = {
   name: 'manage_task',
-  description: 'Create, list, enable, disable, delete, or immediately run scheduled tasks',
+  description: 'Create, list, update, enable, disable, delete, or immediately run scheduled tasks. For research or complex tasks, use tool="agent" which delegates to an AI agent with web search. For simple tool-based tasks, specify the exact tool name.',
   tier: 'direct',
   parameters: {
     action: { type: 'string', required: true, description: 'Action', enum: ['create', 'list', 'enable', 'disable', 'delete', 'run_now', 'update'] },
     task_uuid: { type: 'string', required: false, description: 'Task UUID (for enable/disable/delete/run_now/update)' },
     name: { type: 'string', required: false, description: 'Task name (for create)' },
-    tool: { type: 'string', required: false, description: 'Tool to execute (for create)' },
+    tool: { type: 'string', required: false, description: 'Tool to execute. Use "agent" for research/complex tasks that need AI reasoning with web search. Use specific tool names (e.g. "web_search", "brand_analysis") for simple direct tasks.' },
     agent_slug: { type: 'string', required: false, description: 'Agent slug (default: ruhi)' },
     tier: { type: 'string', required: false, description: 'direct or agent', enum: ['direct', 'agent'] },
-    schedule_type: { type: 'string', required: false, description: 'Schedule type', enum: ['cron', 'interval', 'once', 'trigger'] },
+    schedule_type: { type: 'string', required: false, description: 'Schedule type: "once" for one-time tasks, "interval" for recurring, "cron" for cron-based, "trigger" for event-driven', enum: ['cron', 'interval', 'once', 'trigger'] },
     interval_minutes: { type: 'number', required: false, description: 'Interval in minutes' },
     cron_expression: { type: 'string', required: false, description: 'Cron expression' },
     trigger_event: { type: 'string', required: false, description: 'Event name for trigger type' },
@@ -38,12 +38,18 @@ module.exports = {
       }
 
       case 'create': {
-        if (!config.name || !config.tool || !config.schedule_type) {
-          return { success: false, data: null, summary: 'Missing required fields: name, tool, schedule_type' };
+        // Normalize common LLM mistakes
+        if (config.schedule_type === 'one_time') config.schedule_type = 'once';
+        if (!config.name || !config.schedule_type) {
+          return { success: false, data: null, summary: 'Missing required fields: name, schedule_type' };
         }
-        // Validate tool exists
+        // If tool is 'agent' or missing, this is a Tier 2 agent task (LLM reasoning, not direct tool)
+        // Use a placeholder tool — the scheduler's agent executor handles the actual work via the description
         const { getTool } = require('./registry');
-        if (!getTool(config.tool)) {
+        if (!config.tool || config.tool === 'agent' || config.tool === 'research') {
+          config.tier = 'agent';
+          config.tool = 'web_search'; // Placeholder — agent executor uses description + agent persona, not this tool directly
+        } else if (!getTool(config.tool)) {
           return { success: false, data: null, summary: `Unknown tool: "${config.tool}". Use 'list' action to see available tools.` };
         }
         const task = {

@@ -1,0 +1,127 @@
+<h2>Ruhi as Agentic C-Suite</h2>
+<p class="subtitle">Each business function is a specialized agent. Ruhi orchestrates them all.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Agent Hierarchy</div>
+  <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.6; padding: 24px; background: #0d1117; color: #c9d1d9;">
+<pre style="margin:0; white-space: pre; overflow-x: auto;">
+                              ┌─────────────────────┐
+                              │       RUHI           │
+                              │   Chief of Staff     │
+                              │                      │
+                              │ Orchestrates agents  │
+                              │ Routes tasks         │
+                              │ Resolves conflicts   │
+                              │ Reports to human     │
+                              └──────────┬───────────┘
+                                         │
+                    ┌────────────┬────────┼────────┬────────────┐
+                    │            │        │        │            │
+                    ▼            ▼        ▼        ▼            ▼
+          ┌──────────────┐ ┌─────────┐ ┌──────┐ ┌──────────┐ ┌──────────┐
+          │   MARKETING  │ │  SALES  │ │  R&D │ │    HR    │ │ FINANCE  │
+          │   Agent      │ │  Agent  │ │ Agent│ │  Agent   │ │  Agent   │
+          ├──────────────┤ ├─────────┤ ├──────┤ ├──────────┤ ├──────────┤
+          │ Social media │ │ Lead    │ │ Comp-│ │ Hiring   │ │ Expense  │
+          │ Content plan │ │ qualify │ │ etit-│ │ pipeline │ │ tracking │
+          │ Campaign     │ │ Outreach│ │ or   │ │ Onboard  │ │ Budget   │
+          │ GA analysis  │ │ CRM     │ │ rsrch│ │ Culture  │ │ Forecast │
+          │ SEO/SEM      │ │ Pipeline│ │ Trend│ │ Perf     │ │ Invoice  │
+          │ Brand voice  │ │ Follow  │ │ gaps │ │ review   │ │ P&L      │
+          │ Influencer   │ │ up      │ │ Innov│ │ Policies │ │ Cash     │
+          └──────────────┘ └─────────┘ └──────┘ └──────────┘ └──────────┘
+                    │            │        │        │            │
+                    └────────────┴────────┼────────┴────────────┘
+                                         │
+                                         ▼
+                              ┌─────────────────────┐
+                              │    SHARED LAYER      │
+                              ├─────────────────────┤
+                              │ Tool Registry        │
+                              │ Memory (RAG)         │
+                              │ Governance (budget)  │
+                              │ Task Scheduler       │
+                              │ Approval Queue       │
+                              └─────────────────────┘
+</pre>
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>How Domain Agents Work</h3>
+  <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px;">
+
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Each Agent = Persona + Tools + Memory Scope</h4>
+      <p style="margin: 0; font-size: 14px;">A domain agent is NOT a separate process. It's a <strong>system prompt + tool subset + memory filter</strong> that runs within the same executor. The <code>agents/</code> directory holds persona files that define each agent's expertise, tone, and tool access.</p>
+    </div>
+
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Ruhi Routes, Agents Execute</h4>
+      <p style="margin: 0; font-size: 14px;">When a Tier 2 task fires, Ruhi (the orchestrator) decides which agent handles it. "Analyze GA drop" → Marketing Agent. "Research competitor pricing" → R&D Agent. "Draft follow-up email to lead" → Sales Agent. The agent gets its own system prompt, relevant memories, and tool subset.</p>
+    </div>
+
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Cross-Agent Collaboration</h4>
+      <p style="margin: 0; font-size: 14px;">Agents can request work from each other via Ruhi. Marketing: "I need product images for the summer campaign" → Ruhi routes to R&D (creative) → ikawn_generate tool → images back to Marketing for posting. All through the same task queue.</p>
+    </div>
+
+    <div style="padding: 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+      <h4 style="color: #FFC01C; margin: 0 0 8px;">Enterprise Multi-Tenant</h4>
+      <p style="margin: 0; font-size: 14px;">Each brand gets the same agent suite, scoped by <code>brand_id</code>. MaxFashion's Marketing Agent only sees MaxFashion's memories, GA data, and content. iKawn (V) gets all agents with full access. The agent definitions are shared — the data is isolated.</p>
+    </div>
+
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>Agent Definitions (DB-driven, not hardcoded)</h3>
+  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+    <thead>
+      <tr style="border-bottom: 2px solid rgba(255,255,255,0.2);">
+        <th style="text-align: left; padding: 8px; color: #FFC01C;">Agent</th>
+        <th style="text-align: left; padding: 8px; color: #FFC01C;">Role</th>
+        <th style="text-align: left; padding: 8px; color: #FFC01C;">Primary Tools</th>
+        <th style="text-align: left; padding: 8px; color: #FFC01C;">Phase</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 8px;">Ruhi (Chief of Staff)</td>
+        <td style="padding: 8px;">Orchestration, routing, conflict resolution, human interface</td>
+        <td style="padding: 8px;">All tools, manage_task, notify</td>
+        <td style="padding: 8px; color: #4ade80;">Phase 1</td>
+      </tr>
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 8px;">Marketing</td>
+        <td style="padding: 8px;">Content strategy, social media, GA analysis, brand voice, campaigns</td>
+        <td style="padding: 8px;">ga_report, ga_analyze, content_draft, ikawn_generate, social_publish</td>
+        <td style="padding: 8px; color: #4ade80;">Phase 1</td>
+      </tr>
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 8px;">Sales</td>
+        <td style="padding: 8px;">Lead qualification, outreach, pipeline management, follow-ups</td>
+        <td style="padding: 8px;">gmail_read, gmail_draft, gmail_send, web_search, crm_update</td>
+        <td style="padding: 8px; color: #facc15;">Phase 2</td>
+      </tr>
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 8px;">R&D</td>
+        <td style="padding: 8px;">Competitor research, market trends, product gaps, innovation</td>
+        <td style="padding: 8px;">web_search, ga_analyze, content_draft, ikawn_generate</td>
+        <td style="padding: 8px; color: #facc15;">Phase 2</td>
+      </tr>
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 8px;">Finance</td>
+        <td style="padding: 8px;">Cost monitoring, budget tracking, forecasting, P&L</td>
+        <td style="padding: 8px;">system_status, ga_report, expense_track, invoice_scan</td>
+        <td style="padding: 8px; color: #f87171;">Phase 3</td>
+      </tr>
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <td style="padding: 8px;">HR</td>
+        <td style="padding: 8px;">Hiring pipeline, onboarding, performance, culture</td>
+        <td style="padding: 8px;">gmail_read, calendar_create, docs_write, web_search</td>
+        <td style="padding: 8px; color: #f87171;">Phase 3</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

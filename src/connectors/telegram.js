@@ -2,6 +2,7 @@ const { pool } = require('../db');
 const { uploadToR2 } = require('../utils/storage');
 const { extractText } = require('../utils/doc-parser');
 const { suggestHashtags } = require('../utils/hashtags');
+const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -70,7 +71,7 @@ async function transcribeAudio(buffer, ext) {
  */
 async function processMessage(msg, brandId) {
   const isBot = msg.from?.is_bot;
-  const sender = isBot ? 'Ruhi' : (msg.from?.first_name || 'Vineet');
+  const sender = isBot ? INSTANCE_NAME : (msg.from?.first_name || 'Vineet');
   const entry = { sender, text: msg.text || msg.caption || '', attachments: [], timestamp: msg.date };
 
   try {

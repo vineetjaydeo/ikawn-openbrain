@@ -3,6 +3,7 @@
 
 const { pool } = require('../db');
 const { captureEvent } = require('./capture');
+const { INSTANCE_NAME } = require('./ruhi-assets');
 
 /**
  * Action types that ALWAYS require human approval regardless of confidence.
@@ -365,7 +366,7 @@ async function reviewAction(params) {
     });
 
     console.log(`[Governance] Rejected by ${reviewedBy}: ${action.action_type} (${actionQueueId})`);
-    return { success: true, message: 'Rejected. Budget refunded. Ruhi will learn from this.' };
+    return { success: true, message: `Rejected. Budget refunded. ${INSTANCE_NAME} will learn from this.` };
   }
 
   if (decision === 'revision_requested') {
@@ -379,7 +380,7 @@ async function reviewAction(params) {
     `, [actionQueueId, reviewedBy, feedback || null]);
 
     console.log(`[Governance] Revision requested by ${reviewedBy}: ${action.action_type} (${actionQueueId})`);
-    return { success: true, message: 'Revision requested. Ruhi will revise and resubmit.' };
+    return { success: true, message: `Revision requested. ${INSTANCE_NAME} will revise and resubmit.` };
   }
 
   return { success: false, message: `Unknown decision: ${decision}` };

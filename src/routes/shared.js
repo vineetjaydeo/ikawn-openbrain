@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { pool } = require('../db');
-const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
+const { RUHI_FAVICON_LINK, RUHI_ICON_URL, INSTANCE_NAME } = require('../utils/ruhi-assets');
 
 const router = Router();
 
@@ -45,7 +45,7 @@ function notFoundPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="robots" content="noindex, nofollow">
-  <title>Not Found | Ruhi by iKawn</title>
+  <title>Not Found | ${INSTANCE_NAME} by iKawn</title>
   ${RUHI_FAVICON_LINK}
   <style>
     body { background: #0A0F2E; color: #E8EAF0; font-family: 'Google Sans', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
@@ -59,7 +59,7 @@ function notFoundPage() {
   <div class="msg">
     <h1>Conversation not found</h1>
     <p>This link may have been revoked or is invalid.</p>
-    <p style="margin-top:16px"><a href="/">Go to Ruhi</a></p>
+    <p style="margin-top:16px"><a href="/">Go to ${INSTANCE_NAME}</a></p>
   </div>
 </body>
 </html>`;
@@ -82,7 +82,7 @@ function sharedPage(conv, messages, authorName) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>${escapeHtml(title)} | Ruhi by iKawn</title>
+  <title>${escapeHtml(title)} | ${INSTANCE_NAME} by iKawn</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -222,7 +222,7 @@ function sharedPage(conv, messages, authorName) {
 <body>
   <div class="page-header">
     <div class="page-header-left">
-      <div class="brand-icon"><img src="${RUHI_ICON_URL}" alt="Ruhi"></div>
+      <div class="brand-icon"><img src="${RUHI_ICON_URL}" alt="${INSTANCE_NAME}"></div>
       <div>
         <div class="page-title">${escapeHtml(title)}</div>
         <div class="page-date">${date}</div>
@@ -234,7 +234,7 @@ function sharedPage(conv, messages, authorName) {
   <div class="messages-container" id="messages"></div>
 
   <div class="footer">
-    <a href="https://ikawn.com" target="_blank">Powered by Ruhi &mdash; iKawn</a>
+    <a href="https://ikawn.com" target="_blank">Powered by ${INSTANCE_NAME} &mdash; iKawn</a>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -272,7 +272,7 @@ function sharedPage(conv, messages, authorName) {
       meta.className = 'msg-meta';
       if (m.role === 'user') meta.style.textAlign = 'right';
 
-      const speaker = m.role === 'assistant' ? 'Ruhi' : esc(AUTHOR);
+      const speaker = m.role === 'assistant' ? '${INSTANCE_NAME}' : esc(AUTHOR);
       meta.innerHTML = speaker + ' <span class="msg-time">' + esc(m.time) + '</span>';
 
       const bubble = document.createElement('div');

@@ -3,6 +3,7 @@
 
 const { recall } = require('./recall');
 const { callReflectionLLM } = require('./llm');
+const { INSTANCE_NAME } = require('./ruhi-assets');
 
 /**
  * @typedef {Object} GenerateWithMemoryParams
@@ -67,7 +68,7 @@ async function generateWithMemory(params) {
     .join('\n');
 
   // 3. Build system prompt
-  const systemPrompt = systemPromptOverride || `You are Ruhi, generating content for a brand.
+  const systemPrompt = systemPromptOverride || `You are ${INSTANCE_NAME}, generating content for a brand.
 
 BRAND VOICE RULES (follow these strictly):
 ${voiceRules || 'None learned yet — use professional, clear tone.'}

@@ -8,6 +8,7 @@ const { calculateNextRun, isInActiveWindow } = require('./utils/schedule');
 const { sendTelegramMessage } = require('./utils/telegram');
 const eventBus = require('./utils/event-bus');
 const { captureMessage } = require('./utils/capture');
+const { INSTANCE_NAME } = require('./utils/ruhi-assets');
 
 let githubInterval = null;
 let calendarInterval = null;
@@ -131,18 +132,19 @@ async function runTaskScheduler() {
 async function deliverTaskResultToChat(task, result, runId) {
   if (!task.user_id) return; // No user to deliver to
   try {
-    // Find or create "Ruhi Updates" conversation for this user
+    // Find or create updates conversation for this user
+    const updatesTitle = `${INSTANCE_NAME} Updates`;
     let convResult = await pool.query(
-      `SELECT id FROM conversations WHERE user_id = $1 AND title = 'Ruhi Updates' LIMIT 1`,
-      [task.user_id]
+      `SELECT id FROM conversations WHERE user_id = $1 AND title IN ($2, 'Ruhi Updates') LIMIT 1`,
+      [task.user_id, updatesTitle]
     );
     let convId;
     if (convResult.rows.length > 0) {
       convId = convResult.rows[0].id;
     } else {
       const newConv = await pool.query(
-        `INSERT INTO conversations (user_id, title, uuid) VALUES ($1, 'Ruhi Updates', gen_random_uuid()) RETURNING id`,
-        [task.user_id]
+        `INSERT INTO conversations (user_id, title, uuid) VALUES ($1, $2, gen_random_uuid()) RETURNING id`,
+        [task.user_id, updatesTitle]
       );
       convId = newConv.rows[0].id;
     }
@@ -225,7 +227,7 @@ async function executeTask(task) {
 
       const agentDef = {
         slug: task.agent_slug,
-        persona: task.persona || 'You are Ruhi, an AI assistant.',
+        persona: task.persona || `You are ${INSTANCE_NAME}, an AI assistant.`,
         tools: task.agent_tools || [],
         memory_tags: task.memory_tags || null,
       };

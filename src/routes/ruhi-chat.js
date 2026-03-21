@@ -212,17 +212,30 @@ router.post('/chat', async (req, res) => {
     let messages = [...openaiMessages];
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      // Buffer text during tool rounds — only stream to client on final (non-tool) round
+      let roundText = '';
       const result = await streamChatAnthropic(messages, {
         model: 'claude-sonnet-4-6',
         tools: toolSchemas.length > 0 ? toolSchemas : undefined,
         onChunk: (chunk) => {
-          fullResponse += chunk;
-          res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+          roundText += chunk;
         },
       });
 
-      // If Claude didn't request tool use, we're done
-      if (result.stopReason !== 'tool_use') break;
+      // If Claude didn't request tool use, this is the final round — flush text to client
+      if (result.stopReason !== 'tool_use') {
+        if (roundText) {
+          fullResponse += roundText;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: roundText })}\n\n`);
+        }
+        break;
+      }
+
+      // Tool round: don't send the pre-tool text to the user (it's often garbled reasoning)
+      // But do accumulate it for the conversation history
+      if (roundText) {
+        console.log(`[RuhiChat] Suppressed ${roundText.length} chars of pre-tool text in round ${round}`);
+      }
 
       // Extract tool_use blocks from content
       const toolUseBlocks = result.contentBlocks.filter(b => b.type === 'tool_use');

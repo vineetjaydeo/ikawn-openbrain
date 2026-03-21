@@ -2,6 +2,7 @@
 'use strict';
 
 const { pool } = require('../db');
+const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 
 module.exports = {
   name: 'create_user_task',
@@ -49,7 +50,7 @@ module.exports = {
       config.description || null,
       assignedUserId,
       context.userId || null,
-      context.userName || 'Ruhi',
+      context.userName || INSTANCE_NAME,
       config.priority || 'normal',
       context.conversationId || null,
     ]);

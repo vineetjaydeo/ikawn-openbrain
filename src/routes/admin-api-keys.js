@@ -2,7 +2,7 @@ const { Router } = require('express');
 const crypto = require('crypto');
 const { requireAdmin } = require('../auth');
 const { pool } = require('../db');
-const { RUHI_FAVICON_LINK } = require('../utils/ruhi-assets');
+const { RUHI_FAVICON_LINK, INSTANCE_NAME } = require('../utils/ruhi-assets');
 
 const { requireAuth } = require('../auth');
 
@@ -143,7 +143,7 @@ function apiKeysPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain | API Keys</title>
+  <title>${INSTANCE_NAME} | API Keys</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

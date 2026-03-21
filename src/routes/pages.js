@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { requireAuth, requireAdmin } = require('../auth');
-const { RUHI_FAVICON_LINK, RUHI_ICON_URL } = require('../utils/ruhi-assets');
+const { RUHI_FAVICON_LINK, RUHI_ICON_URL, INSTANCE_NAME } = require('../utils/ruhi-assets');
 const { getSpacetimeBg } = require('../utils/spacetime-bg');
 
 const router = Router();
@@ -39,7 +39,7 @@ function loginPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain | Sign In</title>
+  <title>${INSTANCE_NAME} | Sign In</title>
   ${RUHI_FAVICON_LINK}
   ${GOOGLE_FONTS}
   <style>
@@ -66,8 +66,8 @@ function loginPage() {
 <body>
   ${SPACETIME_HTML}
   <div class="container">
-    <div class="brand-icon"><img src="${RUHI_ICON_URL}" alt="Ruhi"></div>
-    <h1>Ruhi</h1>
+    <div class="brand-icon"><img src="${RUHI_ICON_URL}" alt="${INSTANCE_NAME}"></div>
+    <h1>${INSTANCE_NAME}</h1>
     <p>Sign in with your @ikawn.com account</p>
     <form onsubmit="login(event)">
       <input type="email" id="email" placeholder="you@ikawn.com" autofocus>
@@ -150,7 +150,7 @@ function adminPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain | Admin</title>
+  <title>${INSTANCE_NAME} | Admin</title>
   ${RUHI_FAVICON_LINK}
   ${GOOGLE_FONTS}
   <style>
@@ -197,7 +197,7 @@ function adminPage(user) {
     <div style="display:flex;align-items:center;gap:12px;">
       <a href="/" class="btn btn-outline" style="padding:8px 12px;font-size:1.1rem;line-height:1;text-decoration:none;" title="Back to chat">&larr;</a>
       <div>
-        <h1>Ruhi Admin</h1>
+        <h1>${INSTANCE_NAME} Admin</h1>
         <p class="subtitle">Manage users &mdash; ${user.email}</p>
       </div>
     </div>
@@ -300,7 +300,7 @@ function settingsPage(user) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain | Settings</title>
+  <title>${INSTANCE_NAME} | Settings</title>
   ${RUHI_FAVICON_LINK}
   ${GOOGLE_FONTS}
   <style>
@@ -333,7 +333,7 @@ function settingsPage(user) {
     <p class="subtitle">${user.email}</p>
 
     <p class="section-title">Custom Instructions</p>
-    <p class="section-desc">Tell Ruhi about yourself — your role, preferences, or how you'd like responses. This is added to every conversation.</p>
+    <p class="section-desc">Tell ${INSTANCE_NAME} about yourself — your role, preferences, or how you'd like responses. This is added to every conversation.</p>
     <form onsubmit="saveInstructions(event)">
       <div class="form-group">
         <textarea id="instructions" maxlength="500" placeholder="e.g. I'm the CTO. Keep answers technical and concise. Always suggest test cases."></textarea>

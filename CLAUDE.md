@@ -12,10 +12,18 @@ architecture, and conventions. Do not guess — look it up here first.
 | **Ruhi OS** (or just **OS**) | os.ikawn.com/ruhi — the conversational interface | "Ruhi chat", "Ruhi web", "/ruhi route" |
 | **Visual OS** | os.ikawn.com — all agents except Ruhi (Genie, Remix, Prism, Lazarus, Muse, Shopkeeper) | "ikawn OS", "the platform" |
 | **OpenClaw** | Hostinger VPS agent — orchestration, Telegram, background tasks | "the agent", "the bot" |
-| **OpenBrain** | ruhi.ikawn.in — memory, RAG, edit deltas, intelligence layer | "the memory system", "the brain" |
+| **OpenBrain** | This codebase — memory, RAG, chat, intelligence. ONE repo, TWO Fly deployments | "the memory system" |
+| **Lucy** | OpenBrain deployed as `ikawn-openbrain` — internal/R&D channel at ruhi.ikawn.in | "OpenBrain internal" |
+| **Ruhi Brain** | OpenBrain deployed as `ruhi-os-brain` — SaaS channel powering os.ikawn.com/ruhi | "Ruhi backend" |
 | **Ruhi** (conceptually) | OpenBrain + OpenClaw + Visual OS combined | Use only for the brand character, not any one system |
 | **ikawn-v3** | Monorepo on Fly.io powering Ruhi OS + Visual OS | "the app", "the frontend" |
-| **ikawn-openbrain** | Fly.io app for OpenBrain | "the memory app" |
+
+**CRITICAL — Dual Deployment:**
+This codebase deploys to TWO separate Fly apps with TWO separate databases:
+- `flyctl deploy --app ikawn-openbrain` → **Lucy** (ruhi.ikawn.in) — internal R&D, Telegram
+- `flyctl deploy --app ruhi-os-brain` → **Ruhi** (os.ikawn.com/ruhi) — SaaS product
+When changing shared code (routes, db.js, etc.), **deploy to BOTH apps**.
+Each app has its own DB (`ikawn-openbrain-db` and `ruhi-os-brain-db`), own secrets, own users.
 
 **Key rule:** Ruhi OS is what clients and investors see. OpenClaw and OpenBrain are internal
 infrastructure — never expose these names in UI copy or Ruhi's responses.

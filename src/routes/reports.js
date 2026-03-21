@@ -13,7 +13,7 @@
 const { Router } = require('express');
 const { pool } = require('../db');
 const { requireAuth } = require('../auth');
-const { RUHI_FAVICON_LINK } = require('../utils/ruhi-assets');
+const { RUHI_FAVICON_LINK, INSTANCE_NAME } = require('../utils/ruhi-assets');
 
 const router = Router();
 
@@ -151,7 +151,7 @@ function reportsPage() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>OpenBrain | Reports</title>
+  <title>${INSTANCE_NAME} | Reports</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -299,7 +299,7 @@ function reportsPage() {
       var h3 = document.createElement('h3');
       h3.textContent = 'No results yet';
       var p = document.createElement('p');
-      p.textContent = 'Ask Ruhi to schedule a task and results will appear here.';
+      p.textContent = 'Ask ${INSTANCE_NAME} to schedule a task and results will appear here.';
       empty.appendChild(h3);
       empty.appendChild(p);
       container.appendChild(empty);
@@ -355,7 +355,7 @@ function reportsPage() {
       var h3 = document.createElement('h3');
       h3.textContent = 'No scheduled tasks';
       var p = document.createElement('p');
-      p.textContent = 'Ask Ruhi to create a recurring task like "check my competitors every Monday".';
+      p.textContent = 'Ask ${INSTANCE_NAME} to create a recurring task like "check my competitors every Monday".';
       empty.appendChild(h3);
       empty.appendChild(p);
       container.appendChild(empty);

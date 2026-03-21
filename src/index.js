@@ -44,6 +44,8 @@ const { startModerationWorker } = require('./workers/moderation-worker');
 const { startMothershipWorker } = require('./workers/mothership-worker');
 const { startDistillationWorker } = require('./workers/distillation-worker');
 const { startIntelligenceWorker } = require('./workers/intelligence-worker');
+const { startResearchWorker } = require('./workers/research-worker');
+const { startSyncWorker } = require('./workers/sync-worker');
 
 // Load Ruhi knowledge base at startup
 const docsDir = path.join(__dirname, '..', 'docs');
@@ -197,6 +199,8 @@ async function start() {
       startMothershipWorker();
       startDistillationWorker();
       startIntelligenceWorker();
+      startResearchWorker();
+      startSyncWorker();
     });
   } catch (err) {
     console.error('Failed to start:', err);

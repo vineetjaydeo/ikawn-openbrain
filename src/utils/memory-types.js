@@ -21,6 +21,11 @@ const SHARED_MEMORY_TYPES = [
   'CROSS_BRAND_INSIGHT',
   'PRODUCT_SUGGESTION',
   'COST_EFFICIENCY',
+  // Research-derived types (populated by research-worker)
+  'MARKET_INTELLIGENCE',
+  'SEO_UPDATE',
+  'AD_STRATEGY',
+  'PLATFORM_UPDATE',
 ];
 
 /**

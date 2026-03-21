@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { requireAdmin } = require('../auth');
-const { RUHI_FAVICON_LINK } = require('../utils/ruhi-assets');
+const { RUHI_FAVICON_LINK, INSTANCE_NAME } = require('../utils/ruhi-assets');
 
 const router = Router();
 
@@ -129,7 +129,7 @@ function brainHealthPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBrain | Brain Health</title>
+  <title>${INSTANCE_NAME} | Brain Health</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

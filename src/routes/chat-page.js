@@ -827,7 +827,7 @@ function chatPage(user) {
     .input-area {
       position: sticky;
       bottom: 0;
-      background: linear-gradient(transparent, rgb(14,14,14) 20%);
+      background: var(--bg);
       padding: 8px 20px 20px;
     }
 

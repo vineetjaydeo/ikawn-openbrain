@@ -560,7 +560,7 @@ function chatPage(user) {
     .msg-bubble ul, .msg-bubble ol { padding-left: 1.4em; margin-bottom: 0.65em; }
     .msg-bubble li { margin-bottom: 0.25em; }
     .msg-bubble blockquote {
-      border-left: 3px solid var(--accent); padding: 12px 14px; color: var(--text-dim);
+      border-left: 3px solid var(--accent); padding: 12px 14px; color: var(--text);
       margin: 0.5em 0; background: #111; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
       position: relative;
     }

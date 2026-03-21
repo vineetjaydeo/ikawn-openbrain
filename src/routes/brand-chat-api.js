@@ -17,29 +17,54 @@ const router = Router();
 
 // ── Middleware: validate ikawn OS API key, synthesize session from headers ──
 
-function requireBrandApiAuth(req, res, next) {
+async function requireBrandApiAuth(req, res, next) {
   const apiKey = req.headers['x-api-key'];
   if (!apiKey || apiKey !== process.env.IKAWN_API_KEY) {
     return res.status(401).json({ error: 'Invalid API key' });
   }
 
   const brandId = req.headers['x-brand-id'];
-  const userId = req.headers['x-user-id'];
+  const externalUserId = req.headers['x-user-id'];
   const userName = req.headers['x-user-name'];
 
-  if (!brandId || !userId) {
+  if (!brandId || !externalUserId) {
     return res.status(400).json({ error: 'X-Brand-Id and X-User-Id headers required' });
+  }
+
+  // Resolve external user ID (cuid string from ikawn-v3) to internal integer ID.
+  // If the external ID is already numeric, use it directly. Otherwise, lookup/create.
+  let internalId = parseInt(externalUserId);
+  if (isNaN(internalId)) {
+    try {
+      // Try to find existing user by external_id
+      let { rows } = await pool.query(
+        'SELECT id FROM users WHERE external_id = $1', [externalUserId]
+      );
+      if (rows.length === 0) {
+        // Create a new user for this external ID
+        const decodedName = userName ? decodeURIComponent(userName) : 'User';
+        ({ rows } = await pool.query(
+          `INSERT INTO users (email, name, external_id, role)
+           VALUES ($1, $2, $3, 'user')
+           ON CONFLICT (external_id) DO UPDATE SET name = EXCLUDED.name
+           RETURNING id`,
+          [`brand-${externalUserId}@ikawn.os`, decodedName, externalUserId]
+        ));
+      }
+      internalId = rows[0].id;
+    } catch (err) {
+      console.error('[BrandChat] User resolution failed:', err.message);
+      return res.status(500).json({ error: 'User resolution failed' });
+    }
   }
 
   // Synthesize session so chat-api handlers work unchanged
   req.session = req.session || {};
   req.session.user = {
-    id: parseInt(userId),
+    id: internalId,
     name: userName ? decodeURIComponent(userName) : 'User',
     role: 'user',
   };
-  // brand_id is already set by requireBrand middleware (from X-Brand-Id header)
-  // but set explicitly as safety net
   req.brand_id = brandId;
 
   next();

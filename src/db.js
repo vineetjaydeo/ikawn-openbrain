@@ -54,6 +54,12 @@ async function initSchema() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
     `);
 
+    // External ID for brand API users (cuid from ikawn-v3)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS external_id TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS users_external_id_idx ON users(external_id) WHERE external_id IS NOT NULL;
+    `);
+
     // Custom instructions per user (appended to Ruhi's system prompt)
     await client.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_instructions TEXT

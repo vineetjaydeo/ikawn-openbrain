@@ -277,6 +277,48 @@ Also feeding OpenBrain: GitHub webhooks, Google Calendar (2hr), ruhi.ikawn.in we
 
 ---
 
+## ActivePieces Integration (Orchestration Layer)
+
+**Status:** In progress. Genie endpoint feature-flagged, awaiting AP deployment on Fly.
+
+ActivePieces (AP) is a self-hosted open-source automation platform deployed on Fly as `ikawn-activepieces`.
+It serves as a **deterministic execution engine** for process-driven automations. Lucy/Ruhi remain the
+intelligence layer — AP never touches auth, memory, credits, or LLM reasoning.
+
+### Architecture
+```
+Lucy/Ruhi (intelligence) → ActivePieces (orchestration) → External APIs (execution)
+ikawn-v3 (surface)       → ActivePieces (orchestration) → External APIs (execution)
+                                    ↓
+                          Callbacks to ikawn-v3 /api/internal/generation/*
+```
+
+### OpenBrain's Role
+- **`automation.tool.js`** — Tool in the registry that lets Lucy/Ruhi manage AP flows (CRUD, monitor, rollback)
+- **`automation-monitor.js`** — Worker (15min interval) that polls AP flow run data, alerts on drift
+- **`flow_versions`** — DB table for version tracking, rollback, and A/B performance comparison
+
+### Key Files
+```
+src/tools/automation.tool.js      — manage_automation tool (list, get, update, toggle, rollback flows)
+src/workers/automation-monitor.js — Periodic flow health monitoring + memory capture on alerts
+src/db.js                         — flow_versions table schema (auto-created on startup)
+```
+
+### Environment Variables (Fly Secrets)
+| Key | Used By | Description |
+|-----|---------|-------------|
+| `ACTIVEPIECES_URL` | automation.tool, monitor | AP instance URL (e.g., https://ikawn-activepieces.fly.dev) |
+| `ACTIVEPIECES_API_KEY` | automation.tool, monitor | AP API key for programmatic access |
+
+### Hard Rules
+- AP never holds iKawn database credentials — communicates via HTTP callbacks only
+- AP never does LLM reasoning — it's a dumb-but-reliable pipeline runner
+- Flow definitions are versioned in `flow_versions` before every update/rollback
+- The `manage_automation` tool is agent-tier — only callable by domain agents, not direct user requests
+
+---
+
 
 
 - Never expose "OpenClaw", "OpenBrain", or "delegation" in UI copy or Ruhi's responses

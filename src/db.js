@@ -975,7 +975,28 @@ async function initSchema() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_user_tasks_uuid ON user_tasks(uuid);
     `);
 
-    console.log('Database schema initialized (v10 — user tasks + agent platform)');
+    // ── ActivePieces Integration: flow_versions table ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS flow_versions (
+        id SERIAL PRIMARY KEY,
+        flow_id TEXT NOT NULL,
+        version INT NOT NULL,
+        display_name TEXT,
+        definition JSONB NOT NULL,
+        created_by TEXT,
+        reason TEXT,
+        performance JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(flow_id, version)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_flow_versions_flow ON flow_versions(flow_id);
+      CREATE INDEX IF NOT EXISTS idx_flow_versions_flow_version ON flow_versions(flow_id, version DESC);
+    `);
+
+    console.log('Database schema initialized (v11 — user tasks + agent platform + ActivePieces)');
   } finally {
     client.release();
   }

@@ -174,6 +174,11 @@ async function initSchema() {
       )
     `);
 
+    // Dynamic model tier tracking
+    await client.query(`
+      ALTER TABLE messages ADD COLUMN IF NOT EXISTS tier TEXT
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,

@@ -966,6 +966,20 @@ function chatPage(user) {
       background: var(--accent-soft);
     }
 
+    .tier-divider {
+      text-align: center;
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 6px 0;
+      opacity: 0.5;
+      color: var(--text-secondary, #888);
+    }
+    .tier-divider.tier-expert {
+      color: var(--accent, #FFC01C);
+      opacity: 0.7;
+    }
+
     #msg-input {
       flex: 1;
       background: transparent;
@@ -2248,6 +2262,13 @@ function chatPage(user) {
                 if (conv) { conv.title = evt.title; renderConversationList(); }
               } else if (evt.type === 'generation_started') {
                 showGenerationCard(evt.generationId, evt.agent, evt.prompt, evt.batchSize);
+              } else if (evt.type === 'tier_switch') {
+                // Inline tier divider — subtle indicator of model tier
+                const tierDiv = document.createElement('div');
+                tierDiv.className = 'tier-divider tier-' + evt.tier;
+                tierDiv.textContent = evt.label || evt.tier;
+                document.getElementById('messages').appendChild(tierDiv);
+                scrollToBottom(false);
               } else if (evt.type === 'error') {
                 showToast(evt.error || evt.message || 'An error occurred', 'error');
               }
@@ -2741,13 +2762,13 @@ function chatPage(user) {
     function updateModelToggle() {
       const btn = document.getElementById('model-toggle');
       if (useSecondaryModel) {
-        btn.textContent = 'PRO';
+        btn.textContent = 'MAX';
         btn.classList.add('secondary-active');
-        btn.title = 'Using advanced model (click to switch)';
+        btn.title = 'Always use Expert tier (click for auto)';
       } else {
-        btn.textContent = 'STD';
+        btn.textContent = 'AUTO';
         btn.classList.remove('secondary-active');
-        btn.title = 'Using standard model (click to switch)';
+        btn.title = 'Auto-selects tier per message (click for Expert)';
       }
     }
 

@@ -12,6 +12,53 @@ const { getTool, getTools } = require('../tools/registry');
 const { loadBrandKnowledge } = require('../ruhi/persona');
 const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 
+// ── Dynamic Model Tier Detection ──
+const EXPERT_KEYWORDS = /\b(investor|valuation|funding|revenue|series\s*[abc]|due\s*diligence|term\s*sheet|cap\s*table|equity|partnership\s*agreement|legal|compliance|acquisition|board\s*meeting|arr|mrr|burn\s*rate|runway|dilution|convertible\s*note|safe\s*note)\b/i;
+const EXPERT_PHRASES = /how much is ikawn worth|tell me about the company|what(?:'s| is) our arr|what(?:'s| is) the valuation|investor deck|pitch deck|fundraising/i;
+const REGULAR_PATTERNS = /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|bye|good morning|good evening|gm|gn|lol|haha|hmm|cool|nice|great|got it|noted)[\s!.?]*$/i;
+
+function detectTier(content, historyRows) {
+  const trimmed = (content || '').trim();
+
+  // Check if previous assistant message was expert tier — sticky escalation
+  const lastAssistantTier = historyRows
+    .filter(m => m.role === 'assistant' && m.tier)
+    .slice(-1)[0]?.tier;
+
+  // Expert detection: current message
+  if (EXPERT_KEYWORDS.test(trimmed) || EXPERT_PHRASES.test(trimmed)) {
+    return 'expert';
+  }
+
+  // Scan last 5 messages for expert signals
+  const recentMessages = historyRows.slice(-5);
+  for (const msg of recentMessages) {
+    const text = msg.content || '';
+    if (EXPERT_KEYWORDS.test(text) || EXPERT_PHRASES.test(text)) {
+      return 'expert';
+    }
+  }
+
+  // Sticky: expert never drops to regular (can go to pro)
+  if (lastAssistantTier === 'expert') {
+    return 'expert';
+  }
+
+  // Regular: short greetings, single words, trivial messages
+  if (trimmed.length < 20 && REGULAR_PATTERNS.test(trimmed)) {
+    return 'regular';
+  }
+
+  // Default: pro
+  return 'pro';
+}
+
+const TIER_MODELS = {
+  regular: 'claude-haiku-4-5-20251001',
+  pro: 'claude-sonnet-4-6',
+  expert: 'claude-opus-4-6',
+};
+
 /**
  * RAG: search memories for relevant context.
  * Uses hybrid scoring: semantic similarity + recency boost.
@@ -356,7 +403,7 @@ async function handleChatSend(req, res) {
 
     // Build OpenAI messages array from conversation history (last 50)
     const { rows: historyRows } = await pool.query(
-      'SELECT role, content, attachments FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 50',
+      'SELECT role, content, attachments, tier FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 50',
       [convInternalId]
     );
     historyRows.reverse();
@@ -472,16 +519,11 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       return { role: msg.role, content: msg.content };
     })];
 
-    // Get model from settings — Claude is PRIMARY, OpenAI is fallback only
-    const modelKey = use_secondary ? 'secondary_model' : 'primary_model';
-    const { rows: settingsRows } = await pool.query(
-      'SELECT value FROM settings WHERE key = $1',
-      [modelKey]
-    );
-    const settingsModel = settingsRows.length ? settingsRows[0].value : undefined;
-    // Default to Claude Sonnet for primary, keep OpenAI as explicit secondary only
-    model = settingsModel || 'claude-sonnet-4-6';
-    const isAnthropic = model.startsWith('claude');
+    // Dynamic tier detection — use_secondary forces Expert, otherwise auto-detect
+    const tier = use_secondary ? 'expert' : detectTier(content, historyRows);
+    model = TIER_MODELS[tier] || TIER_MODELS.pro;
+    const isAnthropic = true; // All tiers use Claude
+    console.log(`[Tier] ${tier} → ${model} (forced=${!!use_secondary})`);
 
     // Build tool schemas (Anthropic format — name, description, input_schema)
     const { getToolSchemas } = require('../tools/registry');
@@ -509,6 +551,12 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         name: mentionedAgent.name,
         role: mentionedAgent.role,
       })}\n\n`);
+    }
+
+    // Emit tier indicator to frontend (only if not default pro)
+    if (tier !== 'pro') {
+      const tierLabels = { regular: 'Quick response', expert: 'Deep thinking' };
+      res.write(`data: ${JSON.stringify({ type: 'tier_switch', tier, label: tierLabels[tier] })}\n\n`);
     }
 
     const pendingGenerations = [];
@@ -640,10 +688,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       });
     }
 
-    // Save assistant message to DB
+    // Save assistant message to DB (with tier for cost tracking)
     const { rows: assistantMsgRows } = await pool.query(
-      'INSERT INTO messages (conversation_id, role, content, model) VALUES ($1, $2, $3, $4) RETURNING *',
-      [convInternalId, 'assistant', fullResponse, model]
+      'INSERT INTO messages (conversation_id, role, content, model, tier) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [convInternalId, 'assistant', fullResponse, model, tier]
     );
 
     // Send done event (include conversation_id for brand API callers)
@@ -702,8 +750,8 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     if (fullResponse && convInternalId) {
       try {
         await pool.query(
-          'INSERT INTO messages (conversation_id, role, content, model) VALUES ($1, $2, $3, $4)',
-          [convInternalId, 'assistant', fullResponse + '\n\n*[Response interrupted]*', model || 'unknown']
+          'INSERT INTO messages (conversation_id, role, content, model, tier) VALUES ($1, $2, $3, $4, $5)',
+          [convInternalId, 'assistant', fullResponse + '\n\n*[Response interrupted]*', model || 'unknown', tier || null]
         );
       } catch (saveErr) {
         console.error('Failed to save partial response:', saveErr.message);

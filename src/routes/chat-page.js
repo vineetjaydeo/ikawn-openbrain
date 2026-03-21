@@ -32,8 +32,8 @@ function chatPage(user) {
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: rgb(5,5,5);
-      --bg-sidebar: rgb(5,5,5);
+      --bg: rgb(12,12,12);
+      --bg-sidebar: rgb(8,8,8);
       --bg-input: rgb(32,32,32);
       --bg-hover: rgb(28,28,28);
       --bg-assistant: transparent;
@@ -365,10 +365,7 @@ function chatPage(user) {
       flex-direction: column;
       min-width: 0;
       position: relative;
-      background: var(--bg);
-    }
-    .main.in-chat {
-      background: linear-gradient(to bottom, rgb(30,30,30), rgb(22,22,22));
+      background: rgb(18,18,18);
     }
 
     .main-header {
@@ -827,7 +824,7 @@ function chatPage(user) {
     .input-area {
       position: sticky;
       bottom: 0;
-      background: var(--bg);
+      background: rgb(18,18,18);
       padding: 8px 20px 20px;
     }
 
@@ -925,7 +922,7 @@ function chatPage(user) {
       display: flex;
       align-items: flex-end;
       gap: 8px;
-      background: rgb(5,5,5);
+      background: rgb(10,10,10);
       border: 1px solid rgb(35,35,35);
       border-radius: 24px;
       padding: 10px 14px;

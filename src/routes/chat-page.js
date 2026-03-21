@@ -367,6 +367,9 @@ function chatPage(user) {
       position: relative;
       background: rgb(18,18,18);
     }
+    .main.in-chat {
+      background: linear-gradient(to bottom, rgb(40,40,40), rgb(30,30,30));
+    }
 
     .main-header {
       display: flex;

@@ -979,6 +979,97 @@ function chatPage(user) {
       opacity: 0.7;
     }
 
+    /* Context Card */
+    .context-card {
+      margin: 8px 0 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+    .context-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .context-card-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary, #888);
+      font-weight: 600;
+    }
+    .context-card-badge {
+      font-size: 0.6rem;
+      padding: 1px 6px;
+      border-radius: 8px;
+      color: #000;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .context-card-topic {
+      flex: 1;
+      font-size: 0.75rem;
+      color: var(--text, #eee);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .context-card-toggle {
+      background: none;
+      border: none;
+      color: var(--text-secondary, #888);
+      font-size: 0.8rem;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+    .context-card.collapsed .context-card-body { display: none; }
+    .context-card-body {
+      padding: 4px 12px 10px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .context-bullets {
+      list-style: none;
+      padding: 0;
+      margin: 4px 0;
+    }
+    .context-bullets li {
+      font-size: 0.72rem;
+      color: var(--text-secondary, #aaa);
+      padding: 2px 0;
+      line-height: 1.4;
+    }
+    .context-ts {
+      font-size: 0.6rem;
+      color: var(--text-secondary, #666);
+      font-variant-numeric: tabular-nums;
+    }
+    .context-section {
+      margin-top: 6px;
+    }
+    .context-section-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--accent, #FFC01C);
+      font-weight: 600;
+    }
+    .context-section ul {
+      list-style: disc;
+      padding-left: 16px;
+      margin: 2px 0;
+    }
+    .context-section li {
+      font-size: 0.7rem;
+      color: var(--text-secondary, #aaa);
+      padding: 1px 0;
+    }
+
     #msg-input {
       flex: 1;
       background: transparent;
@@ -1544,10 +1635,20 @@ function chatPage(user) {
     document.addEventListener('DOMContentLoaded', () => {
       initMarked();
       updateModelToggle();
-      setGreeting();
+
+      // If navigating directly to a chat URL, hide welcome screen immediately
+      // to prevent flash of empty state while conversation loads
+      const directChatMatch = window.location.pathname.match(/^\\/chat\\/([a-f0-9-]+)$/);
+      if (directChatMatch) {
+        const welcome = document.getElementById('welcome');
+        if (welcome) welcome.style.display = 'none';
+        document.querySelector('.main').classList.add('in-chat');
+      } else {
+        setGreeting();
+      }
+
       loadConversations().then(() => {
-        const match = window.location.pathname.match(/^\\/chat\\/([a-f0-9-]+)$/);
-        if (match) loadConversation(match[1]);
+        if (directChatMatch) loadConversation(directChatMatch[1]);
       });
 
       window.addEventListener('popstate', () => {
@@ -1575,6 +1676,11 @@ function chatPage(user) {
     });
 
     function initMarked() {
+      if (typeof marked === 'undefined') {
+        console.error('[initMarked] marked library NOT LOADED — markdown will render as plain text');
+        return;
+      }
+      console.log('[initMarked] marked v' + (marked.version || '?') + ' loaded OK');
       var copyIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
       var renderer = new marked.Renderer();
@@ -1582,10 +1688,14 @@ function chatPage(user) {
         var code = token.text || token;
         var lang = token.lang || '';
         var highlighted;
-        if (lang && hljs.getLanguage(lang)) {
-          try { highlighted = hljs.highlight(code, { language: lang }).value; } catch(e) { highlighted = escapeHtml(code); }
+        if (typeof hljs !== 'undefined' && hljs.getLanguage) {
+          if (lang && hljs.getLanguage(lang)) {
+            try { highlighted = hljs.highlight(code, { language: lang }).value; } catch(e) { highlighted = escapeHtml(code); }
+          } else {
+            try { highlighted = hljs.highlightAuto(code).value; } catch(e) { highlighted = escapeHtml(code); }
+          }
         } else {
-          try { highlighted = hljs.highlightAuto(code).value; } catch(e) { highlighted = escapeHtml(code); }
+          highlighted = escapeHtml(code);
         }
         var langClass = lang ? ' language-' + escapeHtml(lang) : '';
         return '<div class="code-block-wrapper">'
@@ -1879,6 +1989,7 @@ function chatPage(user) {
         currentShareToken = data.share_token || null;
         document.querySelector('.main').classList.add('in-chat');
         renderMessages(data.messages || []);
+        if (data.context_summary) renderContextCard(data.context_summary);
         document.getElementById('header-title').textContent = data.title || 'New Chat';
         if (window.location.pathname !== '/chat/' + id) {
           history.pushState(null, '', '/chat/' + id);
@@ -1988,6 +2099,116 @@ function chatPage(user) {
       updateShareUI();
     }
 
+    function renderContextCard(summary) {
+      if (!summary || !summary.topic) return;
+      let card = document.getElementById('context-card');
+      if (!card) {
+        card = document.createElement('div');
+        card.id = 'context-card';
+        card.className = 'context-card collapsed';
+        const container = document.getElementById('messages-inner');
+        container.insertBefore(card, container.firstChild);
+      }
+      const complexityColors = { casual: '#4ade80', standard: '#60a5fa', complex: '#f59e0b' };
+      const complexityLabels = { casual: 'Quick', standard: 'Standard', complex: 'Deep' };
+      const c = summary.complexity || 'standard';
+      const bullets = (summary.bullets || []).slice(0, 6);
+      const decisions = (summary.decisions || []).slice(0, 4);
+      const openQs = (summary.open_questions || []).slice(0, 3);
+
+      card.textContent = '';
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'context-card-header';
+
+      const label = document.createElement('span');
+      label.className = 'context-card-label';
+      label.textContent = 'Context';
+      header.appendChild(label);
+
+      const badge = document.createElement('span');
+      badge.className = 'context-card-badge';
+      badge.style.background = complexityColors[c];
+      badge.textContent = complexityLabels[c];
+      header.appendChild(badge);
+
+      const topicEl = document.createElement('span');
+      topicEl.className = 'context-card-topic';
+      topicEl.textContent = summary.topic || '';
+      header.appendChild(topicEl);
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'context-card-toggle';
+      toggleBtn.textContent = '\\u25BE';
+      header.appendChild(toggleBtn);
+
+      header.addEventListener('click', function() {
+        card.classList.toggle('collapsed');
+        toggleBtn.textContent = card.classList.contains('collapsed') ? '\\u25BE' : '\\u25B4';
+      });
+      card.appendChild(header);
+
+      // Body
+      const body = document.createElement('div');
+      body.className = 'context-card-body';
+
+      if (bullets.length) {
+        const ul = document.createElement('ul');
+        ul.className = 'context-bullets';
+        bullets.forEach(function(b) {
+          const li = document.createElement('li');
+          const ts = b.ts ? new Date(b.ts) : null;
+          if (ts) {
+            const tsSpan = document.createElement('span');
+            tsSpan.className = 'context-ts';
+            tsSpan.textContent = timeAgo(ts);
+            li.appendChild(tsSpan);
+            li.appendChild(document.createTextNode(' '));
+          }
+          li.appendChild(document.createTextNode(b.text || ''));
+          ul.appendChild(li);
+        });
+        body.appendChild(ul);
+      }
+
+      if (decisions.length) {
+        const dec = document.createElement('div');
+        dec.className = 'context-section';
+        const decLabel = document.createElement('span');
+        decLabel.className = 'context-section-label';
+        decLabel.textContent = 'Decisions';
+        dec.appendChild(decLabel);
+        const dl = document.createElement('ul');
+        decisions.forEach(function(d) { const li = document.createElement('li'); li.textContent = d; dl.appendChild(li); });
+        dec.appendChild(dl);
+        body.appendChild(dec);
+      }
+
+      if (openQs.length) {
+        const qs = document.createElement('div');
+        qs.className = 'context-section';
+        const qsLabel = document.createElement('span');
+        qsLabel.className = 'context-section-label';
+        qsLabel.textContent = 'Open Questions';
+        qs.appendChild(qsLabel);
+        const ql = document.createElement('ul');
+        openQs.forEach(function(q) { const li = document.createElement('li'); li.textContent = q; ql.appendChild(li); });
+        qs.appendChild(ql);
+        body.appendChild(qs);
+      }
+
+      card.appendChild(body);
+    }
+
+    function timeAgo(date) {
+      const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (secs < 60) return 'just now';
+      if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+      if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+      return Math.floor(secs / 86400) + 'd ago';
+    }
+
     function renderMessages(messages) {
       const container = document.getElementById('messages-inner');
       container.textContent = '';
@@ -2068,7 +2289,22 @@ function chatPage(user) {
     function renderContent(role, content) {
       if (!content) return '';
       if (role === 'assistant') {
-        try { return marked.parse(content); } catch { return escapeHtml(content); }
+        try {
+          if (typeof marked !== 'undefined' && marked.parse) {
+            return marked.parse(content);
+          }
+          console.error('[renderContent] marked library not loaded, using fallback');
+          return content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+            .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+            .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
+            .replace(/\\n/g, '<br>');
+        } catch(e) {
+          console.error('[renderContent] marked.parse failed:', e);
+          return escapeHtml(content).replace(/\\n/g, '<br>');
+        }
       }
       return escapeHtml(content).replace(/\\n/g, '<br>');
     }
@@ -2263,12 +2499,16 @@ function chatPage(user) {
               } else if (evt.type === 'generation_started') {
                 showGenerationCard(evt.generationId, evt.agent, evt.prompt, evt.batchSize);
               } else if (evt.type === 'tier_switch') {
-                // Inline tier divider — subtle indicator of model tier
+                // Inline tier divider — subtle indicator of model tier (replace, never stack)
+                const existing = document.querySelector('.tier-divider');
+                if (existing) existing.remove();
                 const tierDiv = document.createElement('div');
                 tierDiv.className = 'tier-divider tier-' + evt.tier;
                 tierDiv.textContent = evt.label || evt.tier;
                 document.getElementById('messages').appendChild(tierDiv);
                 scrollToBottom(false);
+              } else if (evt.type === 'done' && evt.context_summary) {
+                renderContextCard(evt.context_summary);
               } else if (evt.type === 'error') {
                 showToast(evt.error || evt.message || 'An error occurred', 'error');
               }

@@ -17,7 +17,7 @@ const EXPERT_KEYWORDS = /\b(investor|valuation|funding|revenue|series\s*[abc]|du
 const EXPERT_PHRASES = /how much is ikawn worth|tell me about the company|what(?:'s| is) our arr|what(?:'s| is) the valuation|investor deck|pitch deck|fundraising/i;
 const REGULAR_PATTERNS = /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|bye|good morning|good evening|gm|gn|lol|haha|hmm|cool|nice|great|got it|noted)[\s!.?]*$/i;
 
-function detectTier(content, historyRows, forcedTier) {
+function detectTier(content, historyRows, forcedTier, contextSummary) {
   // Manual override — user can toggle tier mid-conversation
   if (forcedTier && ['regular', 'pro', 'expert'].includes(forcedTier)) {
     return forcedTier;
@@ -30,7 +30,14 @@ function detectTier(content, historyRows, forcedTier) {
     return 'regular';
   }
 
-  // Expert: only for deep technical analysis, debugging, security review
+  // Context Card v2: use conversation complexity when available
+  if (contextSummary && contextSummary.complexity) {
+    const complexityMap = { casual: 'regular', standard: 'pro', complex: 'expert' };
+    const mapped = complexityMap[contextSummary.complexity];
+    if (mapped) return mapped;
+  }
+
+  // Fallback: keyword-based detection
   if (EXPERT_KEYWORDS.test(trimmed) || EXPERT_PHRASES.test(trimmed)) {
     return 'expert';
   }
@@ -198,7 +205,7 @@ router.get('/api/conversations/:id', async (req, res) => {
       [internalId]
     );
     const conv = { ...convRows[0], id: convRows[0].uuid };
-    res.json({ ...conv, messages, share_token: convRows[0].share_token || null });
+    res.json({ ...conv, messages, share_token: convRows[0].share_token || null, context_summary: convRows[0].context_summary || null });
   } catch (err) {
     console.error('GET /api/conversations/:id error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -264,6 +271,7 @@ async function handleChatSend(req, res) {
   let convInternalId = null;
   let fullResponse = '';
   let model = null;
+  let tier = null;
 
   try {
     // Verify conversation ownership (resolve UUID → internal ID, brand-scoped)
@@ -387,10 +395,12 @@ async function handleChatSend(req, res) {
       }
     }
 
-    // Build OpenAI messages array from conversation history (last 50)
+    // Build OpenAI messages array from conversation history
+    // If context summary exists, use fewer raw messages (20) + summary for better signal-to-noise
+    const historyLimit = convRows[0].context_summary ? 20 : 50;
     const { rows: historyRows } = await pool.query(
-      'SELECT role, content, attachments, tier FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 50',
-      [convInternalId]
+      'SELECT role, content, attachments, tier FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT $2',
+      [convInternalId, historyLimit]
     );
     historyRows.reverse();
 
@@ -409,6 +419,9 @@ async function handleChatSend(req, res) {
       );
       if (rows.length > 0) mentionedAgent = rows[0];
     }
+
+    // Extract context summary early — needed by both system prompt and tier detection
+    const contextSummary = convRows[0].context_summary;
 
     // Build system prompt — swap persona if agent is @mentioned
     let systemPrompt;
@@ -443,7 +456,12 @@ ${kb.memory || ''}
 === YOUR CAPABILITIES ===
 ${kb.tools || ''}
 ${memoryContext}
-=== CRITICAL RULES ===
+${contextSummary ? `=== CONVERSATION CONTEXT (auto-generated summary) ===
+Topic: ${contextSummary.topic || 'General conversation'}
+${contextSummary.bullets ? contextSummary.bullets.map(b => `- ${b.text}`).join('\n') : ''}
+${contextSummary.decisions?.length ? `\nKey decisions: ${contextSummary.decisions.join('; ')}` : ''}
+${contextSummary.open_questions?.length ? `\nOpen questions: ${contextSummary.open_questions.join('; ')}` : ''}
+` : ''}=== CRITICAL RULES ===
 1. You ARE ${INSTANCE_NAME}. First person. "I can help with that" not "${INSTANCE_NAME} can help with that."
 2. Never say "As an AI" or "As a language model." You are ${INSTANCE_NAME}.
 3. Never reveal AI model names (GPT-4o, Claude, Gemini, etc.), providers (OpenAI, Anthropic, Google), architecture details, or internal pricing. If asked, deflect warmly: "I'm ${INSTANCE_NAME} — that's all that matters."
@@ -512,7 +530,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     })];
 
     // Dynamic tier detection — forced_tier from UI toggle, use_secondary legacy compat
-    const tier = use_secondary ? 'expert' : detectTier(content, historyRows, forced_tier);
+    tier = use_secondary ? 'expert' : detectTier(content, historyRows, forced_tier, contextSummary);
     model = TIER_MODELS[tier] || TIER_MODELS.pro;
     const isAnthropic = true; // All tiers use Claude
     console.log(`[Tier] ${tier} → ${model} (forced=${!!use_secondary})`);
@@ -686,8 +704,14 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       [convInternalId, 'assistant', fullResponse, model, tier]
     );
 
+    // Fetch latest context_summary (may have been updated by worker since conversation load)
+    const { rows: latestConv } = await pool.query(
+      'SELECT context_summary FROM conversations WHERE id = $1', [convInternalId]
+    );
+    const latestSummary = latestConv[0]?.context_summary || null;
+
     // Send done event (include conversation_id for brand API callers)
-    res.write(`data: ${JSON.stringify({ type: 'done', message_id: assistantMsgRows[0].id, conversation_id: conversation_id })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'done', message_id: assistantMsgRows[0].id, conversation_id: conversation_id, context_summary: latestSummary })}\n\n`);
 
     // Capture both sides to memories (fire-and-forget, never blocks)
     const brandId = req.brand_id;

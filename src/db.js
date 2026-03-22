@@ -342,6 +342,12 @@ async function initSchema() {
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS draft_updated_at TIMESTAMPTZ;
     `);
 
+    // Context Card — living conversation summary for smart tier detection
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS context_summary JSONB DEFAULT NULL;
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS context_msg_count INTEGER DEFAULT 0;
+    `);
+
     // ── OpenBrain v3: edit_deltas — highest priority training data ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS edit_deltas (

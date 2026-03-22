@@ -102,6 +102,32 @@ Password: FILL_IN
 
 ---
 
+## Testing
+
+```bash
+npm test              # Run all tests (41 tests across unit/integration/regression)
+npm run test:watch    # Watch mode
+npm run lint          # ESLint only
+npm run pre-deploy    # Full gate: lint + tests (run before EVERY deploy)
+```
+
+### Test Structure
+```
+tests/
+  helpers/     — Mock DB, session, Express app factory
+  unit/        — Pure function tests (tier detection, embedding format, auth)
+  integration/ — HTTP endpoint tests via supertest (upload validation)
+  regression/  — Tests for previously fixed bugs (NEVER delete these)
+```
+
+### Rules
+- **NEVER deploy without running `npm run pre-deploy` first**
+- **NEVER delete a regression test** — they exist because the bug happened before
+- When fixing a bug, write the regression test FIRST (TDD)
+- When adding a feature, add at least one happy-path test
+
+---
+
 ## Deploy Commands
 
 ### ikawn-v3 (Ruhi OS + Visual OS)
@@ -118,8 +144,11 @@ flyctl secrets set KEY=value --app ikawn-v3
 
 ### ikawn-openbrain (OpenBrain)
 ```bash
-# Deploy (--depot=false is mandatory — Depot builder caches stale src layers, --no-cache alone doesn't work)
-~/.fly/bin/flyctl deploy --app ikawn-openbrain --remote-only --depot=false
+# ALWAYS run pre-deploy first
+npm run pre-deploy
+
+# Deploy (use Depot builder — remote builders are unreliable)
+~/.fly/bin/flyctl deploy --app ikawn-openbrain --remote-only
 
 # Logs
 ~/.fly/bin/flyctl logs --app ikawn-openbrain --no-tail

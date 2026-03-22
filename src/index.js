@@ -36,6 +36,7 @@ const skillsRoute = require('./routes/skills');
 const intelligenceRoute = require('./routes/intelligence');
 const missionControlRoute = require('./routes/mission-control');
 const reportsRoute = require('./routes/reports');
+const flowConfigRoute = require('./routes/flow-config');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
 const { loadTools } = require('./tools/registry');
@@ -148,6 +149,7 @@ app.use(requireAuthOrApiKey, recallRoute);
 app.use(requireAuthOrApiKey, governanceRoute);
 app.use(requireAuthOrApiKey, brandsApiRoute);
 app.use(skillsRoute);
+app.use(flowConfigRoute);
 
 // Chat UI at / — requires auth
 app.use(chatPage);

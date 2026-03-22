@@ -45,9 +45,11 @@ module.exports = {
         'toggle_flow',
         'update_flow',
         'rollback_flow',
+        'update_flow_config',
       ],
     },
     flow_id: { type: 'string', required: false, description: 'ActivePieces flow ID (required for most actions)' },
+    flow_config: { type: 'object', required: false, description: 'For update_flow_config: the config object to set' },
     run_id: { type: 'string', required: false, description: 'Flow run ID (for get_run_details)' },
     enabled: { type: 'boolean', required: false, description: 'Enable/disable flow (for toggle_flow)' },
     status_filter: { type: 'string', required: false, description: 'Filter runs by status: SUCCEEDED, FAILED, RUNNING' },
@@ -265,6 +267,21 @@ module.exports = {
             data: { flow_id: config.flow_id, rolled_back_to: config.version },
             summary: `Flow ${config.flow_id} rolled back to version ${config.version}. Reason: ${config.reason || 'No reason provided'}.`,
           };
+        }
+
+        case 'update_flow_config': {
+          if (!config.flow_id) return { success: false, data: null, summary: 'flow_id is required' };
+          if (!config.flow_config) return { success: false, data: null, summary: 'flow_config is required' };
+          const { pool: dbPool } = require('../db');
+          const fcResult = await dbPool.query(
+            `INSERT INTO flow_configs (flow_id, config, updated_by)
+             VALUES ($1, $2, 'lucy')
+             ON CONFLICT (flow_id) DO UPDATE SET
+               config = $2, updated_by = 'lucy', updated_at = NOW()
+             RETURNING flow_id, config, updated_at`,
+            [config.flow_id, JSON.stringify(config.flow_config)]
+          );
+          return { success: true, data: fcResult.rows[0], summary: 'Updated config for flow ' + config.flow_id };
         }
 
         default:

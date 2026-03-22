@@ -996,7 +996,40 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_flow_versions_flow_version ON flow_versions(flow_id, version DESC);
     `);
 
-    console.log('Database schema initialized (v11 — user tasks + agent platform + ActivePieces)');
+    // ── Flow Configs: runtime intelligence for AP flows ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS flow_configs (
+        id SERIAL PRIMARY KEY,
+        flow_id TEXT UNIQUE NOT NULL,
+        display_name TEXT,
+        config JSONB NOT NULL DEFAULT '{}',
+        updated_by TEXT DEFAULT 'system',
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      INSERT INTO flow_configs (flow_id, display_name, config, updated_by)
+      VALUES (
+        'genie-single',
+        'Genie — Single Generation',
+        '{"default_model":"fal-ai/flux-pro/v1.1-ultra","fallback_model":"fal-ai/flux-dev","max_poll_attempts":120,"poll_interval_ms":5000,"timeout_ms":600000,"retry_on_failure":true,"max_retries":1,"thumbnail_width":400}',
+        'system'
+      ) ON CONFLICT (flow_id) DO NOTHING
+    `);
+
+    await client.query(`
+      INSERT INTO flow_configs (flow_id, display_name, config, updated_by)
+      VALUES (
+        'genie-batch',
+        'Genie — Batch Generation',
+        '{"default_model":"fal-ai/flux-pro/v1.1-ultra","fallback_model":"fal-ai/flux-dev","max_poll_attempts":120,"poll_interval_ms":5000,"timeout_ms":600000,"parallel_submissions":true,"max_concurrent":4,"retry_on_failure":true,"max_retries":1,"thumbnail_width":400,"partial_completion":true}',
+        'system'
+      ) ON CONFLICT (flow_id) DO NOTHING
+    `);
+
+    console.log('Database schema initialized (v12 — flow_configs for AP runtime intelligence)');
   } finally {
     client.release();
   }

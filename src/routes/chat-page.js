@@ -2174,6 +2174,7 @@ function chatPage(user) {
               : content,
             attachments,
             use_secondary: useSecondaryModel,
+            forced_tier: forcedTier || undefined,
           }),
           signal: abortController.signal,
         });
@@ -2753,22 +2754,23 @@ function chatPage(user) {
     }
 
     /* ==================== MODEL TOGGLE ==================== */
+    var forcedTier = null; // null = auto, 'regular', 'pro', 'expert'
+    const TIER_CYCLE = [null, 'regular', 'pro', 'expert'];
+    const TIER_LABELS = { null: 'AUTO', regular: 'FAST', pro: 'PRO', expert: 'MAX' };
+    const TIER_TITLES = { null: 'Auto-selects tier per message', regular: 'Fast mode (Haiku)', pro: 'Pro mode (Sonnet)', expert: 'Expert mode (Opus)' };
+
     function toggleModel() {
-      useSecondaryModel = !useSecondaryModel;
+      const idx = TIER_CYCLE.indexOf(forcedTier);
+      forcedTier = TIER_CYCLE[(idx + 1) % TIER_CYCLE.length];
+      useSecondaryModel = forcedTier === 'expert';
       updateModelToggle();
     }
 
     function updateModelToggle() {
       const btn = document.getElementById('model-toggle');
-      if (useSecondaryModel) {
-        btn.textContent = 'MAX';
-        btn.classList.add('secondary-active');
-        btn.title = 'Always use Expert tier (click for auto)';
-      } else {
-        btn.textContent = 'AUTO';
-        btn.classList.remove('secondary-active');
-        btn.title = 'Auto-selects tier per message (click for Expert)';
-      }
+      btn.textContent = TIER_LABELS[forcedTier];
+      btn.title = TIER_TITLES[forcedTier];
+      btn.classList.toggle('secondary-active', forcedTier === 'expert');
     }
 
     /* ==================== INPUT HANDLING ==================== */

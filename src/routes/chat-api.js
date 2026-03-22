@@ -17,39 +17,25 @@ const EXPERT_KEYWORDS = /\b(investor|valuation|funding|revenue|series\s*[abc]|du
 const EXPERT_PHRASES = /how much is ikawn worth|tell me about the company|what(?:'s| is) our arr|what(?:'s| is) the valuation|investor deck|pitch deck|fundraising/i;
 const REGULAR_PATTERNS = /^(hi|hello|hey|thanks|thank you|ok|okay|sure|yes|no|bye|good morning|good evening|gm|gn|lol|haha|hmm|cool|nice|great|got it|noted)[\s!.?]*$/i;
 
-function detectTier(content, historyRows) {
+function detectTier(content, historyRows, forcedTier) {
+  // Manual override — user can toggle tier mid-conversation
+  if (forcedTier && ['regular', 'pro', 'expert'].includes(forcedTier)) {
+    return forcedTier;
+  }
+
   const trimmed = (content || '').trim();
 
-  // Check if previous assistant message was expert tier — sticky escalation
-  const lastAssistantTier = historyRows
-    .filter(m => m.role === 'assistant' && m.tier)
-    .slice(-1)[0]?.tier;
-
-  // Expert detection: current message
-  if (EXPERT_KEYWORDS.test(trimmed) || EXPERT_PHRASES.test(trimmed)) {
-    return 'expert';
-  }
-
-  // Scan last 5 messages for expert signals
-  const recentMessages = historyRows.slice(-5);
-  for (const msg of recentMessages) {
-    const text = msg.content || '';
-    if (EXPERT_KEYWORDS.test(text) || EXPERT_PHRASES.test(text)) {
-      return 'expert';
-    }
-  }
-
-  // Sticky: expert never drops to regular (can go to pro)
-  if (lastAssistantTier === 'expert') {
-    return 'expert';
-  }
-
-  // Regular: short greetings, single words, trivial messages
+  // Regular: short greetings, single words, trivial messages — always cheap
   if (trimmed.length < 20 && REGULAR_PATTERNS.test(trimmed)) {
     return 'regular';
   }
 
-  // Default: pro
+  // Expert: only for deep technical analysis, debugging, security review
+  if (EXPERT_KEYWORDS.test(trimmed) || EXPERT_PHRASES.test(trimmed)) {
+    return 'expert';
+  }
+
+  // Default: pro (handles architecture, vision, general conversation)
   return 'pro';
 }
 
@@ -267,7 +253,7 @@ router.patch('/api/conversations/:id', async (req, res) => {
 // ── 6. Send chat message (SSE streaming) ──
 
 async function handleChatSend(req, res) {
-  const { conversation_id, content: rawContent, attachments, use_secondary } = req.body;
+  const { conversation_id, content: rawContent, attachments, use_secondary, forced_tier } = req.body;
 
   const hasAttachments = attachments && Array.isArray(attachments) && attachments.length > 0;
   if (!conversation_id || (!rawContent && !hasAttachments)) {
@@ -505,22 +491,28 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           }
         }
 
-        contentParts.push({ type: 'text', text: textContent });
+        if (textContent) {
+          contentParts.push({ type: 'text', text: textContent });
+        }
 
-        // Add image attachments as image_url content parts
+        // Add image attachments (Anthropic format: type 'image' with source.url)
         for (const att of msg.attachments) {
           if (att.type === 'image' && att.url) {
-            contentParts.push({ type: 'image_url', image_url: { url: att.url } });
+            contentParts.push({ type: 'image', source: { type: 'url', url: att.url } });
           }
         }
 
+        // Ensure at least one content part exists
+        if (contentParts.length === 0) {
+          contentParts.push({ type: 'text', text: '(image attached)' });
+        }
         return { role: 'user', content: contentParts };
       }
       return { role: msg.role, content: msg.content };
     })];
 
-    // Dynamic tier detection — use_secondary forces Expert, otherwise auto-detect
-    const tier = use_secondary ? 'expert' : detectTier(content, historyRows);
+    // Dynamic tier detection — forced_tier from UI toggle, use_secondary legacy compat
+    const tier = use_secondary ? 'expert' : detectTier(content, historyRows, forced_tier);
     model = TIER_MODELS[tier] || TIER_MODELS.pro;
     const isAnthropic = true; // All tiers use Claude
     console.log(`[Tier] ${tier} → ${model} (forced=${!!use_secondary})`);

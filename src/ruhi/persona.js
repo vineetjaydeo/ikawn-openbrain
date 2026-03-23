@@ -158,12 +158,16 @@ async function loadBrandKnowledge(brandId) {
     );
 
     if (rows.length > 0) {
+      const globalKb = global.ruhiKnowledge || {};
       const knowledge = {};
       for (const row of rows) {
-        knowledge[row.doc_type] = row.content;
+        // Append brand-specific content to global fallback (not replace)
+        const globalContent = globalKb[row.doc_type] || '';
+        knowledge[row.doc_type] = globalContent
+          ? `${globalContent}\n\n${row.content}`
+          : row.content;
       }
       // Fill any missing doc types from global fallback
-      const globalKb = global.ruhiKnowledge || {};
       for (const docType of ['soul', 'memory', 'tools', 'user']) {
         if (!knowledge[docType]) {
           knowledge[docType] = globalKb[docType] || '';

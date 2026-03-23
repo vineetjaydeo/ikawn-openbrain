@@ -6,6 +6,7 @@ const { searchWeb } = require('../utils/web-search');
 const { readLink } = require('../utils/link-reader');
 const { extractText, guessMimeFromFilename } = require('../utils/doc-parser');
 const { downloadFromUrl } = require('../utils/storage');
+const sharp = require('sharp');
 const { getEmbedding } = require('../embeddings');
 const { captureMessage } = require('../utils/capture');
 const { getTool, getTools } = require('../tools/registry');
@@ -461,7 +462,13 @@ Topic: ${contextSummary.topic || 'General conversation'}
 ${contextSummary.bullets ? contextSummary.bullets.map(b => `- ${b.text}`).join('\n') : ''}
 ${contextSummary.decisions?.length ? `\nKey decisions: ${contextSummary.decisions.join('; ')}` : ''}
 ${contextSummary.open_questions?.length ? `\nOpen questions: ${contextSummary.open_questions.join('; ')}` : ''}
-` : ''}=== CRITICAL RULES ===
+` : ''}=== WHO YOU ARE TALKING TO ===
+You are speaking with: ${req.session.user.name || 'User'} (role: ${req.session.user.role || 'user'})
+This is the person in this conversation. When they say "I" or "my", they mean ${req.session.user.name || 'this user'}.
+NEVER ask "${req.session.user.name || 'this user'}" to "check with ${req.session.user.name || 'themselves'}" or "confirm with ${req.session.user.name || 'themselves'}" — they ARE that person.
+If memory references work by ${req.session.user.name || 'this user'}, say "you" — because you're talking to them right now.
+
+=== CRITICAL RULES ===
 1. You ARE ${INSTANCE_NAME}. First person. "I can help with that" not "${INSTANCE_NAME} can help with that."
 2. Never say "As an AI" or "As a language model." You are ${INSTANCE_NAME}.
 3. Never reveal AI model names (GPT-4o, Claude, Gemini, etc.), providers (OpenAI, Anthropic, Google), architecture details, or internal pricing. If asked, deflect warmly: "I'm ${INSTANCE_NAME} — that's all that matters."
@@ -497,7 +504,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       }
     }
 
-    const openaiMessages = [systemPrompt, ...historyRows.map((msg) => {
+    const mappedMessages = await Promise.all(historyRows.map(async (msg) => {
       if (msg.role === 'user' && msg.attachments && Array.isArray(msg.attachments)) {
         const contentParts = [];
         let textContent = msg.content;
@@ -513,10 +520,26 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           contentParts.push({ type: 'text', text: textContent });
         }
 
-        // Add image attachments (Anthropic format: type 'image' with source.url)
+        // Add image attachments — resize if >8000px (Anthropic limit)
         for (const att of msg.attachments) {
           if (att.type === 'image' && att.url) {
-            contentParts.push({ type: 'image', source: { type: 'url', url: att.url } });
+            try {
+              const res = await fetch(att.url);
+              const buf = Buffer.from(await res.arrayBuffer());
+              const meta = await sharp(buf).metadata();
+              if (meta.width > 8000 || meta.height > 8000) {
+                const resized = await sharp(buf)
+                  .resize({ width: 8000, height: 8000, fit: 'inside', withoutEnlargement: true })
+                  .jpeg({ quality: 90 })
+                  .toBuffer();
+                contentParts.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: resized.toString('base64') } });
+              } else {
+                contentParts.push({ type: 'image', source: { type: 'url', url: att.url } });
+              }
+            } catch (imgErr) {
+              console.error(`[chat] Image resize failed for ${att.url}:`, imgErr.message);
+              contentParts.push({ type: 'image', source: { type: 'url', url: att.url } });
+            }
           }
         }
 
@@ -527,7 +550,8 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         return { role: 'user', content: contentParts };
       }
       return { role: msg.role, content: msg.content };
-    })];
+    }));
+    const openaiMessages = [systemPrompt, ...mappedMessages];
 
     // Dynamic tier detection — forced_tier from UI toggle, use_secondary legacy compat
     tier = use_secondary ? 'expert' : detectTier(content, historyRows, forced_tier, contextSummary);
@@ -578,22 +602,38 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         let roundText = '';
-        const result = await streamChatAnthropic(messages, {
-          model,
-          tools: toolSchemas.length > 0 ? toolSchemas : undefined,
-          onChunk: (chunk) => { roundText += chunk; },
-        });
-
-        // Final round (no tool_use) — flush text to client
-        if (result.stopReason !== 'tool_use') {
+        let result;
+        try {
+          result = await streamChatAnthropic(messages, {
+            model,
+            tools: toolSchemas.length > 0 ? toolSchemas : undefined,
+            onChunk: (chunk) => { roundText += chunk; },
+          });
+        } catch (streamErr) {
+          console.error(`[chat] Tool round ${round} streaming failed:`, streamErr.message);
+          // Send whatever text we have + error notice
           if (roundText) {
             fullResponse += roundText;
             res.write(`data: ${JSON.stringify({ type: 'chunk', text: roundText })}\n\n`);
           }
+          const errMsg = '\n\n*[An error occurred while processing. Please try again.]*';
+          fullResponse += errMsg;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
           break;
         }
 
-        // Tool round — suppress pre-tool text, execute tools
+        // Stream pre-tool thinking text to client (don't suppress it)
+        if (roundText) {
+          fullResponse += roundText;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: roundText })}\n\n`);
+        }
+
+        // Final round (no tool_use) — done
+        if (result.stopReason !== 'tool_use') {
+          break;
+        }
+
+        // Tool round — execute tools
         const toolUseBlocks = result.contentBlocks.filter(b => b.type === 'tool_use');
         if (toolUseBlocks.length === 0) break;
 

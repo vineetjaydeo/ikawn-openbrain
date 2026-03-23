@@ -10,10 +10,10 @@ router.get('/', requireAuth, (req, res) => {
 });
 
 router.get('/chat/:id', requireAuth, (req, res) => {
-  res.send(chatPage(req.session.user));
+  res.send(chatPage(req.session.user, true));
 });
 
-function chatPage(user) {
+function chatPage(user, isDirectChat = false) {
   const isAdmin = user.role === 'admin';
   const { SPACETIME_CSS, SPACETIME_HTML, METEOR_JS } = getSpacetimeBg();
   return `<!DOCTYPE html>
@@ -439,6 +439,8 @@ function chatPage(user) {
       min-height: 60vh;
       gap: 16px;
     }
+    /* Hide welcome screen instantly on chat URLs — prevents flash before JS runs */
+    .welcome-screen.hidden-on-load { display: none !important; }
     .welcome-logo {
       font-size: 3.2rem;
       font-weight: 700;
@@ -1547,7 +1549,7 @@ function chatPage(user) {
 
       <div class="messages" id="messages">
         <div class="messages-inner" id="messages-inner">
-          <div class="welcome-screen" id="welcome">
+          <div class="welcome-screen${isDirectChat ? ' hidden-on-load' : ''}" id="welcome">
             ${SPACETIME_HTML}
             <div class="welcome-logo"><span class="sparkle">\u2726</span> Lucy</div>
             <div class="welcome-tagline" id="welcome-tagline"></div>

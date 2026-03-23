@@ -1,0 +1,41 @@
+{
+  "env": {
+    "node": true,
+    "es2022": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022
+  },
+  "rules": {
+    "no-use-before-define": ["error", {
+      "functions": false,
+      "classes": true,
+      "variables": true
+    }],
+    "no-undef": "error",
+    "no-constant-condition": "error",
+    "no-unreachable": "error",
+    "no-unused-vars": ["warn", {
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_"
+    }],
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-var": "error",
+    "prefer-const": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.js"],
+      "globals": {
+        "describe": "readonly",
+        "it": "readonly",
+        "expect": "readonly",
+        "beforeEach": "readonly",
+        "afterEach": "readonly",
+        "beforeAll": "readonly",
+        "afterAll": "readonly",
+        "vi": "readonly"
+      }
+    }
+  ]
+}

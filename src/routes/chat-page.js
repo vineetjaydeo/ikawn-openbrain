@@ -406,6 +406,8 @@ function chatPage(user, isDirectChat = false) {
       padding: 10px 16px;
       gap: 8px;
       min-height: 44px;
+      position: relative;
+      z-index: 2;
     }
     .main-header-title {
       flex: 1;

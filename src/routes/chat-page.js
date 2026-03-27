@@ -1457,7 +1457,12 @@ function chatPage(user, isDirectChat = false) {
       .main { margin-left: 0; width: 100vw; }
       .messages-inner { padding: 20px 16px 140px; }
       .input-area { padding: 0 12px 14px; }
-      .mobile-hamburger { display: flex !important; }
+      .mobile-hamburger {
+        display: flex !important;
+        background: rgba(255,255,255,0.1);
+        color: var(--text);
+      }
+      .mobile-hamburger:hover { background: rgba(255,255,255,0.18); }
       .welcome-logo { font-size: 2.4rem; }
       .welcome-tagline { font-size: 1.3rem; padding: 0 20px; text-align: center; }
     }

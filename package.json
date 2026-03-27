@@ -1,6 +1,6 @@
 {
   "name": "ikawn-openbrain",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "iKawn's Enterprise AI Intelligence Layer — memory, RAG, chat, agent platform",
   "main": "src/index.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "express-rate-limit": "^8.3.0",
     "googleapis": "^171.4.0",
     "jsdom": "^28.1.0",
+    "mammoth": "^1.12.0",
     "openai": "^4.73.0",
     "pdf-parse": "^2.4.5",
     "pg": "^8.13.0",

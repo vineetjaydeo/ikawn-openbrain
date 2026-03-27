@@ -1459,10 +1459,13 @@ function chatPage(user, isDirectChat = false) {
       .input-area { padding: 0 12px 14px; }
       .mobile-hamburger {
         display: flex !important;
-        background: rgba(255,255,255,0.1);
-        color: var(--text);
+        background: rgba(255,255,255,0.12);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.15);
+        width: 36px;
+        height: 36px;
       }
-      .mobile-hamburger:hover { background: rgba(255,255,255,0.18); }
+      .mobile-hamburger:hover { background: rgba(255,255,255,0.22); }
       .welcome-logo { font-size: 2.4rem; }
       .welcome-tagline { font-size: 1.3rem; padding: 0 20px; text-align: center; }
     }

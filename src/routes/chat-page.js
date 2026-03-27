@@ -229,7 +229,9 @@ function chatPage(user, isDirectChat = false) {
       text-align: left;
       transition: all 0.15s;
     }
-    .panel-nav-item:hover { background: var(--bg-hover); color: var(--text); }
+    @media (hover: hover) {
+      .panel-nav-item:hover { background: var(--bg-hover); color: var(--text); }
+    }
     .panel-nav-item.active { background: var(--bg-hover); color: var(--text); }
     .panel-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
 
@@ -305,7 +307,9 @@ function chatPage(user, isDirectChat = false) {
       transition: all 0.12s;
       position: relative;
     }
-    .conv-item:hover { background: var(--bg-hover); color: var(--text); }
+    @media (hover: hover) {
+      .conv-item:hover { background: var(--bg-hover); color: var(--text); }
+    }
     .conv-item.active { background: var(--accent-soft); color: var(--text); }
 
     .conv-item-title {
@@ -507,7 +511,7 @@ function chatPage(user, isDirectChat = false) {
       height: 26px;
       border-radius: 50%;
       flex-shrink: 0;
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
       font-size: 0.65rem;
@@ -1471,6 +1475,18 @@ function chatPage(user, isDirectChat = false) {
       .mobile-hamburger:hover { background: rgb(60,60,60) !important; }
       .welcome-logo { font-size: 2.4rem; }
       .welcome-tagline { font-size: 1.3rem; padding: 0 20px; text-align: center; }
+      .conv-item {
+        font-size: 0.88rem;
+        padding: 12px 12px;
+        min-height: 44px;
+      }
+      .panel-nav-item {
+        font-size: 0.88rem;
+        padding: 10px 12px;
+        min-height: 44px;
+      }
+      .conv-group-label { font-size: 0.72rem; }
+      .conv-item-actions { display: none; }
     }
     @media (min-width: 769px) {
       .mobile-hamburger { display: none !important; }

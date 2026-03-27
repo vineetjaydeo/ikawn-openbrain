@@ -1459,14 +1459,14 @@ function chatPage(user, isDirectChat = false) {
       .input-area { padding: 0 12px 14px; }
       .mobile-hamburger {
         display: flex !important;
-        background: rgba(255,255,255,0.12) !important;
-        color: #fff !important;
-        border: 1px solid rgba(255,255,255,0.18) !important;
+        background: rgb(45,45,45) !important;
+        color: rgb(220,220,220) !important;
+        border: 1px solid rgb(65,65,65) !important;
         width: 38px !important;
         height: 38px !important;
         border-radius: 10px !important;
       }
-      .mobile-hamburger:hover { background: rgba(255,255,255,0.25) !important; }
+      .mobile-hamburger:hover { background: rgb(60,60,60) !important; }
       .welcome-logo { font-size: 2.4rem; }
       .welcome-tagline { font-size: 1.3rem; padding: 0 20px; text-align: center; }
     }

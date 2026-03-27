@@ -348,6 +348,11 @@ async function initSchema() {
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS context_msg_count INTEGER DEFAULT 0;
     `);
 
+    // Hashtags for conversation filtering
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS hashtags TEXT[] DEFAULT '{}';
+    `);
+
     // ── OpenBrain v3: edit_deltas — highest priority training data ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS edit_deltas (

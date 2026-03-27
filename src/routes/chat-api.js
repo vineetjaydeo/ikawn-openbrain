@@ -161,7 +161,7 @@ router.get('/api/conversations', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows } = await pool.query(
-      'SELECT uuid AS id, title, updated_at FROM conversations WHERE user_id = $1 AND brand_id = $2 ORDER BY updated_at DESC LIMIT 50',
+      'SELECT uuid AS id, title, hashtags, updated_at FROM conversations WHERE user_id = $1 AND brand_id = $2 ORDER BY updated_at DESC LIMIT 50',
       [req.session.user.id, req.brand_id]
     );
     res.json(rows);
@@ -247,9 +247,11 @@ router.patch('/api/conversations/:id', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     if (rows[0].user_id !== req.session.user.id) return res.status(403).json({ error: 'Forbidden' });
 
+    const newTitle = req.body.title;
+    const hashtags = (newTitle.match(/#\w+/g) || []).map(t => t.toLowerCase());
     const { rows: updated } = await pool.query(
-      'UPDATE conversations SET title = $1, updated_at = NOW() WHERE id = $2 RETURNING uuid AS id, title, updated_at',
-      [req.body.title, rows[0].id]
+      'UPDATE conversations SET title = $1, hashtags = $2, updated_at = NOW() WHERE id = $3 RETURNING uuid AS id, title, hashtags, updated_at',
+      [newTitle, hashtags, rows[0].id]
     );
     res.json(updated[0]);
   } catch (err) {
@@ -611,6 +613,22 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           });
         } catch (streamErr) {
           console.error(`[chat] Tool round ${round} streaming failed:`, streamErr.message);
+          // If first round fails, try OpenAI fallback for basic conversation (no tool_use)
+          if (round === 0 && !roundText) {
+            console.log(`[chat] Attempting OpenAI fallback...`);
+            try {
+              await streamChat(openaiMessages, {
+                model: 'gpt-4o-mini',
+                onChunk: (chunk) => {
+                  fullResponse += chunk;
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+                }
+              });
+              break; // fallback succeeded
+            } catch (fallbackErr) {
+              console.error(`[chat] OpenAI fallback also failed:`, fallbackErr.message);
+            }
+          }
           // Send whatever text we have + error notice
           if (roundText) {
             fullResponse += roundText;
@@ -786,10 +804,11 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         );
 
         const title = (titleResult.content || titleResult).toString().trim().slice(0, 100);
+        const hashtags = (title.match(/#\w+/g) || []).map(t => t.toLowerCase());
 
         await pool.query(
-          'UPDATE conversations SET title = $1, updated_at = NOW() WHERE id = $2',
-          [title, convInternalId]
+          'UPDATE conversations SET title = $1, hashtags = $2, updated_at = NOW() WHERE id = $3',
+          [title, hashtags, convInternalId]
         );
 
         res.write(`data: ${JSON.stringify({ type: 'title', title })}\n\n`);

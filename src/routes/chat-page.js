@@ -265,6 +265,35 @@ function chatPage(user, isDirectChat = false) {
       font-weight: 600;
     }
 
+    .hashtag-filter {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px 6px;
+    }
+    .hashtag-active {
+      font-size: 0.72rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .hashtag-clear {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .hashtag-clear:hover { color: var(--text); }
+    .hashtag-pill {
+      display: inline;
+      color: var(--accent);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .hashtag-pill:hover { text-decoration: underline; }
+
     .conv-item {
       display: flex;
       align-items: center;
@@ -374,22 +403,19 @@ function chatPage(user, isDirectChat = false) {
     .main-header {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
       padding: 10px 16px;
       gap: 8px;
       min-height: 44px;
     }
     .main-header-title {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
+      flex: 1;
+      min-width: 0;
+      text-align: center;
       font-size: 0.85rem;
       color: var(--text-dim);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 300px;
-      pointer-events: none;
     }
 
     .header-btn {
@@ -1432,6 +1458,8 @@ function chatPage(user, isDirectChat = false) {
       .messages-inner { padding: 20px 16px 140px; }
       .input-area { padding: 0 12px 14px; }
       .mobile-hamburger { display: flex !important; }
+      .welcome-logo { font-size: 2.4rem; }
+      .welcome-tagline { font-size: 1.3rem; padding: 0 20px; text-align: center; }
     }
     @media (min-width: 769px) {
       .mobile-hamburger { display: none !important; }
@@ -1500,6 +1528,10 @@ function chatPage(user, isDirectChat = false) {
 
       <div class="panel-divider"></div>
       <div class="panel-section-label">History</div>
+      <div class="hashtag-filter" id="hashtag-filter" style="display:none">
+        <span class="hashtag-active" id="hashtag-active-label"></span>
+        <button class="hashtag-clear" onclick="clearHashtagFilter()" title="Clear filter">&times;</button>
+      </div>
 
       <div class="panel-conversations" id="conv-list"></div>
 
@@ -1585,7 +1617,7 @@ function chatPage(user, isDirectChat = false) {
   <div class="drag-overlay" id="drag-overlay"><div class="drag-overlay-label">Drop files here</div></div>
 
   <!-- File input (hidden) -->
-  <input type="file" id="file-input" accept="image/*,application/pdf,text/plain,text/markdown,text/csv" multiple style="display:none" onchange="handleFileSelect(event)">
+  <input type="file" id="file-input" accept="image/*,application/pdf,text/plain,text/markdown,text/csv,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="display:none" onchange="handleFileSelect(event)">
 
   <!-- Gallery Picker -->
   <div class="gallery-overlay" id="gallery-overlay" onclick="if(event.target===this)closeGalleryPicker()">
@@ -1632,6 +1664,7 @@ function chatPage(user, isDirectChat = false) {
     let useSecondaryModel = false;
     let abortController = null;
     let sidebarOpen = false;
+    let activeHashtagFilter = null;
 
     /* ==================== INIT ==================== */
     document.addEventListener('DOMContentLoaded', () => {
@@ -1884,13 +1917,33 @@ function chatPage(user, isDirectChat = false) {
       }
     }
 
+    function filterByHashtag(tag) {
+      activeHashtagFilter = tag.toLowerCase();
+      var filterEl = document.getElementById('hashtag-filter');
+      var labelEl = document.getElementById('hashtag-active-label');
+      filterEl.style.display = 'flex';
+      labelEl.textContent = activeHashtagFilter;
+      renderConversationList();
+    }
+
+    function clearHashtagFilter() {
+      activeHashtagFilter = null;
+      document.getElementById('hashtag-filter').style.display = 'none';
+      renderConversationList();
+    }
+
     function renderConversationList() {
       const list = document.getElementById('conv-list');
-      if (!conversations.length) {
+      var filtered = conversations;
+      if (activeHashtagFilter) {
+        filtered = conversations.filter(c => c.hashtags && c.hashtags.some(h => h === activeHashtagFilter));
+      }
+
+      if (!filtered.length) {
         list.textContent = '';
         const empty = document.createElement('div');
         empty.style.cssText = 'padding:16px 8px;text-align:center;color:var(--text-muted);font-size:0.75rem;';
-        empty.textContent = 'No conversations yet';
+        empty.textContent = activeHashtagFilter ? 'No conversations with ' + activeHashtagFilter : 'No conversations yet';
         list.appendChild(empty);
         return;
       }
@@ -1898,7 +1951,7 @@ function chatPage(user, isDirectChat = false) {
       const now = new Date();
       const groups = { today: [], yesterday: [], week: [], month: [], older: [] };
 
-      conversations.forEach(c => {
+      filtered.forEach(c => {
         const d = new Date(c.updated_at || c.created_at);
         const diff = (now - d) / (1000 * 60 * 60 * 24);
         if (diff < 1 && now.getDate() === d.getDate()) groups.today.push(c);
@@ -1910,7 +1963,10 @@ function chatPage(user, isDirectChat = false) {
 
       const labels = { today: 'Today', yesterday: 'Yesterday', week: 'This Week', month: 'This Month', older: 'Older' };
 
-      // Build DOM safely without innerHTML
+      const renameSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+      const deleteSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+      // Build DOM safely without innerHTML (except static SVG icons)
       const frag = document.createDocumentFragment();
       for (const [key, items] of Object.entries(groups)) {
         if (!items.length) continue;
@@ -1928,7 +1984,20 @@ function chatPage(user, isDirectChat = false) {
 
           const title = document.createElement('span');
           title.className = 'conv-item-title';
-          title.textContent = c.title || 'New Chat';
+          // Render hashtags as clickable gold pills within the title
+          var titleText = c.title || 'New Chat';
+          var titleParts = titleText.split(/(#\\w+)/g);
+          titleParts.forEach(part => {
+            if (/^#\\w+/.test(part)) {
+              var pill = document.createElement('span');
+              pill.className = 'hashtag-pill';
+              pill.textContent = part;
+              pill.addEventListener('click', (e) => { e.stopPropagation(); filterByHashtag(part); });
+              title.appendChild(pill);
+            } else if (part) {
+              title.appendChild(document.createTextNode(part));
+            }
+          });
           item.appendChild(title);
 
           const actions = document.createElement('div');
@@ -1937,14 +2006,14 @@ function chatPage(user, isDirectChat = false) {
           const renameBtn = document.createElement('button');
           renameBtn.className = 'conv-action-btn';
           renameBtn.title = 'Rename';
-          renameBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+          renameBtn.innerHTML = renameSvg;
           renameBtn.addEventListener('click', (e) => { e.stopPropagation(); startRename(c.id); });
           actions.appendChild(renameBtn);
 
           const deleteBtn = document.createElement('button');
           deleteBtn.className = 'conv-action-btn danger';
           deleteBtn.title = 'Delete';
-          deleteBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+          deleteBtn.innerHTML = deleteSvg;
           deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteConversation(c.id); });
           actions.appendChild(deleteBtn);
 
@@ -2751,15 +2820,20 @@ function chatPage(user, isDirectChat = false) {
         var ct = file.type;
         if (!ct || ct === 'application/octet-stream') {
           var ext = file.name.split('.').pop().toLowerCase();
-          var mimeMap = { md: 'text/markdown', txt: 'text/plain', csv: 'text/csv', json: 'application/json', pdf: 'application/pdf' };
+          var mimeMap = { md: 'text/markdown', txt: 'text/plain', csv: 'text/csv', json: 'application/json', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
           ct = mimeMap[ext] || 'application/octet-stream';
         }
+
+        const uploadCtrl = new AbortController();
+        const uploadTimeout = setTimeout(() => uploadCtrl.abort(), 30000);
 
         const res = await fetch('/api/upload/direct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: base64, filename: file.name, contentType: ct }),
+          signal: uploadCtrl.signal,
         });
+        clearTimeout(uploadTimeout);
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -2782,7 +2856,8 @@ function chatPage(user, isDirectChat = false) {
         // Remove the placeholder on failure
         pendingAttachments.splice(placeholderIdx, 1);
         renderPendingAttachments();
-        showToast(err.message, 'error');
+        var msg = err.name === 'AbortError' ? 'Upload timed out — check your connection and try again' : (err.message || 'Upload failed');
+        showToast(msg, 'error');
       }
     }
 

@@ -1,7 +1,7 @@
 const { JSDOM } = require('jsdom');
 const { Readability } = require('@mozilla/readability');
 
-const FETCH_TIMEOUT_MS = 15_000;
+const FETCH_TIMEOUT_MS = 25_000;
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_CONTENT_LENGTH = 8_000;
 

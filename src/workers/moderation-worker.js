@@ -9,7 +9,7 @@ const BACKOFF_MS = 5 * 60 * 1000; // 5 min backoff on rate limit
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const VINEET_CHAT_ID = '534771402';
 
-let rateLimitedUntil = 0; // timestamp when backoff expires
+let rateLimitedUntil = 0; // in-memory cache, synced with DB
 
 async function notifyTelegram(memoryId, score, flags, content) {
   if (!BOT_TOKEN) return;
@@ -28,6 +28,44 @@ async function notifyTelegram(memoryId, score, flags, content) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function loadBackoffState() {
+  try {
+    const { rows } = await pool.query(
+      "SELECT value FROM worker_state WHERE key = 'moderation_backoff_until' LIMIT 1"
+    );
+    if (rows.length > 0) {
+      rateLimitedUntil = parseInt(rows[0].value) || 0;
+    }
+  } catch (_) {
+    // Table may not exist yet — will be created on first save
+  }
+}
+
+async function saveBackoffState(until) {
+  rateLimitedUntil = until;
+  try {
+    await pool.query(`
+      INSERT INTO worker_state (key, value, updated_at) VALUES ('moderation_backoff_until', $1, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+    `, [String(until)]);
+  } catch (err) {
+    // Create table if it doesn't exist (one-time)
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS worker_state (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await pool.query(`
+        INSERT INTO worker_state (key, value, updated_at) VALUES ('moderation_backoff_until', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+      `, [String(until)]);
+    } catch (_) {}
+  }
 }
 
 async function moderateUnscored() {
@@ -82,7 +120,7 @@ async function moderateUnscored() {
       } catch (err) {
         if (err.status === 429 || (err.message && err.message.includes('429'))) {
           console.warn(`[Moderation] Rate limited. Backing off for 5 minutes.`);
-          rateLimitedUntil = Date.now() + BACKOFF_MS;
+          await saveBackoffState(Date.now() + BACKOFF_MS);
           return; // Stop processing this batch entirely
         }
         console.error('[Moderation] Failed for memory', row.id, err.message);
@@ -95,8 +133,9 @@ async function moderateUnscored() {
 
 let interval = null;
 
-function startModerationWorker() {
-  console.log('[ModerationWorker] Starting (30s interval, 1s between calls, 5min backoff on 429)');
+async function startModerationWorker() {
+  console.log('[ModerationWorker] Starting (30s interval, 1s between calls, 5min backoff on 429, persistent state)');
+  await loadBackoffState();
   moderateUnscored();
   interval = setInterval(moderateUnscored, INTERVAL_MS);
 }

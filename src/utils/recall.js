@@ -171,10 +171,14 @@ async function recall(params) {
     .filter(r => r.source === 'distilled')
     .map(r => r.id);
   if (distilledIds.length > 0) {
-    pool.query(`
-      UPDATE distilled_memory SET last_used = NOW(), times_used = COALESCE(times_used, 0) + 1
-      WHERE id = ANY($1)
-    `, [distilledIds]).catch(() => {});
+    try {
+      await pool.query(`
+        UPDATE distilled_memory SET last_used = NOW(), times_used = COALESCE(times_used, 0) + 1
+        WHERE id = ANY($1)
+      `, [distilledIds]);
+    } catch (err) {
+      console.error('[Recall] Failed to update distilled memory usage:', err.message);
+    }
   }
 
   return { memories: topResults };

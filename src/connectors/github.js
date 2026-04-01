@@ -1,4 +1,5 @@
 const { pool } = require('../db');
+const { captureMessage } = require('../utils/capture');
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_ORG = process.env.GITHUB_ORG || 'ikawn-technologies';
 const GITHUB_REPOS = (process.env.GITHUB_REPOS || 'ikawn-v3,ikawn-openbrain').split(',').map(r => r.trim());
@@ -19,19 +20,17 @@ async function githubFetch(path) {
 }
 
 async function upsertMemory({ content, memory_type, source_ref, source_url, project, author, access_level }) {
-  // Check if already exists by source_ref
-  const existing = await pool.query(
-    'SELECT id FROM memories WHERE source_ref = $1 AND memory_type = $2',
-    [source_ref, memory_type]
-  );
-  if (existing.rows.length > 0) return null;
-
-  const result = await pool.query(
-    `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-     VALUES ($1, 'github', $2, $3, $4, $5, $6, $7, 'ikawn', 'pending') RETURNING id`,
-    [content, memory_type, source_ref, source_url, project, author || 'github', access_level || 'internal']
-  );
-  return result.rows[0].id;
+  // captureMessage handles ON CONFLICT by source_ref (idempotent)
+  const id = await captureMessage({
+    brand_id: 'ikawn',
+    channel: 'github',
+    direction: 'inbound',
+    content,
+    source_ref,
+    access_level: access_level || 'internal',
+    metadata: { project: project || null },
+  });
+  return id;
 }
 
 async function syncCommits(repo, since) {

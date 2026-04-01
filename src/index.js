@@ -79,13 +79,14 @@ app.use(cookieSession({
   sameSite: 'lax',
 }));
 
-// ── Rate Limiting (skip for API key authenticated requests) ──
+// ── Rate Limiting (per-user when authenticated, per-IP otherwise) ──
 const skipIfApiKey = (req) => !!req.headers['x-api-key'];
+const userKeyGenerator = (req) => req.session?.user?.id ? `user_${req.session.user.id}` : req.ip;
 app.use('/capture',             rateLimit({ windowMs: 60000, max: 60,  message: 'Capture rate limit exceeded', skip: skipIfApiKey }));
 app.use('/search',              rateLimit({ windowMs: 60000, max: 120, message: 'Search rate limit exceeded', skip: skipIfApiKey }));
-app.use('/api/chat',            rateLimit({ windowMs: 60000, max: 20,  message: 'Chat rate limit exceeded' }));
+app.use('/api/chat',            rateLimit({ windowMs: 60000, max: 20,  message: 'Chat rate limit exceeded', keyGenerator: userKeyGenerator }));
 app.use('/auth/login',          rateLimit({ windowMs: 60000, max: 5,   message: 'Too many login attempts', skipSuccessfulRequests: true }));
-app.use('/api/actions/trigger',  rateLimit({ windowMs: 60000, max: 10,  message: 'Generation rate limit exceeded', skip: skipIfApiKey }));
+app.use('/api/actions/trigger',  rateLimit({ windowMs: 60000, max: 10,  message: 'Generation rate limit exceeded', skip: skipIfApiKey, keyGenerator: userKeyGenerator }));
 
 // ── Brand scoping (sets req.brand_id on every request) ──
 app.use(requireBrand);

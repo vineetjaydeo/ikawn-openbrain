@@ -69,9 +69,12 @@ const EVENT_TYPE_MAP = {
  * NEVER throws.
  */
 async function captureEditDelta(data) {
-  // Write 1: edit_deltas (existing pipeline)
+  const client = await pool.connect();
   try {
-    await pool.query(`
+    await client.query('BEGIN');
+
+    // Write 1: edit_deltas (existing pipeline)
+    await client.query(`
       INSERT INTO edit_deltas (
         brand_id, agent_name, generation_id, session_id,
         delta_type, original_prompt, revised_prompt,
@@ -86,14 +89,10 @@ async function captureEditDelta(data) {
       data.selected_urls || [], data.rejected_urls || [],
       data.model_used || null, data.user_signal || 'implicit'
     ]);
-  } catch (err) {
-    console.error('[EditDelta] edit_deltas write failed:', err.message);
-  }
 
-  // Write 2: memory_events (distillation pipeline)
-  try {
+    // Write 2: memory_events (distillation pipeline)
     const eventType = EVENT_TYPE_MAP[data.delta_type] || 'signal';
-    await pool.query(`
+    await client.query(`
       INSERT INTO memory_events (brand_id, event_type, payload, user_id)
       VALUES ($1, $2, $3, $4)
     `, [
@@ -102,8 +101,13 @@ async function captureEditDelta(data) {
       JSON.stringify(data),
       data.user_id || null
     ]);
+
+    await client.query('COMMIT');
   } catch (err) {
-    console.error('[EditDelta] memory_events write failed:', err.message);
+    await client.query('ROLLBACK');
+    console.error('[EditDelta] Transaction failed:', err.message);
+  } finally {
+    client.release();
   }
 }
 

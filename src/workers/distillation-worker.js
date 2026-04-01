@@ -8,6 +8,7 @@ const { createWorkerGuard } = require('../utils/worker-guards');
 const { isPersonalMemory } = require('../utils/memory-types');
 
 const { resetExpiredBudgets, expireStaleActions } = require('../utils/governance');
+const { SUPERSESSION_THRESHOLD, HIGH_SIMILARITY_THRESHOLD } = require('../utils/similarity');
 
 const guard = createWorkerGuard('distillation');
 
@@ -15,8 +16,7 @@ const guard = createWorkerGuard('distillation');
 const MIN_EVENTS_FOR_DISTILLATION = 3;
 /** Maximum events per LLM call to control token budget */
 const MAX_EVENTS_PER_CALL = 50;
-/** Cosine similarity threshold for supersession check */
-const SUPERSESSION_THRESHOLD = 0.85;
+// SUPERSESSION_THRESHOLD and HIGH_SIMILARITY_THRESHOLD imported from utils/similarity.js
 
 /**
  * Main distillation entry point. Processes all unprocessed memory_events.
@@ -413,7 +413,7 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
       LIMIT 3
     `, similarParams);
 
-    const highSimilarCount = top3.filter(r => r.similarity > 0.80).length;
+    const highSimilarCount = top3.filter(r => r.similarity > HIGH_SIMILARITY_THRESHOLD).length;
     if (highSimilarCount >= 2) {
       console.log(`[DistillationWorker] Skipping duplicate insight (${highSimilarCount} similar memories exist)`);
       return; // We already know this

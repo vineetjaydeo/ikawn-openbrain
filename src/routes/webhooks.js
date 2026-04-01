@@ -41,14 +41,16 @@ router.post('/webhooks/github', async (req, res) => {
           `Files: ${(commit.added || []).concat(commit.modified || []).join(', ').slice(0, 500)}`,
         ].join('\n');
 
-        const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [commit.id]);
-        if (existing.rows.length === 0) {
-          await pool.query(
-            `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-             VALUES ($1, 'github', 'github_commit', $2, $3, $4, $5, 'internal', $6, 'pending')`,
-            [content, commit.id, commit.url, payload.repository?.name || '', commit.author?.name || 'unknown', req.brand_id]
-          );
-        }
+        // captureMessage handles ON CONFLICT by source_ref (idempotent upsert)
+        await captureMessage({
+          brand_id: req.brand_id,
+          channel: 'github',
+          direction: 'inbound',
+          content,
+          source_ref: commit.id,
+          access_level: 'internal',
+          metadata: { project: payload.repository?.name || '' },
+        });
       }
     }
 
@@ -63,20 +65,16 @@ router.post('/webhooks/github', async (req, res) => {
         issue.body ? `\n${issue.body.slice(0, 1000)}` : '',
       ].join('\n');
 
-      const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [ref]);
-      if (existing.rows.length === 0) {
-        await pool.query(
-          `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-           VALUES ($1, 'github', 'github_issue', $2, $3, $4, $5, 'internal', $6, 'pending')`,
-          [content, ref, issue.html_url, payload.repository?.name || '', issue.user?.login || 'unknown', req.brand_id]
-        );
-      } else {
-        // Update existing — re-queue for async embedding
-        await pool.query(
-          'UPDATE memories SET content = $1, embedding_status = $2 WHERE source_ref = $3',
-          [content, 'pending', ref]
-        );
-      }
+      // captureMessage handles ON CONFLICT by source_ref — upserts content + re-queues embedding
+      await captureMessage({
+        brand_id: req.brand_id,
+        channel: 'github',
+        direction: 'inbound',
+        content,
+        source_ref: ref,
+        access_level: 'internal',
+        metadata: { project: payload.repository?.name || '' },
+      });
     }
 
     if (event === 'pull_request' && payload.pull_request) {
@@ -90,20 +88,16 @@ router.post('/webhooks/github', async (req, res) => {
         pr.body ? `\n${pr.body.slice(0, 1000)}` : '',
       ].join('\n');
 
-      const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [ref]);
-      if (existing.rows.length === 0) {
-        await pool.query(
-          `INSERT INTO memories (content, source, memory_type, source_ref, source_url, project, author, access_level, brand_id, embedding_status)
-           VALUES ($1, 'github', 'github_pr', $2, $3, $4, $5, 'internal', $6, 'pending')`,
-          [content, ref, pr.html_url, payload.repository?.name || '', pr.user?.login || 'unknown', req.brand_id]
-        );
-      } else {
-        // Update existing — re-queue for async embedding
-        await pool.query(
-          'UPDATE memories SET content = $1, embedding_status = $2 WHERE source_ref = $3',
-          [content, 'pending', ref]
-        );
-      }
+      // captureMessage handles ON CONFLICT by source_ref — upserts content + re-queues embedding
+      await captureMessage({
+        brand_id: req.brand_id,
+        channel: 'github',
+        direction: 'inbound',
+        content,
+        source_ref: ref,
+        access_level: 'internal',
+        metadata: { project: payload.repository?.name || '' },
+      });
     }
 
     res.json({ received: true });
@@ -389,6 +383,9 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     let messages = [...historyMessages];
     let ruhiReply = '';
     const MAX_ROUNDS = 5;
+    const TOOL_TIMEOUT_MS = 30000;
+    const MAX_TOOL_FAILURES = 2;
+    const toolFailureCounts = {};
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const response = await anthropic.messages.create({
@@ -414,14 +411,21 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       for (const toolBlock of toolUseBlocks) {
         const tool = getTool(toolBlock.name);
         let result;
-        if (tool) {
+        if (!tool) {
+          result = { success: false, data: null, summary: `Unknown tool: ${toolBlock.name}` };
+        } else if ((toolFailureCounts[toolBlock.name] || 0) >= MAX_TOOL_FAILURES) {
+          result = { success: false, data: null, summary: `Tool ${toolBlock.name} disabled after ${MAX_TOOL_FAILURES} failures` };
+        } else {
           try {
-            result = await tool.execute(toolBlock.input || {}, { brandId: req.brand_id, userId, conversationId: String(chatId), pool });
+            result = await Promise.race([
+              tool.execute(toolBlock.input || {}, { brandId: req.brand_id, userId, conversationId: String(chatId), pool }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolBlock.name} timed out after 30s`)), TOOL_TIMEOUT_MS))
+            ]);
           } catch (err) {
+            toolFailureCounts[toolBlock.name] = (toolFailureCounts[toolBlock.name] || 0) + 1;
+            console.error(`[Telegram] Tool ${toolBlock.name} failed (${toolFailureCounts[toolBlock.name]}/${MAX_TOOL_FAILURES}):`, err.message);
             result = { success: false, data: null, summary: `Tool error: ${err.message}` };
           }
-        } else {
-          result = { success: false, data: null, summary: `Unknown tool: ${toolBlock.name}` };
         }
         toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: JSON.stringify(result) });
       }

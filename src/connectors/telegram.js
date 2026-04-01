@@ -1,8 +1,8 @@
 const { pool } = require('../db');
 const { uploadToR2 } = require('../utils/storage');
 const { extractText } = require('../utils/doc-parser');
-const { suggestHashtags } = require('../utils/hashtags');
 const { INSTANCE_NAME } = require('../utils/ruhi-assets');
+const { captureMessage } = require('../utils/capture');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -166,14 +166,14 @@ async function flushConversation(chatId) {
   const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [sourceRef]);
   if (existing.rows.length > 0) return;
 
-  const hashtags = await suggestHashtags(content);
-
-  await pool.query(
-    `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
-     VALUES ($1, 'openclaw-telegram', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
-     RETURNING id`,
-    [content, sourceRef, null, 'vineet', hashtags.length > 0 ? hashtags : null]
-  );
+  await captureMessage({
+    brand_id: 'ikawn',
+    channel: 'openclaw-telegram',
+    direction: 'inbound',
+    content,
+    source_ref: sourceRef,
+    access_level: 'private',
+  });
 
   // Log ingestion
   await pool.query(
@@ -209,13 +209,14 @@ async function saveMessageToDB(msg, entry) {
     else if (att.type === 'video') content += `\n[Video: ${att.url}]`;
   }
 
-  const hashtags = await suggestHashtags(content);
-
-  await pool.query(
-    `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
-     VALUES ($1, 'openclaw-telegram', 'discussion', $2, $3, $4, 'private', $5, 'ikawn', 'pending')`,
-    [content.slice(0, 8000), sourceRef, null, entry.sender.toLowerCase(), hashtags.length > 0 ? hashtags : null]
-  );
+  await captureMessage({
+    brand_id: 'ikawn',
+    channel: 'openclaw-telegram',
+    direction: 'inbound',
+    content: content.slice(0, 8000),
+    source_ref: sourceRef,
+    access_level: 'private',
+  });
 
   await pool.query(
     `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('openclaw-telegram', 'success', 1)`
@@ -296,21 +297,23 @@ async function handleSelfReport({ content, project, hashtags }) {
   }
 
   const sourceRef = `openclaw-report-${Date.now()}`;
-  const autoHashtags = Array.isArray(hashtags) && hashtags.length > 0
-    ? hashtags
-    : await suggestHashtags(content);
 
-  const result = await pool.query(
-    `INSERT INTO memories (content, source, memory_type, source_ref, project, author, access_level, hashtags, brand_id, embedding_status)
-     VALUES ($1, 'openclaw', 'note', $2, $3, $4, 'private', $5, 'ikawn', 'pending')
-     RETURNING id, content, source, created_at`,
-    [content.slice(0, 8000), sourceRef, project || null, 'openclaw', autoHashtags.length > 0 ? autoHashtags : null]
-  );
+  const memoryId = await captureMessage({
+    brand_id: 'ikawn',
+    channel: 'openclaw',
+    direction: 'inbound',
+    content: content.slice(0, 8000),
+    source_ref: sourceRef,
+    access_level: 'private',
+    metadata: { project: project || null },
+  });
 
   await pool.query(
     `INSERT INTO ob_ingestion_log (source, status, records_added) VALUES ('openclaw', 'success', 1)`
   );
 
+  // Return a shape compatible with the existing API response
+  const result = await pool.query('SELECT id, content, source, created_at FROM memories WHERE id = $1', [memoryId]);
   return result.rows[0];
 }
 

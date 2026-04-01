@@ -3,7 +3,7 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { z } = require('zod');
 const { pool, initSchema } = require('../db');
 const { getEmbedding } = require('../embeddings');
-const { suggestHashtags } = require('../utils/hashtags');
+const { captureMessage } = require('../utils/capture');
 
 // MCP brand context — configurable via env, defaults to 'ikawn'
 const MCP_BRAND_ID = process.env.MCP_BRAND_ID || 'ikawn';
@@ -24,19 +24,19 @@ server.tool(
     access_level: z.string().optional(),
   },
   async ({ content, type, project, hashtags, access_level }) => {
-    // Extract hashtags from content
-    const extracted = (content.match(/#[a-zA-Z0-9_]+/g) || []).map(t => t.toLowerCase());
-    let allHashtags = [...new Set([...(hashtags || []), ...extracted])];
-    if (allHashtags.length === 0) {
-      const suggested = await suggestHashtags(content);
-      allHashtags = suggested;
-    }
+    const memoryId = await captureMessage({
+      brand_id: MCP_BRAND_ID,
+      channel: 'mcp',
+      direction: 'inbound',
+      content,
+      access_level: access_level || 'private',
+      metadata: { project: project || null },
+    });
 
-    const result = await pool.query(
-      `INSERT INTO memories (content, source, memory_type, project, hashtags, access_level, author, brand_id, embedding_status)
-       VALUES ($1, 'mcp', $2, $3, $4, $5, 'vineet', $6, 'pending') RETURNING id, content, memory_type, project, hashtags, created_at`,
-      [content, type || 'note', project || null, allHashtags.length > 0 ? allHashtags : null, access_level || 'private', MCP_BRAND_ID]
-    );
+    // Fetch the created row to return full details
+    const result = memoryId
+      ? await pool.query('SELECT id, content, memory_type, project, hashtags, created_at FROM memories WHERE id = $1', [memoryId])
+      : { rows: [{ id: null, content, memory_type: type || 'note', project, hashtags, created_at: new Date() }] };
 
     return { content: [{ type: 'text', text: JSON.stringify(result.rows[0]) }] };
   }
@@ -139,16 +139,20 @@ server.tool(
     hashtags: z.array(z.string()).optional(),
   },
   async ({ decision, context, project, signed_off_by, hashtags }) => {
-    const memoryResult = await pool.query(
-      `INSERT INTO memories (content, source, memory_type, project, author, signed_off_by, access_level, hashtags, brand_id, embedding_status)
-       VALUES ($1, 'decision', 'decision', $2, $3, $4, 'management', $5, $6, 'pending') RETURNING id`,
-      [context ? `${decision}\n\nContext: ${context}` : decision, project || null, signed_off_by || 'vineet', signed_off_by || null, hashtags || null, MCP_BRAND_ID]
-    );
+    const decisionContent = context ? `${decision}\n\nContext: ${context}` : decision;
+    const memoryId = await captureMessage({
+      brand_id: MCP_BRAND_ID,
+      channel: 'decision',
+      direction: 'outbound',
+      content: decisionContent,
+      access_level: 'management',
+      metadata: { project: project || null },
+    });
 
     const result = await pool.query(
       `INSERT INTO ob_decisions (decision, context, decided_by, signed_off_by, project, hashtags, memory_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [decision, context || null, signed_off_by || 'vineet', signed_off_by || null, project || null, hashtags || null, memoryResult.rows[0].id]
+      [decision, context || null, signed_off_by || 'vineet', signed_off_by || null, project || null, hashtags || null, memoryId]
     );
 
     return { content: [{ type: 'text', text: JSON.stringify(result.rows[0]) }] };

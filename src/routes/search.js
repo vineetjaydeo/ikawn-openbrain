@@ -67,10 +67,12 @@ router.get('/search', async (req, res) => {
       query += ` AND author = $${paramIdx++}`;
       params.push(author);
     }
-    if (user_id) {
-      // User isolation: show this user's memories + non-private shared memories
+    // User isolation: prefer session user, fall back to query param
+    const effectiveUserId = req.session?.user?.id || (user_id ? parseInt(user_id) : null);
+    if (effectiveUserId) {
+      // Show this user's memories + shared (non-private or null user_id)
       query += ` AND (user_id = $${paramIdx++} OR access_level NOT IN ('private') OR user_id IS NULL)`;
-      params.push(parseInt(user_id));
+      params.push(effectiveUserId);
     }
     if (from) {
       query += ` AND created_at >= $${paramIdx++}`;

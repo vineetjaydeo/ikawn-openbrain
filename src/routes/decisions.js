@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { pool } = require('../db');
+const { captureMessage } = require('../utils/capture');
 const router = Router();
 
 router.post('/decisions', async (req, res) => {
@@ -9,20 +10,16 @@ router.post('/decisions', async (req, res) => {
       return res.status(400).json({ error: 'decision is required' });
     }
 
-    // Insert into memories — embedding handled async by worker
-    const memoryResult = await pool.query(
-      `INSERT INTO memories (content, source, memory_type, project, author, signed_off_by, access_level, hashtags, brand_id, embedding_status)
-       VALUES ($1, 'decision', 'decision', $2, $3, $4, $5, $6, $7, 'pending') RETURNING id`,
-      [
-        context ? `${decision}\n\nContext: ${context}` : decision,
-        project || null,
-        signed_off_by || 'vineet',
-        signed_off_by || null,
-        access_level || 'management',
-        hashtags || null,
-        req.brand_id,
-      ]
-    );
+    // Insert into memories via captureMessage — embedding handled async by worker
+    const decisionContent = context ? `${decision}\n\nContext: ${context}` : decision;
+    const memoryId = await captureMessage({
+      brand_id: req.brand_id,
+      channel: 'decision',
+      direction: 'outbound',
+      content: decisionContent,
+      access_level: access_level || 'management',
+      metadata: { project: project || null },
+    });
 
     // Insert into ob_decisions
     const decisionResult = await pool.query(
@@ -36,7 +33,7 @@ router.post('/decisions', async (req, res) => {
         project || null,
         access_level || 'management',
         hashtags || null,
-        memoryResult.rows[0].id,
+        memoryId,
         req.brand_id,
       ]
     );

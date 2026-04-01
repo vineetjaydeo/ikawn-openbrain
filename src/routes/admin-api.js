@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { requireAdmin, requireAuthOrApiKey } = require('../auth');
 const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
+const { SYNC_DEDUP_THRESHOLD } = require('../utils/similarity');
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.post('/api/sync/receive', requireAuthOrApiKey, async (req, res) => {
   }
 
   const CONFIDENCE_FACTOR = 0.8; // Reduce confidence for synced knowledge
-  const SIMILARITY_THRESHOLD = 0.85;
+  const SIMILARITY_THRESHOLD = SYNC_DEDUP_THRESHOLD;
   let accepted = 0;
   let skipped = 0;
 

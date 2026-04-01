@@ -11,7 +11,11 @@ const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio
 const { z } = require('zod');
 
 const BASE_URL = 'https://ikawn-openbrain.fly.dev';
-const API_KEY = process.env.OPENBRAIN_API_KEY || 'ob_b2ee4fa803bbd763ca9a989e0b9038db4610f143d7194fdaaf37e74e1c39681c';
+const API_KEY = process.env.OPENBRAIN_API_KEY;
+if (!API_KEY) {
+  console.error('[MCP] OPENBRAIN_API_KEY environment variable is required');
+  process.exit(1);
+}
 
 async function apiFetch(path, opts = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {

@@ -12,6 +12,7 @@ const { captureMessage } = require('../utils/capture');
 const { getTool, getTools } = require('../tools/registry');
 const { loadBrandKnowledge } = require('../ruhi/persona');
 const { INSTANCE_NAME } = require('../utils/ruhi-assets');
+const { CHAT_CONTEXT_THRESHOLD } = require('../utils/similarity');
 
 // ── Dynamic Model Tier Detection ──
 const EXPERT_KEYWORDS = /\b(investor|valuation|funding|revenue|series\s*[abc]|due\s*diligence|term\s*sheet|cap\s*table|equity|partnership\s*agreement|legal|compliance|acquisition|board\s*meeting|arr|mrr|burn\s*rate|runway|dilution|convertible\s*note|safe\s*note)\b/i;
@@ -110,7 +111,7 @@ async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn'
     const now = Date.now();
     // Re-rank: 70% similarity + 30% recency (exponential decay over 7 days)
     const scored = result.rows
-      .filter(r => r.similarity > 0.2)
+      .filter(r => r.similarity > CHAT_CONTEXT_THRESHOLD)
       .map(r => {
         const ageMs = now - new Date(r.created_at).getTime();
         const ageDays = ageMs / (1000 * 60 * 60 * 24);
@@ -484,7 +485,8 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
 8. Remember: everything discussed here feeds into your knowledge for iKawn OS. Treat every conversation as a learning opportunity about the user and their brand.
 9. You earn trust progressively. Start helpful. Become indispensable.
 10. You have LIVE memory feeds from GitHub (commits, PRs, issues), Telegram conversations, and past decisions. This data is automatically synced — you DO have access. Never say "I don't have access to GitHub" or ask the user to paste links. If the memory feed contains relevant data, USE it confidently. If a specific piece of info isn't in your memory, say "I don't have that specific detail in my recent memory" — not "I can't access GitHub."
-11. When referencing memory data, be specific: cite commit messages, dates, authors. Don't hedge or disclaim.`
+11. When referencing memory data, be specific: cite commit messages, dates, authors. Don't hedge or disclaim.
+12. TOOL USE DISCIPLINE: When you decide to search the web or use any tool, CALL IT DIRECTLY in the same response. Do NOT write "Let me research this" or "I'll look into that" as a standalone message without actually calling the tool. Never promise research you don't deliver. The user sees a "searching..." indicator when you call web_search — just call it, don't narrate your intent.`
       };
     }
 
@@ -596,11 +598,14 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     }
 
     const pendingGenerations = [];
+    const TOOL_TIMEOUT_MS = 30000;
 
     if (isAnthropic) {
       // ── Claude path: native tool_use with multi-turn loop (same pattern as ruhi-chat.js) ──
       const MAX_TOOL_ROUNDS = 5;
+      const MAX_TOOL_FAILURES = 2;
       let messages = [...openaiMessages];
+      const toolFailureCounts = {}; // track per-tool failures
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         let roundText = '';
@@ -648,11 +653,13 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
 
         // Final round (no tool_use) — done
         if (result.stopReason !== 'tool_use') {
+          console.log(`[chat] Round ${round} ended with stopReason=${result.stopReason}, no tool calls`);
           break;
         }
 
         // Tool round — execute tools
         const toolUseBlocks = result.contentBlocks.filter(b => b.type === 'tool_use');
+        console.log(`[chat] Round ${round}: ${toolUseBlocks.length} tool calls: ${toolUseBlocks.map(b => b.name).join(', ')}`);
         if (toolUseBlocks.length === 0) break;
 
         // Build assistant message for conversation history
@@ -665,26 +672,54 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         // Execute each tool
         const toolResults = [];
         for (const block of toolUseBlocks) {
-          res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: block.name })}\n\n`);
+          // Send rich tool_start with input details
+          const toolStartData = { type: 'tool_start', tool: block.name };
+          if (block.name === 'web_search' && block.input?.query) {
+            toolStartData.detail = block.input.query;
+          } else if (block.input) {
+            // For other tools, send a brief summary of the input
+            const inputKeys = Object.keys(block.input);
+            if (inputKeys.length > 0) {
+              const firstVal = block.input[inputKeys[0]];
+              toolStartData.detail = typeof firstVal === 'string' ? firstVal.slice(0, 100) : undefined;
+            }
+          }
+          res.write(`data: ${JSON.stringify(toolStartData)}\n\n`);
           let toolOutput;
 
           if (block.name === 'web_search') {
             try {
+              console.log(`[chat] web_search called with query: "${block.input?.query}"`);
               const searchResults = await searchWeb(block.input?.query || '');
+              console.log(`[chat] web_search returned ${Array.isArray(searchResults) ? searchResults.length : 'non-array'} results`);
               toolOutput = typeof searchResults === 'string' ? searchResults : JSON.stringify(searchResults);
+              // Send rich tool_done with sources
+              const sources = Array.isArray(searchResults)
+                ? searchResults.slice(0, 5).map(r => ({ title: r.title, url: r.url }))
+                : [];
+              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, sources, count: Array.isArray(searchResults) ? searchResults.length : 0 })}\n\n`);
             } catch (err) {
+              console.error(`[chat] web_search error:`, err.message);
               toolOutput = `[Web search failed: ${err.message}]`;
+              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: err.message })}\n\n`);
             }
           } else {
             const registryTool = getTool(block.name);
             if (!registryTool) {
               toolOutput = JSON.stringify({ error: `Unknown tool: ${block.name}` });
+              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: `Unknown tool` })}\n\n`);
+            } else if ((toolFailureCounts[block.name] || 0) >= MAX_TOOL_FAILURES) {
+              toolOutput = JSON.stringify({ error: `Tool ${block.name} disabled after ${MAX_TOOL_FAILURES} failures this session` });
+              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: `Disabled after repeated failures` })}\n\n`);
             } else {
               try {
-                const execResult = await registryTool.execute(
-                  block.input || {},
-                  { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: conversation_id, pool }
-                );
+                const execResult = await Promise.race([
+                  registryTool.execute(
+                    block.input || {},
+                    { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: conversation_id, pool }
+                  ),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${block.name} timed out after 30s`)), TOOL_TIMEOUT_MS))
+                ]);
                 // Special handling for ikawn_generate
                 if (block.name === 'ikawn_generate' && execResult?.success && execResult?.data?.generationId) {
                   const agent = block.input?.agent || 'genie';
@@ -696,14 +731,15 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
                   pendingGenerations.push({ generationId: execResult.data.generationId, agent, prompt: block.input?.prompt, batchSize });
                 }
                 toolOutput = execResult?.summary || JSON.stringify(execResult?.data || execResult);
+                res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, success: true })}\n\n`);
               } catch (toolErr) {
-                console.error(`[Chat] Tool ${block.name} failed:`, toolErr.message);
+                toolFailureCounts[block.name] = (toolFailureCounts[block.name] || 0) + 1;
+                console.error(`[Chat] Tool ${block.name} failed (${toolFailureCounts[block.name]}/${MAX_TOOL_FAILURES}):`, toolErr.message);
                 toolOutput = JSON.stringify({ error: `Tool ${block.name} failed: ${toolErr.message}` });
+                res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: toolErr.message })}\n\n`);
               }
             }
           }
-
-          res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name })}\n\n`);
           toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput) });
         }
         messages.push({ role: 'user', content: toolResults });
@@ -737,7 +773,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
             try { content = JSON.stringify(await searchWeb(args.query)); } catch { content = '[Web search failed]'; }
           } else if (registryTool) {
             try {
-              const result = await registryTool.execute(args, { brandId: req.brand_id, userId: req.session?.user?.id, pool });
+              const result = await Promise.race([
+                registryTool.execute(args, { brandId: req.brand_id, userId: req.session?.user?.id, pool }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 30s`)), TOOL_TIMEOUT_MS))
+              ]);
               content = JSON.stringify(result);
             } catch (err) { content = JSON.stringify({ error: err.message }); }
           } else {

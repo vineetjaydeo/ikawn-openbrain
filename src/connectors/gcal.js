@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const { pool } = require('../db');
+const { captureMessage } = require('../utils/capture');
 async function getCalendarClient() {
   const credsBase64 = process.env.GOOGLE_CALENDAR_CREDENTIALS;
   if (!credsBase64) return null;
@@ -41,8 +42,6 @@ async function syncCalendar() {
 
     for (const event of events) {
       const sourceRef = `gcal-${event.id}`;
-      const existing = await pool.query('SELECT id FROM memories WHERE source_ref = $1', [sourceRef]);
-      if (existing.rows.length > 0) continue;
 
       const attendees = (event.attendees || []).map(a => a.email).join(', ');
       const isTeamEvent = (event.attendees || []).length > 1;
@@ -55,17 +54,15 @@ async function syncCalendar() {
         event.hangoutLink ? `Meeting link: ${event.hangoutLink}` : '',
       ].filter(Boolean).join('\n');
 
-      await pool.query(
-        `INSERT INTO memories (content, source, memory_type, source_ref, source_url, author, access_level, brand_id, embedding_status)
-         VALUES ($1, 'calendar', 'calendar_event', $2, $3, 'vineet', $4, 'ikawn', 'pending')`,
-        [
-          content,
-          sourceRef,
-          event.htmlLink || null,
-          isTeamEvent ? 'management' : 'private',
-        ]
-      );
-      added++;
+      const id = await captureMessage({
+        brand_id: 'ikawn',
+        channel: 'calendar',
+        direction: 'inbound',
+        content,
+        source_ref: sourceRef,
+        access_level: isTeamEvent ? 'management' : 'private',
+      });
+      if (id) added++;
     }
 
     await pool.query(

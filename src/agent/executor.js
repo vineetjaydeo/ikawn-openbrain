@@ -7,9 +7,10 @@ const { getTool, getToolSchemas, checkToolPermission } = require('../tools/regis
 const { recall } = require('../utils/recall');
 const { captureMessage } = require('../utils/capture');
 const { sendTelegramMessage } = require('../utils/telegram');
+const { feature } = require('../utils/features');
 
-const MAX_TOOL_ROUNDS = 5;
-const MAX_TOKENS = 30_000; // ~$0.10/run instead of $0.68
+const MAX_TOOL_ROUNDS = 10;
+const MAX_TOKENS = 50_000;
 const TOOL_TIMEOUT_MS = 20_000;
 const TOOL_CONCURRENCY = 5;
 
@@ -34,19 +35,28 @@ async function executeSingleTool(toolBlock, context) {
   if (!tool) {
     result = { success: false, data: null, summary: `Unknown tool: ${toolBlock.name}` };
   } else {
-    // Permission check before execution
-    const permission = checkToolPermission(toolBlock.name, {
-      brandId: context.brandId,
-      userId: context.userId,
-      isInternal: context.brandId === 'ikawn',
-    });
-    if (!permission.allowed) {
-      result = { success: false, data: null, summary: `Permission denied: ${permission.reason}` };
+    // Feature flag check for gated tools
+    const CODE_TOOL_NAMES = ['code_read', 'code_write', 'code_edit', 'bash_exec'];
+    const DEPLOY_TOOL_NAMES = ['deploy_openbrain'];
+    if (CODE_TOOL_NAMES.includes(toolBlock.name) && !feature('CODE_TOOLS')) {
+      result = { success: false, data: null, summary: `Tool ${toolBlock.name} is disabled (CODE_TOOLS feature flag is off)` };
+    } else if (DEPLOY_TOOL_NAMES.includes(toolBlock.name) && !feature('DEPLOY_TOOLS')) {
+      result = { success: false, data: null, summary: `Tool ${toolBlock.name} is disabled (DEPLOY_TOOLS feature flag is off)` };
     } else {
-      try {
-        result = await withTimeout(tool.execute(toolBlock.input || {}, context));
-      } catch (err) {
-        result = { success: false, data: null, summary: `Tool error: ${err.message}` };
+      // Permission check before execution
+      const permission = checkToolPermission(toolBlock.name, {
+        brandId: context.brandId,
+        userId: context.userId,
+        isInternal: context.brandId === 'ikawn',
+      });
+      if (!permission.allowed) {
+        result = { success: false, data: null, summary: `Permission denied: ${permission.reason}` };
+      } else {
+        try {
+          result = await withTimeout(tool.execute(toolBlock.input || {}, context));
+        } catch (err) {
+          result = { success: false, data: null, summary: `Tool error: ${err.message}` };
+        }
       }
     }
   }
@@ -172,7 +182,8 @@ INSTRUCTIONS:
   const messages = [{ role: 'user', content: `Execute task: ${task.name}` }];
   let finalResult = null;
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+  const maxRounds = (task.config && task.config.max_tool_rounds) || MAX_TOOL_ROUNDS;
+  for (let round = 0; round < maxRounds; round++) {
     const { response, cost } = await callWithFallback({
       system: systemPrompt,
       messages,
@@ -190,10 +201,11 @@ INSTRUCTIONS:
       return { success: false, result: { summary: 'Cost cap exceeded' }, cost: { costUsd: totalCost, tokensUsed: totalTokens } };
     }
 
-    // Token safety cap
-    if (totalTokens > MAX_TOKENS) {
-      console.warn(`[Executor] Task ${task.id} hit ${MAX_TOKENS / 1000}k token cap`);
-      return { success: false, result: { summary: `Token safety cap exceeded (${MAX_TOKENS / 1000}k)` }, cost: { costUsd: totalCost, tokensUsed: totalTokens } };
+    // Token safety cap (task config can override default)
+    const tokenCap = (task.config && task.config.max_tokens) || MAX_TOKENS;
+    if (totalTokens > tokenCap) {
+      console.warn(`[Executor] Task ${task.id} hit ${tokenCap / 1000}k token cap`);
+      return { success: false, result: { summary: `Token safety cap exceeded (${tokenCap / 1000}k)` }, cost: { costUsd: totalCost, tokensUsed: totalTokens } };
     }
 
     const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
@@ -211,7 +223,7 @@ INSTRUCTIONS:
     messages.push({ role: 'user', content: toolResults });
 
     if (round >= MAX_TOOL_ROUNDS - 1) {
-      console.warn(`[Executor] Task ${task.id} hit max tool rounds (${MAX_TOOL_ROUNDS})`);
+      console.warn(`[Executor] Task ${task.id} hit max tool rounds (${maxRounds})`);
     }
   }
 

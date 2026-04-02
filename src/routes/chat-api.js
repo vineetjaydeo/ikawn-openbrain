@@ -590,10 +590,13 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     console.log(`[Tier] ${tier} → ${model} (forced=${!!use_secondary})`);
 
     // Build tool schemas (Anthropic format — name, description, input_schema)
+    // Only expose 'direct' tier tools to chat — 'agent' tier tools are restricted to executor
     const { getToolSchemas } = require('../tools/registry');
     const registryTools = getTools();
-    const allToolNames = [...registryTools.keys()];
-    const toolSchemas = allToolNames.length > 0 ? getToolSchemas(allToolNames) : [];
+    const chatToolNames = [...registryTools.entries()]
+      .filter(([, tool]) => tool.tier !== 'agent')
+      .map(([name]) => name);
+    const toolSchemas = chatToolNames.length > 0 ? getToolSchemas(chatToolNames) : [];
     // Add web_search as Claude native server tool (handles search internally, no manual Brave calls needed)
     toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 5 });
 
@@ -905,7 +908,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           [
             { role: 'user', content: `Generate a 3-5 word title for this conversation. Respond with only the title, no quotes or punctuation.\n\nUser message: ${content || '[User shared an image]'}` }
           ],
-          { model: 'gpt-4o-mini' }
+          { model: 'gemini-2.5-flash' }
         );
 
         const title = (titleResult.content || titleResult).toString().trim().slice(0, 100);

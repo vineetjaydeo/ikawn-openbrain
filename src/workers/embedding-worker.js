@@ -14,7 +14,7 @@ function getGenAI() {
   return _genAI;
 }
 
-const EMBEDDING_MODEL = 'text-embedding-004';
+const EMBEDDING_MODEL = 'gemini-embedding-001';
 const BATCH_SIZE = 50;
 const INTERVAL_MS = 5000;
 const RETRY_STATUS_SEQUENCE = { 'pending': 'retry_1', 'retry_1': 'retry_2', 'retry_2': 'failed' };

@@ -15,7 +15,7 @@ function getGenAI() {
 
 async function getEmbedding(text) {
   const genAI = getGenAI();
-  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
   const result = await model.embedContent(text);
   return result.embedding.values;
 }

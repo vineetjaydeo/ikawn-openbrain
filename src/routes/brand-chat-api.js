@@ -31,31 +31,31 @@ async function requireBrandApiAuth(req, res, next) {
     return res.status(400).json({ error: 'X-Brand-Id and X-User-Id headers required' });
   }
 
-  // Resolve external user ID (cuid string from ikawn-v3) to internal integer ID.
-  // If the external ID is already numeric, use it directly. Otherwise, lookup/create.
-  let internalId = parseInt(externalUserId);
-  if (isNaN(internalId)) {
-    try {
-      // Try to find existing user by external_id
-      let { rows } = await pool.query(
-        'SELECT id FROM users WHERE external_id = $1', [externalUserId]
-      );
-      if (rows.length === 0) {
-        // Create a new user for this external ID
-        const decodedName = userName ? decodeURIComponent(userName) : 'User';
-        ({ rows } = await pool.query(
-          `INSERT INTO users (email, name, external_id, role)
-           VALUES ($1, $2, $3, 'user')
-           ON CONFLICT (external_id) DO UPDATE SET name = EXCLUDED.name
-           RETURNING id`,
-          [`brand-${externalUserId}@ikawn.os`, decodedName, externalUserId]
-        ));
-      }
-      internalId = rows[0].id;
-    } catch (err) {
-      console.error('[BrandChat] User resolution failed:', err.message);
-      return res.status(500).json({ error: 'User resolution failed' });
+  // Resolve external user ID to internal integer ID.
+  // ALWAYS treat externalUserId as an opaque external identifier — never use it directly
+  // as an internal DB ID, even if it happens to be numeric. ikawn-v3 user IDs are from a
+  // separate database and don't exist in OpenBrain's users table.
+  let internalId;
+  try {
+    // Try to find existing user by external_id
+    let { rows } = await pool.query(
+      'SELECT id FROM users WHERE external_id = $1', [String(externalUserId)]
+    );
+    if (rows.length === 0) {
+      // Create a new user for this external ID
+      const decodedName = userName ? decodeURIComponent(userName) : 'User';
+      ({ rows } = await pool.query(
+        `INSERT INTO users (email, name, external_id, role)
+         VALUES ($1, $2, $3, 'user')
+         ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET name = EXCLUDED.name
+         RETURNING id`,
+        [`brand-${externalUserId}@ikawn.os`, decodedName, String(externalUserId)]
+      ));
     }
+    internalId = rows[0].id;
+  } catch (err) {
+    console.error('[BrandChat] User resolution failed:', err.message);
+    return res.status(500).json({ error: 'User resolution failed' });
   }
 
   // Synthesize session so chat-api handlers work unchanged

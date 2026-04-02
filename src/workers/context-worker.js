@@ -5,6 +5,8 @@ const INTERVAL_MS = 30000; // Check every 30s
 const MSG_THRESHOLD = 3;   // Summarize after every 3 user messages since last summary
 
 let intervalId = null;
+const failedConvs = new Map(); // uuid -> { count, backoffUntil }
+const MAX_RETRIES = 3;
 
 async function processContextSummaries() {
   try {
@@ -27,10 +29,19 @@ async function processContextSummaries() {
     if (conversations.length === 0) return;
 
     for (const conv of conversations) {
+      const fail = failedConvs.get(conv.uuid);
+      if (fail) {
+        if (fail.count >= MAX_RETRIES) continue; // stop retrying after 3 failures
+        if (Date.now() < fail.backoffUntil) continue; // respect backoff
+      }
       try {
         await summarizeConversation(conv);
+        failedConvs.delete(conv.uuid); // success — clear failure state
       } catch (err) {
-        console.error(`[ContextWorker] Failed to summarize conv ${conv.uuid}:`, err.message);
+        const count = (fail?.count || 0) + 1;
+        const backoffMs = count * 60000; // 1min, 2min, 3min then stop
+        failedConvs.set(conv.uuid, { count, backoffUntil: Date.now() + backoffMs });
+        console.error(`[ContextWorker] Failed to summarize conv ${conv.uuid} (attempt ${count}/${MAX_RETRIES}):`, err.message);
       }
     }
   } catch (err) {

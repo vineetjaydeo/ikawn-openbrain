@@ -1,4 +1,5 @@
 const { PDFParse } = require('pdf-parse');
+const mammoth = require('mammoth');
 const path = require('path');
 
 const MAX_LENGTH = 15000;
@@ -25,6 +26,7 @@ const EXT_TO_MIME = {
   '.json': 'application/json',
   '.svg': 'text/xml',
   '.odt': 'text/plain', // best-effort: raw XML inside, some text extractable
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
 /**
@@ -73,6 +75,9 @@ async function extractText(buffer, mimeType, filename) {
     const parser = new PDFParse({ data: buffer });
     const result = await parser.getText();
     text = result.text;
+  } else if (resolvedMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    const result = await mammoth.extractRawText({ buffer });
+    text = result.value;
   } else if (resolvedMime === 'text/html') {
     text = stripHtml(buffer.toString('utf-8'));
   } else if (TEXT_MIME_TYPES.includes(resolvedMime)) {
@@ -91,6 +96,6 @@ async function extractText(buffer, mimeType, filename) {
 }
 
 /** MIME types that extractText can handle */
-const SUPPORTED_MIME_TYPES = ['application/pdf', ...TEXT_MIME_TYPES];
+const SUPPORTED_MIME_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ...TEXT_MIME_TYPES];
 
 module.exports = { extractText, guessMimeFromFilename, SUPPORTED_MIME_TYPES };

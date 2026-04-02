@@ -108,9 +108,17 @@ async function runTaskScheduler() {
 
     await client.query('COMMIT');
 
+    if (dueTasks.length > 0) {
+      console.log(`[TaskScheduler] Found ${dueTasks.length} due task(s): ${dueTasks.map(t => `"${t.name}" (id=${t.id}, tier=${t.tier})`).join(', ')}`);
+    }
+
     // Execute tasks outside the lock transaction
     for (const task of dueTasks) {
-      if (!isInActiveWindow(task)) continue;
+      if (!isInActiveWindow(task)) {
+        console.log(`[TaskScheduler] Skipping "${task.name}" — outside active window`);
+        continue;
+      }
+      console.log(`[TaskScheduler] Executing "${task.name}" (agent=${task.agent_slug}, tier=${task.tier})`);
       await executeTask(task);
     }
   } catch (err) {
@@ -240,14 +248,17 @@ async function executeTask(task) {
           `Action: ${agentResult.result?.summary || 'Unknown'}\n` +
           `Est. cost: $${(agentResult.cost?.costUsd || 0).toFixed(4)}`;
 
-        await sendTelegramMessage(approvalMsg, {
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '\u2705 Approve', callback_data: `approve:${run.id}` },
-              { text: '\u274c Reject', callback_data: `reject:${run.id}` },
-            ]],
-          },
-        });
+        // Only send Telegram to admin (user_id=1) — no per-user Telegram routing yet
+        if (task.user_id === 1) {
+          await sendTelegramMessage(approvalMsg, {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '\u2705 Approve', callback_data: `approve:${run.id}` },
+                { text: '\u274c Reject', callback_data: `reject:${run.id}` },
+              ]],
+            },
+          });
+        }
 
         // Update run as awaiting approval
         await pool.query(`
@@ -327,7 +338,10 @@ async function executeTask(task) {
         WHERE id = $3
       `, [err.message, failures, task.id]);
 
-      sendTelegramMessage(`<b>Task auto-disabled:</b> "${task.name}" — ${failures} consecutive failures.\nLast error: ${err.message}`);
+      // Only send Telegram failure alerts for admin tasks
+      if (task.user_id === 1) {
+        sendTelegramMessage(`<b>Task auto-disabled:</b> "${task.name}" — ${failures} consecutive failures.\nLast error: ${err.message}`);
+      }
       console.warn(`[TaskScheduler] Auto-disabled task "${task.name}" after ${failures} failures`);
     } else {
       // Backoff: push next_run 15 minutes instead of immediate retry

@@ -1,8 +1,10 @@
-const OpenAI = require('openai');
+'use strict';
+
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const DEFAULT_PRIMARY_MODEL = 'gpt-4o-mini';
-const DEFAULT_SECONDARY_MODEL = 'gpt-4o';
+const DEFAULT_PRIMARY_MODEL = 'gemini-2.5-flash';
+const DEFAULT_SECONDARY_MODEL = 'gemini-2.5-flash';
 
 const MODEL_ROUTING = {
   edit_delta_distillation: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
@@ -10,24 +12,24 @@ const MODEL_ROUTING = {
   outcome_reflection:      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   session_summary:         { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   research_distillation:   { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
-  intelligence_distillation: { provider: 'openai', model: 'gpt-4.1-mini' },
+  intelligence_distillation: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   strategic_rollup:        { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   product_reflection:      { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   content_generation:      { provider: 'anthropic', model: 'claude-sonnet-4-6' },
 };
 
-let _client = null;
+let _geminiClient = null;
 let _anthropicClient = null;
 
-function getClient() {
-  if (!_client) {
-    const apiKey = process.env.OPENAI_API_KEY;
+function getGeminiClient() {
+  if (!_geminiClient) {
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is not set');
+      throw new Error('GOOGLE_AI_API_KEY environment variable is not set');
     }
-    _client = new OpenAI({ apiKey });
+    _geminiClient = new GoogleGenerativeAI(apiKey);
   }
-  return _client;
+  return _geminiClient;
 }
 
 function getAnthropicClient() {
@@ -42,30 +44,44 @@ function getAnthropicClient() {
 }
 
 /**
- * Streaming chat completion. Calls onChunk per token and onDone with the full text.
- * @param {Array} messages - OpenAI messages array (supports text and image_url content parts)
- * @param {string} model - Model ID (e.g. "gpt-4o", "gpt-4o-mini")
- * @param {(text: string) => void} onChunk - Called with each token chunk
- * @param {(fullText: string) => void} onDone - Called with the complete response text
- * @returns {Promise<void>}
+ * Streaming chat completion via Gemini. Drop-in replacement for old OpenAI streamChat.
+ * @param {Array} messages - Messages array with role/content (system messages extracted)
+ * @param {object} opts - { model, onChunk, onDone }
+ * @returns {Promise<string>} Full response text
  */
 async function streamChat(messages, opts = {}) {
-  const client = getClient();
-  const model = opts.model || DEFAULT_PRIMARY_MODEL;
+  const genAI = getGeminiClient();
+  const modelName = opts.model || DEFAULT_PRIMARY_MODEL;
   const onChunk = opts.onChunk;
   const onDone = opts.onDone;
+
+  // Extract system message
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const systemPrompt = systemMessages.map(m => m.content).join('\n\n') || undefined;
+  const chatMessages = messages.filter(m => m.role !== 'system');
+
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    systemInstruction: systemPrompt,
+  });
+
+  // Convert to Gemini history format
+  const geminiHistory = chatMessages.slice(0, -1).map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+  }));
+
+  const chat = model.startChat({ history: geminiHistory });
+  const lastMsg = chatMessages[chatMessages.length - 1];
+  const lastText = typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
 
   let fullText = '';
 
   try {
-    const stream = await client.chat.completions.create({
-      model,
-      messages,
-      stream: true,
-    });
+    const result = await chat.sendMessageStream(lastText);
 
-    for await (const chunk of stream) {
-      const content = chunk.choices?.[0]?.delta?.content;
+    for await (const chunk of result.stream) {
+      const content = chunk.text();
       if (content) {
         fullText += content;
         if (onChunk) onChunk(content);
@@ -76,45 +92,92 @@ async function streamChat(messages, opts = {}) {
     return fullText;
   } catch (err) {
     const status = err.status || err.statusCode;
-    const msg = err.message || 'Unknown OpenAI error';
-    throw new Error(`OpenAI streaming request failed (model: ${model}, status: ${status}): ${msg}`);
+    const msg = err.message || 'Unknown Gemini error';
+    throw new Error(`Gemini streaming request failed (model: ${modelName}, status: ${status}): ${msg}`);
   }
 }
 
 /**
- * Non-streaming chat completion with optional function calling.
- * @param {Array} messages - OpenAI messages array
- * @param {string} model - Model ID
- * @param {Array} [tools] - OpenAI tools array for function calling
- * @returns {Promise<object>} The response message object (including tool_calls if any)
+ * Non-streaming chat completion via Gemini with optional function calling.
+ * @param {Array} messages - Messages array with role/content
+ * @param {object} opts - { model, tools }
+ * @returns {Promise<object>} Message object with content and optional tool_calls (OpenAI-compatible shape)
  */
 async function chatCompletion(messages, opts = {}) {
-  const client = getClient();
-  const model = opts.model || DEFAULT_PRIMARY_MODEL;
+  const genAI = getGeminiClient();
+  const modelName = opts.model || DEFAULT_PRIMARY_MODEL;
   const tools = opts.tools;
 
-  const params = {
-    model,
-    messages,
-  };
+  // Extract system message
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const systemPrompt = systemMessages.map(m => m.content).join('\n\n') || undefined;
+  const chatMessages = messages.filter(m => m.role !== 'system');
 
+  const modelOpts = { model: modelName };
+  if (systemPrompt) modelOpts.systemInstruction = systemPrompt;
+  const model = genAI.getGenerativeModel(modelOpts);
+
+  // Convert to Gemini history
+  const geminiHistory = chatMessages.slice(0, -1).map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
+  }));
+
+  const chatOpts = { history: geminiHistory };
+
+  // Convert OpenAI-style tools to Gemini function declarations
   if (tools && tools.length > 0) {
-    params.tools = tools;
+    const functionDeclarations = tools.map(t => {
+      // Support both OpenAI format ({type:'function', function:{...}}) and Anthropic format ({name, description, input_schema})
+      if (t.type === 'function' && t.function) {
+        return {
+          name: t.function.name,
+          description: t.function.description,
+          parameters: t.function.parameters,
+        };
+      }
+      return {
+        name: t.name,
+        description: t.description,
+        parameters: t.input_schema || t.parameters,
+      };
+    });
+    chatOpts.tools = [{ functionDeclarations }];
   }
 
-  try {
-    const response = await client.chat.completions.create(params);
-    const message = response.choices?.[0]?.message;
+  const chat = model.startChat(chatOpts);
+  const lastMsg = chatMessages[chatMessages.length - 1];
+  const lastText = typeof lastMsg.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg.content);
 
-    if (!message) {
-      throw new Error('No message in OpenAI response');
+  try {
+    const result = await chat.sendMessage(lastText);
+    const response = result.response;
+    const text = response.text();
+
+    // Check for function calls in response
+    const functionCalls = response.functionCalls();
+    if (functionCalls && functionCalls.length > 0) {
+      // Return in OpenAI-compatible tool_calls format for callers that expect it
+      const tool_calls = functionCalls.map((fc, idx) => ({
+        id: `call_${idx}`,
+        type: 'function',
+        function: {
+          name: fc.name,
+          arguments: JSON.stringify(fc.args || {}),
+        },
+      }));
+      return { role: 'assistant', content: text || null, tool_calls };
     }
 
-    return message;
+    if (!text && (!functionCalls || functionCalls.length === 0)) {
+      throw new Error('No content in Gemini response');
+    }
+
+    return { role: 'assistant', content: text };
   } catch (err) {
     const status = err.status || err.statusCode;
-    const msg = err.message || 'Unknown OpenAI error';
-    throw new Error(`OpenAI completion request failed (model: ${model}, status: ${status}): ${msg}`);
+    const msg = err.message || 'Unknown Gemini error';
+    throw new Error(`Gemini completion request failed (model: ${modelName}, status: ${status}): ${msg}`);
   }
 }
 
@@ -146,7 +209,7 @@ async function callReflectionLLM(promptType, systemPrompt, userPrompt, opts = {}
     return textBlock ? textBlock.text : '';
   }
 
-  // Fallback to OpenAI
+  // Fallback to Gemini
   const message = await chatCompletion(
     [
       { role: 'system', content: systemPrompt },
@@ -186,11 +249,11 @@ function parseJSONSafe(text) {
 
 /**
  * Streaming chat completion via Anthropic Claude.
- * Converts OpenAI-style messages to Anthropic format.
+ * Converts messages to Anthropic format.
  * Supports tool_use: when tools are provided, returns structured content blocks
  * and stop_reason so the caller can handle tool execution loops.
  *
- * @param {Array} messages - OpenAI-style messages array (system extracted automatically)
+ * @param {Array} messages - Messages array (system extracted automatically)
  * @param {object} opts - { model, maxTokens, tools, onChunk, onDone }
  * @returns {Promise<{ text: string, contentBlocks: Array, stopReason: string }>}
  */
@@ -201,6 +264,7 @@ async function streamChatAnthropic(messages, opts = {}) {
   const tools = opts.tools || undefined;
   const onChunk = opts.onChunk;
   const onDone = opts.onDone;
+  const onServerToolUse = opts.onServerToolUse; // callback for native server tools (web_search)
 
   // Extract system message
   const systemMessages = messages.filter(m => m.role === 'system');
@@ -232,6 +296,9 @@ async function streamChatAnthropic(messages, opts = {}) {
           currentBlock = { type: 'text', text: '' };
         } else if (block.type === 'tool_use') {
           currentBlock = { type: 'tool_use', id: block.id, name: block.name, input: '' };
+        } else if (block.type === 'server_tool_use' || block.type === 'web_search_tool_use') {
+          currentBlock = { type: block.type, id: block.id, name: block.name, input: block.input || {} };
+          if (onServerToolUse) onServerToolUse({ event: 'start', name: block.name, input: block.input });
         }
       } else if (event.type === 'content_block_delta') {
         if (event.delta?.type === 'text_delta' && currentBlock?.type === 'text') {
@@ -251,6 +318,8 @@ async function streamChatAnthropic(messages, opts = {}) {
             } catch (_) {
               currentBlock.input = {};
             }
+          } else if (currentBlock.type === 'server_tool_use' || currentBlock.type === 'web_search_tool_use') {
+            if (onServerToolUse) onServerToolUse({ event: 'done', name: currentBlock.name });
           }
           contentBlocks.push(currentBlock);
           currentBlock = null;

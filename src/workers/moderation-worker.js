@@ -1,21 +1,37 @@
-const { pool } = require('../db');
-const OpenAI = require('openai');
+'use strict';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const { pool } = require('../db');
+const Anthropic = require('@anthropic-ai/sdk');
+
+let _anthropic = null;
+
+function getAnthropic() {
+  if (!_anthropic) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+    _anthropic = new Anthropic({ apiKey });
+  }
+  return _anthropic;
+}
 
 const INTERVAL_MS = 30000;
-const DELAY_BETWEEN_CALLS_MS = 1000; // 1s between API calls to avoid 429s
+const DELAY_BETWEEN_CALLS_MS = 1000; // 1s between API calls to avoid rate limits
 const BACKOFF_MS = 5 * 60 * 1000; // 5 min backoff on rate limit
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const VINEET_CHAT_ID = '534771402';
 
 let rateLimitedUntil = 0; // in-memory cache, synced with DB
 
+const MODERATION_CATEGORIES = [
+  'sexual', 'hate', 'harassment', 'self-harm',
+  'violence', 'illegal', 'deception', 'malware'
+];
+
 async function notifyTelegram(memoryId, score, flags, content) {
   if (!BOT_TOKEN) return;
   try {
     const preview = content.length > 200 ? content.slice(0, 200) + '...' : content;
-    const text = `🔴 *SEVERE content detected*\n\nMemory ID: ${memoryId}\nScore: ${score.toFixed(3)}\nFlags: ${flags.join(', ')}\n\nPreview:\n\`${preview}\``;
+    const text = `\u{1F534} *SEVERE content detected*\n\nMemory ID: ${memoryId}\nScore: ${score.toFixed(3)}\nFlags: ${flags.join(', ')}\n\nPreview:\n\`${preview}\``;
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -68,6 +84,43 @@ async function saveBackoffState(until) {
   }
 }
 
+/**
+ * Use Claude Haiku to moderate content. Returns { score, flags }.
+ * Score 0-1, flags are category names with scores > 0.3.
+ */
+async function moderateWithHaiku(content) {
+  const client = getAnthropic();
+  const truncated = content.slice(0, 2000); // Keep prompt small
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 256,
+    system: `You are a content moderation system. Analyze the given text and rate it for harmful content.
+Return ONLY a JSON object with scores from 0.0 to 1.0 for these categories: ${MODERATION_CATEGORIES.join(', ')}.
+Example: {"sexual":0.0,"hate":0.0,"harassment":0.1,"self-harm":0.0,"violence":0.0,"illegal":0.0,"deception":0.0,"malware":0.0}
+Return ONLY the JSON, no other text.`,
+    messages: [{ role: 'user', content: truncated }],
+  });
+
+  const textBlock = response.content.find(b => b.type === 'text');
+  const text = textBlock ? textBlock.text.trim() : '{}';
+
+  try {
+    // Parse the JSON response
+    const cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
+    const scores = JSON.parse(cleaned);
+    const maxScore = Math.max(...Object.values(scores).filter(v => typeof v === 'number'));
+    const flags = Object.entries(scores)
+      .filter(([_, v]) => typeof v === 'number' && v > 0.3)
+      .map(([k]) => k);
+
+    return { score: isFinite(maxScore) ? maxScore : 0, flags };
+  } catch (_) {
+    // If parsing fails, assume safe
+    return { score: 0, flags: [] };
+  }
+}
+
 async function moderateUnscored() {
   // Skip if we're in backoff period
   if (Date.now() < rateLimitedUntil) {
@@ -87,19 +140,14 @@ async function moderateUnscored() {
 
     for (const row of rows) {
       try {
-        const result = await openai.moderations.create({ input: row.content });
-        const score = result.results[0].category_scores;
-        const maxScore = Math.max(...Object.values(score));
-        const flags = Object.entries(score)
-          .filter(([_, v]) => v > 0.3)
-          .map(([k]) => k);
+        const { score, flags } = await moderateWithHaiku(row.content);
 
         await pool.query(`
           UPDATE memories SET moderation_score = $1, moderation_flags = $2
           WHERE id = $3
-        `, [maxScore, flags, row.id]);
+        `, [score, flags, row.id]);
 
-        if (maxScore > 0.7) {
+        if (score > 0.7) {
           const mem = await pool.query('SELECT brand_id FROM memories WHERE id = $1', [row.id]);
           if (mem.rows.length > 0 && mem.rows[0].brand_id) {
             await pool.query(`
@@ -110,9 +158,9 @@ async function moderateUnscored() {
           }
         }
 
-        if (maxScore > 0.9) {
+        if (score > 0.9) {
           console.error(`[Moderation] SEVERE content detected in memory ${row.id}. Manual review required.`);
-          await notifyTelegram(row.id, maxScore, flags, row.content);
+          await notifyTelegram(row.id, score, flags, row.content);
         }
 
         // Delay between calls to stay under rate limits
@@ -134,7 +182,7 @@ async function moderateUnscored() {
 let interval = null;
 
 async function startModerationWorker() {
-  console.log('[ModerationWorker] Starting (30s interval, 1s between calls, 5min backoff on 429, persistent state)');
+  console.log('[ModerationWorker] Starting (30s interval, 1s between calls, 5min backoff on 429, using Claude Haiku)');
   await loadBackoffState();
   moderateUnscored();
   interval = setInterval(moderateUnscored, INTERVAL_MS);

@@ -1,8 +1,20 @@
+'use strict';
+
 const { pool } = require('../db');
-const OpenAI = require('openai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let _genAI = null;
 
+function getGenAI() {
+  if (!_genAI) {
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    if (!apiKey) throw new Error('GOOGLE_AI_API_KEY environment variable is not set');
+    _genAI = new GoogleGenerativeAI(apiKey);
+  }
+  return _genAI;
+}
+
+const EMBEDDING_MODEL = 'text-embedding-004';
 const BATCH_SIZE = 50;
 const INTERVAL_MS = 5000;
 const RETRY_STATUS_SEQUENCE = { 'pending': 'retry_1', 'retry_1': 'retry_2', 'retry_2': 'failed' };
@@ -11,6 +23,30 @@ const RETRY_STATUS_SEQUENCE = { 'pending': 'retry_1', 'retry_1': 'retry_2', 'ret
 function jitteredDelay() {
   const ms = 1000 + Math.random() * 2000;
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Get embedding for a single text using Google Generative AI.
+ */
+async function getEmbedding(text) {
+  const genAI = getGenAI();
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const result = await model.embedContent(text.slice(0, 8000));
+  return result.embedding.values;
+}
+
+/**
+ * Get embeddings for a batch of texts using Google Generative AI.
+ */
+async function getBatchEmbeddings(texts) {
+  const genAI = getGenAI();
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const result = await model.batchEmbedContents({
+    requests: texts.map(text => ({
+      content: { parts: [{ text: text.slice(0, 8000) }] },
+    })),
+  });
+  return result.embeddings.map(e => e.values);
 }
 
 /**
@@ -23,12 +59,9 @@ async function processIndividualMemories(rows, table, extraUpdateFields) {
   for (const row of rows) {
     try {
       await jitteredDelay();
-      const response = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: [row.content.slice(0, 8000)]
-      });
+      const embedding = await getEmbedding(row.content);
 
-      const embeddingStr = `{${response.data[0].embedding.join(',')}}`;
+      const embeddingStr = `{${embedding.join(',')}}`;
       const setClauses = [`embedding = $1::float8[]`, `embedding_status = 'done'`];
       if (extraUpdateFields) setClauses.push(...extraUpdateFields);
 
@@ -73,26 +106,21 @@ async function processPendingEmbeddings() {
 
     if (rows.length === 0) return;
 
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: rows.map(r => r.content.slice(0, 8000))
-    });
+    const embeddings = await getBatchEmbeddings(rows.map(r => r.content));
 
     for (let i = 0; i < rows.length; i++) {
-      // Postgres float8[] expects array parameter, not JSON string
+      // Postgres float8[] expects array literal, not JSON string
       await pool.query(`
         UPDATE memories
         SET embedding = $1::float8[],
             embedding_status = 'done',
-            embedding_model = 'text-embedding-3-small',
+            embedding_model = $3,
             embedded_at = NOW()
         WHERE id = $2
-      `, [`{${response.data[i].embedding.join(',')}}`, rows[i].id]);
+      `, [`{${embeddings[i].join(',')}}`, rows[i].id, EMBEDDING_MODEL]);
     }
 
-    const totalTokens = response.usage?.total_tokens || 0;
-    const estCost = (totalTokens / 1_000_000 * 0.02).toFixed(6);
-    console.log(`[EmbeddingWorker] Batch processed ${rows.length} memories (${totalTokens} tokens, ~$${estCost})`);
+    console.log(`[EmbeddingWorker] Batch processed ${rows.length} memories (model: ${EMBEDDING_MODEL})`);
   } catch (err) {
     console.error(`[EmbeddingWorker] Batch failed, falling back to individual processing: ${err.message}`);
 
@@ -109,7 +137,7 @@ async function processPendingEmbeddings() {
       if (rows.length === 0) return;
 
       const result = await processIndividualMemories(rows, 'memories', [
-        `embedding_model = 'text-embedding-3-small'`,
+        `embedding_model = '${EMBEDDING_MODEL}'`,
         `embedded_at = NOW()`
       ]);
 
@@ -132,10 +160,7 @@ async function processPendingDistilledEmbeddings() {
 
     if (rows.length === 0) return;
 
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: rows.map(r => r.content.slice(0, 8000))
-    });
+    const embeddings = await getBatchEmbeddings(rows.map(r => r.content));
 
     for (let i = 0; i < rows.length; i++) {
       await pool.query(`
@@ -143,12 +168,10 @@ async function processPendingDistilledEmbeddings() {
         SET embedding = $1::float8[],
             embedding_status = 'done'
         WHERE id = $2
-      `, [`{${response.data[i].embedding.join(',')}}`, rows[i].id]);
+      `, [`{${embeddings[i].join(',')}}`, rows[i].id]);
     }
 
-    const totalTokens = response.usage?.total_tokens || 0;
-    const estCost = (totalTokens / 1_000_000 * 0.02).toFixed(6);
-    console.log(`[EmbeddingWorker] Batch processed ${rows.length} distilled memories (${totalTokens} tokens, ~$${estCost})`);
+    console.log(`[EmbeddingWorker] Batch processed ${rows.length} distilled memories (model: ${EMBEDDING_MODEL})`);
   } catch (err) {
     console.error(`[EmbeddingWorker] Distilled batch failed, falling back to individual processing: ${err.message}`);
 
@@ -175,7 +198,7 @@ async function processPendingDistilledEmbeddings() {
 let interval = null;
 
 function startEmbeddingWorker() {
-  console.log('[EmbeddingWorker] Starting (5s interval, batch size 50, memories + distilled)');
+  console.log(`[EmbeddingWorker] Starting (5s interval, batch size ${BATCH_SIZE}, model: ${EMBEDDING_MODEL}, memories + distilled)`);
   processPendingEmbeddings();
   processPendingDistilledEmbeddings();
   interval = setInterval(async () => {

@@ -1630,7 +1630,7 @@ function chatPage(user, isDirectChat = false) {
             </button>
             <textarea id="msg-input" rows="1" placeholder="Talk to ${INSTANCE_NAME}..." onkeydown="handleInputKey(event)" oninput="autoGrow(this)"></textarea>
             <button class="compose-btn model-toggle" id="model-toggle" onclick="toggleModel()" title="Toggle model"></button>
-            <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled style="display:none">
+            <button class="compose-btn send-btn" id="send-btn" onclick="sendMessage()" title="Send" disabled>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
             </button>
           </div>
@@ -2496,6 +2496,7 @@ function chatPage(user, isDirectChat = false) {
 
       await new Promise(r => setTimeout(r, 350));
 
+      let staleTimer = null;
       try {
         abortController = new AbortController();
         const res = await fetch('/api/chat/send', {
@@ -2526,10 +2527,37 @@ function chatPage(user, isDirectChat = false) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let lastDataTime = Date.now();
+        let receivedDone = false;
+
+        // Detect stale stream — if no data for 30s, show "Still thinking..." indicator
+        function startStaleDetector() {
+          if (staleTimer) clearInterval(staleTimer);
+          staleTimer = setInterval(function() {
+            if (Date.now() - lastDataTime > 30000) {
+              const typing = document.getElementById('typing');
+              if (typing) {
+                const label = typing.querySelector('.typing-label');
+                if (label && !label.textContent.includes('Still')) {
+                  label.textContent = 'Still thinking — complex tasks take longer...';
+                }
+              }
+              const indicator = document.getElementById('tool-indicator');
+              if (indicator) {
+                const txt = indicator.querySelector('.tool-indicator-text');
+                if (txt && !txt.textContent.includes('Still')) {
+                  txt.textContent = 'Still working — this may take a minute...';
+                }
+              }
+            }
+          }, 5000);
+        }
+        startStaleDetector();
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          lastDataTime = Date.now();
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\\n');
@@ -2552,18 +2580,64 @@ function chatPage(user, isDirectChat = false) {
                 }
                 window._currentAgentIdentity = evt;
               } else if (evt.type === 'tool_start') {
-                // Show tool activity indicator
+                // Show tool activity — either in typing indicator or inline below bubble
+                const toolLabels = {
+                  web_search: 'Searching',
+                  ikawn_generate: 'Generating',
+                  manage_task: 'Managing task',
+                  create_user_task: 'Creating task',
+                  brand_analysis: 'Analyzing brand',
+                };
+                const toolLabel = toolLabels[evt.tool] || ('Using ' + (evt.tool || 'tool').replace(/_/g, ' '));
+                const toolText = evt.detail ? toolLabel + ': "' + evt.detail.slice(0, 80) + '"' : toolLabel + '...';
+
                 const typing = document.getElementById('typing');
                 if (typing) {
                   const label = typing.querySelector('.typing-label');
-                  if (label) label.textContent = 'Working on it...';
+                  if (label) label.textContent = toolText;
+                } else {
+                  // Typing removed — show tool indicator as its own row
+                  let indicator = document.getElementById('tool-indicator');
+                  if (!indicator) {
+                    indicator = document.createElement('div');
+                    indicator.id = 'tool-indicator';
+                    indicator.className = 'msg-row assistant';
+                    indicator.style.cssText = 'padding:6px 16px;font-size:12px;color:var(--text-muted,#888);display:flex;align-items:center;gap:8px;margin-left:40px;';
+                    const dot = document.createElement('span');
+                    dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#FFC01C;display:inline-block;animation:pulse 1s infinite;flex-shrink:0;';
+                    indicator.appendChild(dot);
+                    const txt = document.createElement('span');
+                    txt.className = 'tool-indicator-text';
+                    indicator.appendChild(txt);
+                    container.appendChild(indicator);
+                    scrollToBottom(false);
+                  }
+                  const txt = indicator.querySelector('.tool-indicator-text');
+                  if (txt) txt.textContent = toolText;
+                  indicator.style.display = 'flex';
                 }
               } else if (evt.type === 'tool_done') {
-                // Tool finished — typing indicator will be replaced by response
-                const typing = document.getElementById('typing');
-                if (typing) {
-                  const label = typing.querySelector('.typing-label');
-                  if (label) label.textContent = 'Finishing up...';
+                // Tool finished — show sources or result summary
+                let doneText = 'Processing results...';
+                if (evt.sources && evt.sources.length > 0) {
+                  const domains = evt.sources.map(function(s) {
+                    try { return new URL(s.url).hostname.replace('www.', ''); } catch(e) { return s.url; }
+                  });
+                  doneText = 'Found ' + evt.count + ' results from ' + domains.slice(0, 3).join(', ') + (domains.length > 3 ? '...' : '');
+                } else if (evt.error) {
+                  doneText = (evt.tool || 'Tool') + ' failed — continuing...';
+                }
+
+                const typing2 = document.getElementById('typing');
+                if (typing2) {
+                  const label = typing2.querySelector('.typing-label');
+                  if (label) label.textContent = doneText;
+                } else {
+                  const indicator = document.getElementById('tool-indicator');
+                  if (indicator) {
+                    const txt = indicator.querySelector('.tool-indicator-text');
+                    if (txt) txt.textContent = doneText;
+                  }
                 }
               } else if (evt.type === 'chunk' && evt.text) {
                 if (firstChunk) {
@@ -2587,6 +2661,9 @@ function chatPage(user, isDirectChat = false) {
                   bubble = document.getElementById('streaming-bubble');
                   window._currentAgentIdentity = null;
                 }
+                // Remove inline tool indicator when new text arrives
+                const toolInd = document.getElementById('tool-indicator');
+                if (toolInd) toolInd.remove();
                 fullText += evt.text;
                 try { bubble.innerHTML = marked.parse(fullText); } catch { bubble.textContent = fullText; }
                 scrollToBottom(false);
@@ -2605,14 +2682,33 @@ function chatPage(user, isDirectChat = false) {
                 tierDiv.textContent = evt.label || evt.tier;
                 document.getElementById('messages').appendChild(tierDiv);
                 scrollToBottom(false);
-              } else if (evt.type === 'done' && evt.context_summary) {
-                renderContextCard(evt.context_summary);
+              } else if (evt.type === 'done') {
+                receivedDone = true;
+                if (evt.context_summary) renderContextCard(evt.context_summary);
               } else if (evt.type === 'error') {
                 showToast(evt.error || evt.message || 'An error occurred', 'error');
               }
             } catch {}
           }
         }
+
+        // Clear stale detector
+        if (staleTimer) clearInterval(staleTimer);
+
+        // Detect premature stream close (connection died without 'done' event)
+        if (!receivedDone && fullText.length === 0) {
+          showToast('Connection lost — Lucy may still be thinking. Try sending your message again.', 'error');
+        } else if (!receivedDone && fullText.length > 0) {
+          // Partial response received — let user know it was cut short
+          if (bubble) {
+            fullText += '\\n\\n*[Response interrupted — connection lost]*';
+            try { bubble.innerHTML = marked.parse(fullText); } catch(e) { bubble.textContent = fullText; }
+          }
+        }
+
+        // Clean up tool indicator if still present
+        const finalToolInd = document.getElementById('tool-indicator');
+        if (finalToolInd) finalToolInd.remove();
 
         if (bubble) {
           if (typeof renderMentionPills === 'function') bubble.innerHTML = renderMentionPills(bubble.innerHTML);
@@ -2622,10 +2718,12 @@ function chatPage(user, isDirectChat = false) {
         if (firstChunk) { const typing = document.getElementById('typing'); if (typing) typing.remove(); }
 
       } catch (err) {
+        if (staleTimer) clearInterval(staleTimer);
         if (err.name === 'AbortError') {} else { showToast(err.message, 'error'); }
         const typing = document.getElementById('typing');
         if (typing) typing.remove();
       } finally {
+        if (staleTimer) clearInterval(staleTimer);
         isStreaming = false;
         abortController = null;
         updateSendBtn();
@@ -3130,10 +3228,11 @@ function chatPage(user, isDirectChat = false) {
     function updateSendBtn() {
       const btn = document.getElementById('send-btn');
       const input = document.getElementById('msg-input');
-      const hasContent = input.value.trim() || pendingAttachments.length;
+      if (!btn || !input) return;
+      const hasContent = !!(input.value.trim() || pendingAttachments.length);
       btn.disabled = isStreaming || !hasContent;
-      btn.style.display = hasContent ? '' : 'none';
-      btn.classList.toggle('has-content', !!hasContent && !isStreaming);
+      btn.style.display = hasContent ? 'flex' : 'none';
+      btn.classList.toggle('has-content', hasContent && !isStreaming);
     }
 
     /* ==================== UNSAID WORDS (Draft Persistence) ==================== */

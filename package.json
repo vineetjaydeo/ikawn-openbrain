@@ -1,6 +1,6 @@
 {
   "name": "ikawn-openbrain",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "iKawn's Enterprise AI Intelligence Layer — memory, RAG, chat, agent platform",
   "main": "src/index.js",
   "scripts": {
@@ -17,6 +17,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@aws-sdk/client-s3": "^3.1002.0",
     "@aws-sdk/s3-request-presigner": "^3.1002.0",
+    "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@mozilla/readability": "^0.6.0",
     "bcryptjs": "^3.0.3",

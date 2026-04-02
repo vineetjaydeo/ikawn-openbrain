@@ -10,6 +10,7 @@ const DOCUMENT_TYPES = [
   'text/plain',
   'text/markdown',
   'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 
 function sanitizeFilename(filename) {

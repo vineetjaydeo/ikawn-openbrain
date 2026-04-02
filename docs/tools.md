@@ -5,11 +5,11 @@
 ### Web Intelligence
 - **Web search** — Brave Search API (web chat) / Anthropic native search (Telegram)
 - **Link reading** — Extract content from any URL using Readability
-- **Document parsing** — PDF and text document extraction
+- **Document parsing** — PDF, Word (.docx), and text document extraction
 
 ### File Handling
 - Image upload and vision analysis (paste or file upload)
-- Document upload (PDF, text, markdown, CSV)
+- Document upload (PDF, Word, text, markdown, CSV)
 - All files stored securely in Cloudflare R2
 
 ### Model Selection

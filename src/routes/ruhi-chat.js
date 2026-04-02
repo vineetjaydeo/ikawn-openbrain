@@ -214,13 +214,44 @@ router.post('/chat', async (req, res) => {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       // Buffer text during tool rounds — only stream to client on final (non-tool) round
       let roundText = '';
-      const result = await streamChatAnthropic(messages, {
-        model: 'claude-sonnet-4-6',
-        tools: toolSchemas.length > 0 ? toolSchemas : undefined,
-        onChunk: (chunk) => {
-          roundText += chunk;
-        },
-      });
+      let result;
+      try {
+        result = await streamChatAnthropic(messages, {
+          model: 'claude-sonnet-4-6',
+          maxTokens: 1024,
+          tools: toolSchemas.length > 0 ? toolSchemas : undefined,
+          onChunk: (chunk) => {
+            roundText += chunk;
+          },
+        });
+      } catch (streamErr) {
+        console.error(`[RuhiChat] Claude streaming failed (round ${round}):`, streamErr.message);
+        // Fallback to Gemini for basic conversation (no tools)
+        if (round === 0 && !roundText) {
+          console.log(`[RuhiChat] Attempting Gemini fallback...`);
+          try {
+            const { streamChat } = require('../utils/llm');
+            await streamChat(openaiMessages, {
+              model: 'gemini-2.5-flash',
+              onChunk: (chunk) => {
+                fullResponse += chunk;
+                res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+              }
+            });
+            break;
+          } catch (fallbackErr) {
+            console.error(`[RuhiChat] Gemini fallback also failed:`, fallbackErr.message);
+          }
+        }
+        if (roundText) {
+          fullResponse += roundText;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: roundText })}\n\n`);
+        }
+        const errMsg = '\n\n*[An error occurred while processing. Please try again.]*';
+        fullResponse += errMsg;
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
+        break;
+      }
 
       // If Claude didn't request tool use, this is the final round — flush text to client
       if (result.stopReason !== 'tool_use') {

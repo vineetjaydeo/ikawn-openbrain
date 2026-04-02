@@ -348,6 +348,11 @@ async function initSchema() {
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS context_msg_count INTEGER DEFAULT 0;
     `);
 
+    // Context compression — track when conversation was last compressed
+    await client.query(`
+      ALTER TABLE conversations ADD COLUMN IF NOT EXISTS compressed_at TIMESTAMPTZ;
+    `);
+
     // Hashtags for conversation filtering
     await client.query(`
       ALTER TABLE conversations ADD COLUMN IF NOT EXISTS hashtags TEXT[] DEFAULT '{}';

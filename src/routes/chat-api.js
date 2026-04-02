@@ -9,10 +9,12 @@ const { downloadFromUrl } = require('../utils/storage');
 const sharp = require('sharp');
 const { getEmbedding } = require('../embeddings');
 const { captureMessage } = require('../utils/capture');
+const { extractMemories } = require('../utils/memory-extractor');
 const { getTool, getTools } = require('../tools/registry');
 const { loadBrandKnowledge } = require('../ruhi/persona');
 const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 const { CHAT_CONTEXT_THRESHOLD } = require('../utils/similarity');
+const { compressContext, estimateMessagesTokens } = require('../utils/context-compressor');
 
 // ── Dynamic Model Tier Detection ──
 const EXPERT_KEYWORDS = /\b(investor|valuation|funding|revenue|series\s*[abc]|due\s*diligence|term\s*sheet|cap\s*table|equity|partnership\s*agreement|legal|compliance|acquisition|board\s*meeting|arr|mrr|burn\s*rate|runway|dilution|convertible\s*note|safe\s*note)\b/i;
@@ -276,6 +278,7 @@ async function handleChatSend(req, res) {
   let fullResponse = '';
   let model = null;
   let tier = null;
+  let heartbeatInterval = null;
 
   try {
     // Verify conversation ownership (resolve UUID → internal ID, brand-scoped)
@@ -555,7 +558,30 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       }
       return { role: msg.role, content: msg.content };
     }));
-    const openaiMessages = [systemPrompt, ...mappedMessages];
+    let openaiMessages = [systemPrompt, ...mappedMessages];
+
+    // ── Context Compression: reduce token usage in long conversations ──
+    {
+      const compressedAt = convRows[0].compressed_at;
+      const recentEnough = compressedAt && (Date.now() - new Date(compressedAt).getTime()) < 60 * 60 * 1000; // < 1hr
+
+      // Skip compression if we recently compressed (summary is already factored into context_summary)
+      if (!recentEnough) {
+        const beforeTokens = estimateMessagesTokens(openaiMessages);
+        const result = await compressContext(openaiMessages, { keepRecent: 8 });
+        if (result.compressed) {
+          openaiMessages = result.messages;
+          const afterTokens = estimateMessagesTokens(openaiMessages);
+          console.log(`[ContextCompressor] Compressed ${beforeTokens} → ${afterTokens} tokens (saved ${result.tokensSaved})`);
+
+          // Store compressed summary + timestamp (fire-and-forget)
+          pool.query(
+            'UPDATE conversations SET compressed_at = NOW() WHERE id = $1',
+            [convInternalId]
+          ).catch(err => console.error('[ContextCompressor] Failed to update compressed_at:', err.message));
+        }
+      }
+    }
 
     // Dynamic tier detection — forced_tier from UI toggle, use_secondary legacy compat
     tier = use_secondary ? 'expert' : detectTier(content, historyRows, forced_tier, contextSummary);
@@ -568,18 +594,25 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     const registryTools = getTools();
     const allToolNames = [...registryTools.keys()];
     const toolSchemas = allToolNames.length > 0 ? getToolSchemas(allToolNames) : [];
-    // Add web_search as Anthropic tool schema
-    toolSchemas.push({
-      name: 'web_search',
-      description: 'Search the web for current information using Brave Search',
-      input_schema: { type: 'object', properties: { query: { type: 'string', description: 'Search query' } }, required: ['query'] },
-    });
+    // Add web_search as Claude native server tool (handles search internally, no manual Brave calls needed)
+    toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 5 });
 
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
+
+    // ── SSE keepalive + client disconnect detection ──
+    let clientDisconnected = false;
+    req.on('close', () => { clientDisconnected = true; });
+
+    // Send SSE comment ping every 15s to keep Fly.io proxy alive during tool execution
+    heartbeatInterval = setInterval(() => {
+      if (!clientDisconnected && !res.writableEnded) {
+        res.write(':ping\n\n');
+      }
+    }, 15000);
 
     // Send agent identity if @mentioned (so frontend can update avatar/label)
     if (mentionedAgent) {
@@ -608,6 +641,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       const toolFailureCounts = {}; // track per-tool failures
 
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        if (clientDisconnected) {
+          console.log(`[chat] Client disconnected, aborting tool round ${round}`);
+          break;
+        }
         let roundText = '';
         let result;
         try {
@@ -615,15 +652,24 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
             model,
             tools: toolSchemas.length > 0 ? toolSchemas : undefined,
             onChunk: (chunk) => { roundText += chunk; },
+            onServerToolUse: (evt) => {
+              // Stream native web_search progress to frontend
+              if (evt.event === 'start') {
+                const detail = evt.input?.query || undefined;
+                res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'web_search', detail })}\n\n`);
+              } else if (evt.event === 'done') {
+                res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: 'web_search', success: true })}\n\n`);
+              }
+            },
           });
         } catch (streamErr) {
           console.error(`[chat] Tool round ${round} streaming failed:`, streamErr.message);
-          // If first round fails, try OpenAI fallback for basic conversation (no tool_use)
+          // If first round fails, try Gemini fallback for basic conversation (no tool_use)
           if (round === 0 && !roundText) {
-            console.log(`[chat] Attempting OpenAI fallback...`);
+            console.log(`[chat] Attempting Gemini fallback...`);
             try {
               await streamChat(openaiMessages, {
-                model: 'gpt-4o-mini',
+                model: 'gemini-2.5-flash',
                 onChunk: (chunk) => {
                   fullResponse += chunk;
                   res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
@@ -631,7 +677,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
               });
               break; // fallback succeeded
             } catch (fallbackErr) {
-              console.error(`[chat] OpenAI fallback also failed:`, fallbackErr.message);
+              console.error(`[chat] Gemini fallback also failed:`, fallbackErr.message);
             }
           }
           // Send whatever text we have + error notice
@@ -657,16 +703,18 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           break;
         }
 
-        // Tool round — execute tools
+        // Tool round — execute only client-side tools (web_search is handled natively by Claude)
         const toolUseBlocks = result.contentBlocks.filter(b => b.type === 'tool_use');
         console.log(`[chat] Round ${round}: ${toolUseBlocks.length} tool calls: ${toolUseBlocks.map(b => b.name).join(', ')}`);
         if (toolUseBlocks.length === 0) break;
 
-        // Build assistant message for conversation history
-        const assistantContent = result.contentBlocks.map(b => {
-          if (b.type === 'text') return { type: 'text', text: b.text };
-          return { type: 'tool_use', id: b.id, name: b.name, input: b.input };
-        });
+        // Build assistant message for conversation history (include only text + tool_use blocks)
+        const assistantContent = result.contentBlocks
+          .filter(b => b.type === 'text' || b.type === 'tool_use')
+          .map(b => {
+            if (b.type === 'text') return { type: 'text', text: b.text };
+            return { type: 'tool_use', id: b.id, name: b.name, input: b.input };
+          });
         messages.push({ role: 'assistant', content: assistantContent });
 
         // Execute each tool
@@ -674,10 +722,8 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         for (const block of toolUseBlocks) {
           // Send rich tool_start with input details
           const toolStartData = { type: 'tool_start', tool: block.name };
-          if (block.name === 'web_search' && block.input?.query) {
-            toolStartData.detail = block.input.query;
-          } else if (block.input) {
-            // For other tools, send a brief summary of the input
+          if (block.input) {
+            // Send a brief summary of the tool input
             const inputKeys = Object.keys(block.input);
             if (inputKeys.length > 0) {
               const firstVal = block.input[inputKeys[0]];
@@ -687,23 +733,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           res.write(`data: ${JSON.stringify(toolStartData)}\n\n`);
           let toolOutput;
 
-          if (block.name === 'web_search') {
-            try {
-              console.log(`[chat] web_search called with query: "${block.input?.query}"`);
-              const searchResults = await searchWeb(block.input?.query || '');
-              console.log(`[chat] web_search returned ${Array.isArray(searchResults) ? searchResults.length : 'non-array'} results`);
-              toolOutput = typeof searchResults === 'string' ? searchResults : JSON.stringify(searchResults);
-              // Send rich tool_done with sources
-              const sources = Array.isArray(searchResults)
-                ? searchResults.slice(0, 5).map(r => ({ title: r.title, url: r.url }))
-                : [];
-              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, sources, count: Array.isArray(searchResults) ? searchResults.length : 0 })}\n\n`);
-            } catch (err) {
-              console.error(`[chat] web_search error:`, err.message);
-              toolOutput = `[Web search failed: ${err.message}]`;
-              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: err.message })}\n\n`);
-            }
-          } else {
+          {
             const registryTool = getTool(block.name);
             if (!registryTool) {
               toolOutput = JSON.stringify({ error: `Unknown tool: ${block.name}` });
@@ -749,9 +779,34 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           res.write(`data: ${JSON.stringify({ type: 'generation_started', generationId: gen.generationId, agent: gen.agent, prompt: gen.prompt, batchSize: gen.batchSize })}\n\n`);
         }
       }
+
+      // If the loop exhausted all rounds with tool_use still active, force a final synthesis call
+      // This happens when Claude keeps searching but never gets to write a text response
+      if (!clientDisconnected && !fullResponse.trim()) {
+        console.log(`[chat] Tool loop exhausted with no text response — forcing final synthesis call`);
+        try {
+          // Add instruction to synthesize, call WITHOUT tools so Claude must respond with text
+          messages.push({ role: 'user', content: [{ type: 'text', text: 'Now synthesize all the information gathered above into a comprehensive response. Do not request any more searches.' }] });
+          const synthResult = await streamChatAnthropic(messages, {
+            model,
+            onChunk: (chunk) => {
+              fullResponse += chunk;
+              res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+            },
+          });
+          if (synthResult.textContent) {
+            // textContent already streamed via onChunk
+          }
+        } catch (synthErr) {
+          console.error('[chat] Synthesis call failed:', synthErr.message);
+          const errMsg = '\n\nI gathered information but encountered an error generating the final response. Please try again.';
+          fullResponse += errMsg;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
+        }
+      }
     } else {
-      // ── OpenAI fallback path (secondary model only) ──
-      const openaiTools = toolSchemas.map(t => ({
+      // ── Gemini fallback path (secondary model only) ──
+      const openaiTools = toolSchemas.filter(t => !t.type?.startsWith('web_search')).map(t => ({
         type: 'function',
         function: { name: t.name, description: t.description, parameters: t.input_schema },
       }));
@@ -832,6 +887,17 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       user_id: req.session.user.id
     });
 
+    // Extract structured memories from this turn (fire-and-forget, never blocks response)
+    extractMemories(content, fullResponse, {
+      userId: req.session.user.id,
+      brandId,
+      conversationId: conversation_id,
+    })
+      .then(items => {
+        if (items.length > 0) console.log(`[MemoryExtractor] Extracted ${items.length} items from conversation ${conversation_id}`);
+      })
+      .catch(err => console.warn('[MemoryExtractor] Extraction failed:', err.message));
+
     // Auto-generate title for first user message
     if (isFirstUserMessage) {
       try {
@@ -856,9 +922,11 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       }
     }
 
+    clearInterval(heartbeatInterval);
     res.end();
   } catch (err) {
     console.error('POST /api/chat/send error:', err);
+    clearInterval(heartbeatInterval);
 
     // Save partial response to DB so conversation context isn't lost
     if (fullResponse && convInternalId) {

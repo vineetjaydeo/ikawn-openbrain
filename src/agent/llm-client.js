@@ -2,27 +2,30 @@
 'use strict';
 
 const Anthropic = require('@anthropic-ai/sdk');
-const OpenAI = require('openai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Cost per 1M tokens (input/output) — update when pricing changes
 const PRICING = {
   'claude-sonnet-4-6':        { input: 3.00, output: 15.00 },
   'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00 },
-  'gpt-5.2':                   { input: 2.50, output: 10.00 },
-  'gpt-4o':                    { input: 2.50, output: 10.00 },
+  'gemini-2.5-flash':          { input: 0.15, output: 0.60 },
 };
 
 let _anthropic = null;
-let _openai = null;
+let _genAI = null;
 
 function getAnthropic() {
   if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   return _anthropic;
 }
 
-function getOpenAI() {
-  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return _openai;
+function getGenAI() {
+  if (!_genAI) {
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    if (!apiKey) throw new Error('GOOGLE_AI_API_KEY environment variable is not set');
+    _genAI = new GoogleGenerativeAI(apiKey);
+  }
+  return _genAI;
 }
 
 /**
@@ -37,8 +40,8 @@ function calculateCost(model, inputTokens, outputTokens) {
  * Call Claude with tool_use support. Primary path for Tier 2 agent execution.
  */
 async function callClaude(params) {
-  const { system, messages, tools = [], serverTools = [], maxTokens = 4096 } = params;
-  const model = 'claude-sonnet-4-6';
+  const { system, messages, tools = [], serverTools = [], maxTokens = 4096, model: modelOverride } = params;
+  const model = modelOverride || 'claude-sonnet-4-6';
   const client = getAnthropic();
 
   const allTools = [...tools, ...serverTools];
@@ -66,50 +69,72 @@ async function callClaude(params) {
 }
 
 /**
- * Fallback: call OpenAI GPT-5.2 with tool_use support.
+ * Fallback: call Gemini 2.5 Flash with tool_use support.
+ * Converts Anthropic-style messages to Gemini format.
  */
-async function callOpenAIFallback(params) {
+async function callGeminiFallback(params) {
   const { system, messages, tools = [], maxTokens = 4096 } = params;
-  const model = 'gpt-5.2';
-  const client = getOpenAI();
+  const modelName = 'gemini-2.5-flash';
+  const genAI = getGenAI();
 
-  const openaiTools = tools
-    .filter(t => t.type !== 'server_tool')
-    .map(t => ({
-      type: 'function',
-      function: { name: t.name, description: t.description, parameters: t.input_schema },
-    }));
-
-  const openaiMessages = [
-    { role: 'system', content: system },
-    ...messages.map(m => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    })),
-  ];
-
-  const response = await client.chat.completions.create({
-    model,
-    max_tokens: maxTokens,
-    messages: openaiMessages,
-    tools: openaiTools.length > 0 ? openaiTools : undefined,
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    systemInstruction: system,
   });
 
-  const usage = response.usage || {};
+  // Convert Anthropic messages to Gemini format
+  const geminiHistory = [];
+  for (const msg of messages) {
+    const role = msg.role === 'assistant' ? 'model' : 'user';
+    const text = typeof msg.content === 'string'
+      ? msg.content
+      : Array.isArray(msg.content)
+        ? msg.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+        : JSON.stringify(msg.content);
+    geminiHistory.push({ role, parts: [{ text }] });
+  }
+
+  // Convert tools to Gemini function declarations
+  const functionDeclarations = tools
+    .filter(t => t.type !== 'server_tool')
+    .map(t => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema,
+    }));
+
+  const generationConfig = { maxOutputTokens: maxTokens };
+
+  const chatOpts = { history: geminiHistory.slice(0, -1), generationConfig };
+  if (functionDeclarations.length > 0) {
+    chatOpts.tools = [{ functionDeclarations }];
+  }
+
+  const chat = model.startChat(chatOpts);
+
+  // Send last message
+  const lastMsg = geminiHistory[geminiHistory.length - 1];
+  const result = await chat.sendMessage(lastMsg.parts);
+  const response = result.response;
+
+  const usage = response.usageMetadata || {};
+  const inputTokens = usage.promptTokenCount || 0;
+  const outputTokens = usage.candidatesTokenCount || 0;
+
   return {
     response,
     cost: {
-      model,
-      inputTokens: usage.prompt_tokens || 0,
-      outputTokens: usage.completion_tokens || 0,
-      costUsd: calculateCost(model, usage.prompt_tokens || 0, usage.completion_tokens || 0),
+      model: modelName,
+      inputTokens,
+      outputTokens,
+      costUsd: calculateCost(modelName, inputTokens, outputTokens),
     },
   };
 }
 
 /**
  * Call LLM with automatic fallback.
- * Anthropic primary -> retry once with 5s backoff -> OpenAI fallback.
+ * Anthropic primary -> retry once with 5s backoff -> Gemini fallback.
  */
 async function callWithFallback(params) {
   try {
@@ -122,10 +147,10 @@ async function callWithFallback(params) {
   try {
     return await callClaude(params);
   } catch (err) {
-    console.warn(`[LLMClient] Anthropic retry failed: ${err.message}. Falling back to OpenAI...`);
+    console.warn(`[LLMClient] Anthropic retry failed: ${err.message}. Falling back to Gemini...`);
   }
 
-  return await callOpenAIFallback(params);
+  return await callGeminiFallback(params);
 }
 
-module.exports = { callClaude, callOpenAIFallback, callWithFallback, calculateCost, PRICING };
+module.exports = { callClaude, callGeminiFallback, callWithFallback, calculateCost, PRICING };

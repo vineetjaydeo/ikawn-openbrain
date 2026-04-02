@@ -27,8 +27,25 @@ module.exports = {
 
     const channel = config.channel || 'telegram';
     if (channel === 'telegram') {
-      const sent = await sendTelegramMessage(config.message, { reply_markup: config.reply_markup });
-      return { success: sent, data: { channel: 'telegram' }, summary: sent ? 'Notification sent via Telegram' : 'Failed to send' };
+      const msg = config.message || '';
+      // Telegram max message length is 4096 chars. Chunk if longer.
+      const MAX_TG_LEN = 4000;
+      if (msg.length <= MAX_TG_LEN) {
+        const sent = await sendTelegramMessage(msg, { reply_markup: config.reply_markup });
+        return { success: sent, data: { channel: 'telegram' }, summary: sent ? 'Notification sent via Telegram' : 'Failed to send' };
+      }
+      // Split into chunks
+      const chunks = [];
+      for (let i = 0; i < msg.length; i += MAX_TG_LEN) {
+        chunks.push(msg.slice(i, i + MAX_TG_LEN));
+      }
+      let allSent = true;
+      for (let i = 0; i < chunks.length; i++) {
+        const prefix = chunks.length > 1 ? `(${i + 1}/${chunks.length}) ` : '';
+        const sent = await sendTelegramMessage(prefix + chunks[i], i === 0 ? { reply_markup: config.reply_markup } : {});
+        if (!sent) allSent = false;
+      }
+      return { success: allSent, data: { channel: 'telegram', chunks: chunks.length }, summary: allSent ? `Notification sent via Telegram (${chunks.length} parts)` : 'Some message parts failed to send' };
     }
     return { success: true, data: { channel: 'web', message: config.message }, summary: 'Notification queued for web' };
   },

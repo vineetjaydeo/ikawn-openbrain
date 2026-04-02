@@ -129,6 +129,13 @@ async function recall(params) {
         AND deleted_at IS NULL
     `;
 
+    // User isolation: scope memories to requesting user (or shared/null)
+    if (userId) {
+      memoriesWhere += ` AND (user_id = $${paramIdx} OR user_id IS NULL)`;
+      memoriesParams.push(userId);
+      paramIdx++;
+    }
+
     if (memoryTypes && memoryTypes.length > 0) {
       memoriesWhere += ` AND memory_type = ANY($${paramIdx++})`;
       memoriesParams.push(memoryTypes);

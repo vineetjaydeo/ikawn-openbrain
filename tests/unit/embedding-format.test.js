@@ -29,12 +29,12 @@ describe('Embedding Vector Format', () => {
     expect(pgFormat).toBe('{}');
   });
 
-  it('handles large dimension vectors (1536 for text-embedding-3-small)', () => {
-    const embedding = Array.from({ length: 1536 }, (_, i) => Math.random() * 2 - 1);
+  it('handles large dimension vectors (768 for text-embedding-004)', () => {
+    const embedding = Array.from({ length: 768 }, (_, i) => Math.random() * 2 - 1);
     const pgFormat = `{${embedding.join(',')}}`;
     expect(pgFormat.startsWith('{')).toBe(true);
     expect(pgFormat.endsWith('}')).toBe(true);
-    // Count commas — should be 1535 for 1536 elements
-    expect((pgFormat.match(/,/g) || []).length).toBe(1535);
+    // Count commas — should be 767 for 768 elements
+    expect((pgFormat.match(/,/g) || []).length).toBe(767);
   });
 });

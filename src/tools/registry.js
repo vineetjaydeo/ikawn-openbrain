@@ -30,6 +30,67 @@ function loadTools() {
   console.log(`[ToolRegistry] ${tools.size} tools loaded`);
 }
 
+/**
+ * Permission tiers for tools:
+ * - 'low': safe, read-only operations (system_status, code_read, ga_report)
+ * - 'medium': writes/side-effects (code_write, code_edit, content_draft, gmail_draft)
+ * - 'high': destructive/costly operations (bash_exec, deploy_openbrain, notify)
+ * - 'critical': requires explicit approval (deploy_openbrain for non-ikawn brands)
+ */
+const DEFAULT_COST_TIERS = {
+  system_status: 'low',
+  code_read: 'low',
+  ga_report: 'low',
+  fly_status: 'low',
+  calendar_read: 'low',
+  gmail_read: 'low',
+  content_draft: 'medium',
+  code_write: 'medium',
+  code_edit: 'medium',
+  gmail_draft: 'medium',
+  create_user_task: 'medium',
+  manage_task: 'medium',
+  brand_analysis: 'medium',
+  ikawn_generate: 'medium',
+  manage_automation: 'medium',
+  bash_exec: 'high',
+  notify: 'high',
+  gmail_send: 'high',
+  deploy_openbrain: 'critical',
+};
+
+function getToolCostTier(toolName) {
+  const tool = tools.get(toolName);
+  if (tool && tool.costTier) return tool.costTier;
+  return DEFAULT_COST_TIERS[toolName] || 'medium';
+}
+
+/**
+ * Check if a tool can be used in the given context.
+ * Returns { allowed: true, tier } or { allowed: false, tier, reason: '...' }
+ */
+function checkToolPermission(toolName, context = {}) {
+  const { brandId, userId, isInternal } = context;
+  const tier = getToolCostTier(toolName);
+
+  // Internal (ikawn brand) has full access
+  if (brandId === 'ikawn' || isInternal) {
+    return { allowed: true, tier };
+  }
+
+  // External brands: block critical tools
+  if (tier === 'critical') {
+    return { allowed: false, tier, reason: `Tool '${toolName}' requires manual approval for external brands` };
+  }
+
+  // External brands: block high-tier tools unless explicitly enabled
+  if (tier === 'high') {
+    return { allowed: false, tier, reason: `Tool '${toolName}' is restricted for external brands. Contact admin to enable.` };
+  }
+
+  return { allowed: true, tier };
+}
+
 function getTools() { return tools; }
 function getTool(name) { return tools.get(name); }
 
@@ -68,4 +129,4 @@ function getToolSchemas(toolNames) {
   return schemas;
 }
 
-module.exports = { loadTools, getTools, getTool, getToolsForAgent, getToolSchemas };
+module.exports = { loadTools, getTools, getTool, getToolsForAgent, getToolSchemas, getToolCostTier, checkToolPermission };

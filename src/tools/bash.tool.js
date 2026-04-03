@@ -23,11 +23,11 @@ const ALLOWED_BASE_COMMANDS = new Set([
 // ── Git subcommand rules ───────────────────────────────────────────────
 
 const ALLOWED_GIT_SUBCOMMANDS = new Set([
-  'status', 'diff', 'log', 'add', 'commit', 'branch', 'stash',
+  'status', 'diff', 'log', 'add', 'commit', 'push', 'branch', 'stash',
 ]);
 
 const BLOCKED_GIT_PATTERNS = [
-  'git push', 'git reset --hard', 'git clean', 'git checkout .',
+  'git push --force', 'git push -f ', 'git reset --hard', 'git clean', 'git checkout .',
 ];
 
 // ── NPM subcommand rules ──────────────────────────────────────────────
@@ -69,7 +69,7 @@ const BLOCKED_PATTERNS = [
 const SENSITIVE_ENV_KEYS = [
   'OPENAI_API_KEY', 'OPENAI_ADMIN_KEY', 'ANTHROPIC_API_KEY',
   'DATABASE_URL', 'TELEGRAM_BOT_TOKEN', 'API_KEY', 'ADMIN_API_KEY',
-  'ACTIVEPIECES_API_KEY', 'AP_INTERNAL_KEY',
+  'ACTIVEPIECES_API_KEY', 'AP_INTERNAL_KEY', 'GITHUB_TOKEN',
 ];
 
 // ── Validation logic (exported separately for testing) ─────────────────

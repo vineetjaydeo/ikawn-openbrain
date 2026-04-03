@@ -129,8 +129,13 @@ describe('bash_exec tool', () => {
       expect(result.allowed).toBe(false);
     });
 
-    it('blocks git push', () => {
+    it('allows git push', () => {
       const result = isCommandAllowed('git push origin main');
+      expect(result.allowed).toBe(true);
+    });
+
+    it('blocks git push --force', () => {
+      const result = isCommandAllowed('git push --force origin main');
       expect(result.allowed).toBe(false);
       expect(result.reason).toMatch(/Destructive git/i);
     });

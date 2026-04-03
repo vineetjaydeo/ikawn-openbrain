@@ -4,7 +4,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 RUN git config --global user.name "Lucy (OpenBrain)" && \
-    git config --global user.email "lucy@ikawn.com"
+    git config --global user.email "lucy@ikawn.com" && \
+    git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=$GITHUB_TOKEN"; }; f'
 ARG CACHE_BUST=1
 COPY src/ ./src/
 COPY scripts/ ./scripts/

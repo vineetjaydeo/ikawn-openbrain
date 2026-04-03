@@ -9,8 +9,8 @@ const { captureMessage } = require('../utils/capture');
 const { sendTelegramMessage } = require('../utils/telegram');
 const { feature } = require('../utils/features');
 
-const MAX_TOOL_ROUNDS = 10;
-const MAX_TOKENS = 50_000;
+const MAX_TOOL_ROUNDS = 15;
+const MAX_TOKENS = 200_000;
 const TOOL_TIMEOUT_MS = 20_000;
 const TOOL_CONCURRENCY = 5;
 

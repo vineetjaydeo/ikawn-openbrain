@@ -46,9 +46,18 @@ module.exports = {
         // If tool is 'agent' or missing, this is a Tier 2 agent task (LLM reasoning, not direct tool)
         // Use a placeholder tool — the scheduler's agent executor handles the actual work via the description
         const { getTool } = require('./registry');
-        if (!config.tool || config.tool === 'agent' || config.tool === 'research') {
+        if (!config.tool || config.tool === 'agent' || config.tool === 'research' || config.tool === 'coding') {
           config.tier = 'agent';
           config.tool = 'web_search'; // Placeholder — agent executor uses description + agent persona, not this tool directly
+          // Auto-set coding defaults if description mentions code operations
+          const desc = (config.description || config.name || '').toLowerCase();
+          const isCodingTask = desc.match(/\b(code_read|code_write|code_edit|edit file|add.*border|modify|refactor|git push|git commit|npm test)\b/);
+          if (isCodingTask && (!config.config || !config.config.max_tokens)) {
+            config.config = { ...config.config, max_tokens: 200000, max_tool_rounds: 15 };
+          }
+          if (!config.agent_slug || config.agent_slug === 'ruhi') {
+            if (isCodingTask) config.agent_slug = 'tech';
+          }
         } else if (!getTool(config.tool)) {
           return { success: false, data: null, summary: `Unknown tool: "${config.tool}". Use 'list' action to see available tools.` };
         }
@@ -66,13 +75,14 @@ module.exports = {
           interval_minutes: config.interval_minutes || null,
           trigger_event: config.trigger_event || null,
           requires_approval: config.requires_approval || false,
+          max_cost_per_run: config.max_cost_per_run || (config.tier === 'agent' ? '2.00' : null),
         };
         const nextRun = calculateNextRun(task);
         const { rows } = await pool.query(`
-          INSERT INTO scheduled_tasks (brand_id, user_id, agent_slug, name, description, tier, tool, config, schedule_type, cron_expression, interval_minutes, trigger_event, requires_approval, next_run_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          INSERT INTO scheduled_tasks (brand_id, user_id, agent_slug, name, description, tier, tool, config, schedule_type, cron_expression, interval_minutes, trigger_event, requires_approval, max_cost_per_run, next_run_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           RETURNING uuid, name
-        `, [task.brand_id, task.user_id, task.agent_slug, task.name, task.description, task.tier, task.tool, JSON.stringify(task.config), task.schedule_type, task.cron_expression, task.interval_minutes, task.trigger_event, task.requires_approval, nextRun]);
+        `, [task.brand_id, task.user_id, task.agent_slug, task.name, task.description, task.tier, task.tool, JSON.stringify(task.config), task.schedule_type, task.cron_expression, task.interval_minutes, task.trigger_event, task.requires_approval, task.max_cost_per_run, nextRun]);
         return { success: true, data: rows[0], summary: `Task "${rows[0].name}" created (${config.schedule_type}).` };
       }
 

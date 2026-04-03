@@ -49,14 +49,11 @@ module.exports = {
         if (!config.tool || config.tool === 'agent' || config.tool === 'research' || config.tool === 'coding') {
           config.tier = 'agent';
           config.tool = 'web_search'; // Placeholder — agent executor uses description + agent persona, not this tool directly
-          // Auto-set coding defaults if description mentions code operations
+          // Auto-route coding tasks to tech agent (token budgets handled by executor tiers)
           const desc = (config.description || config.name || '').toLowerCase();
-          const isCodingTask = desc.match(/\b(code_read|code_write|code_edit|edit file|add.*border|modify|refactor|git push|git commit|npm test)\b/);
-          if (isCodingTask && (!config.config || !config.config.max_tokens)) {
-            config.config = { ...config.config, max_tokens: 200000, max_tool_rounds: 15 };
-          }
-          if (!config.agent_slug || config.agent_slug === 'ruhi') {
-            if (isCodingTask) config.agent_slug = 'tech';
+          const isCodingTask = /\b(code_read|code_write|code_edit|edit file|add.*border|modify|refactor|git push|git commit|npm test|deploy)\b/.test(desc);
+          if (isCodingTask && (!config.agent_slug || config.agent_slug === 'ruhi')) {
+            config.agent_slug = 'tech';
           }
         } else if (!getTool(config.tool)) {
           return { success: false, data: null, summary: `Unknown tool: "${config.tool}". Use 'list' action to see available tools.` };

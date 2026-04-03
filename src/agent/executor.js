@@ -9,10 +9,29 @@ const { captureMessage } = require('../utils/capture');
 const { sendTelegramMessage } = require('../utils/telegram');
 const { feature } = require('../utils/features');
 
-const MAX_TOOL_ROUNDS = 15;
-const MAX_TOKENS = 200_000;
 const TOOL_TIMEOUT_MS = 20_000;
 const TOOL_CONCURRENCY = 5;
+
+// ── Tiered token budgets based on task tools ──────────────────────────
+const CODE_TOOLS = new Set(['code_read', 'code_write', 'code_edit', 'bash_exec', 'deploy_openbrain']);
+const RESEARCH_TOOLS = new Set(['web_search', 'ga_report', 'system_status', 'fly_status', 'search_memory']);
+
+const TOKEN_TIERS = {
+  coding:   { maxTokens: 200_000, maxRounds: 15 },
+  research: { maxTokens: 60_000,  maxRounds: 8 },
+  simple:   { maxTokens: 30_000,  maxRounds: 5 },
+};
+
+/**
+ * Determine the token tier for a task based on its agent's tools.
+ * Task config overrides always win.
+ */
+function getTokenTier(agentTools) {
+  const tools = agentTools || [];
+  if (tools.some(t => CODE_TOOLS.has(t))) return TOKEN_TIERS.coding;
+  if (tools.some(t => RESEARCH_TOOLS.has(t))) return TOKEN_TIERS.research;
+  return TOKEN_TIERS.simple;
+}
 
 /**
  * Wrap a promise with a timeout.
@@ -178,11 +197,15 @@ INSTRUCTIONS:
   // Model override: tasks can specify config.model (e.g., 'claude-haiku-4-5-20251001' for cheap tasks)
   const modelOverride = (task.config && task.config.model) || null;
 
-  // 4. Multi-turn agent loop
+  // 4. Determine token tier from agent's tool set (task config overrides)
+  const tier = getTokenTier(agentDef.tools);
+  const maxRounds = (task.config && task.config.max_tool_rounds) || tier.maxRounds;
+  const tokenCap = (task.config && task.config.max_tokens) || tier.maxTokens;
+  console.log(`[Executor] Task ${task.id} tier: ${tier === TOKEN_TIERS.coding ? 'coding' : tier === TOKEN_TIERS.research ? 'research' : 'simple'} (${tokenCap/1000}k tokens, ${maxRounds} rounds)`);
+
+  // 5. Multi-turn agent loop
   const messages = [{ role: 'user', content: `Execute task: ${task.name}` }];
   let finalResult = null;
-
-  const maxRounds = (task.config && task.config.max_tool_rounds) || MAX_TOOL_ROUNDS;
   for (let round = 0; round < maxRounds; round++) {
     const { response, cost } = await callWithFallback({
       system: systemPrompt,
@@ -201,8 +224,7 @@ INSTRUCTIONS:
       return { success: false, result: { summary: 'Cost cap exceeded' }, cost: { costUsd: totalCost, tokensUsed: totalTokens } };
     }
 
-    // Token safety cap (task config can override default)
-    const tokenCap = (task.config && task.config.max_tokens) || MAX_TOKENS;
+    // Token safety cap (tiered default, task config override)
     if (totalTokens > tokenCap) {
       console.warn(`[Executor] Task ${task.id} hit ${tokenCap / 1000}k token cap`);
       return { success: false, result: { summary: `Token safety cap exceeded (${tokenCap / 1000}k)` }, cost: { costUsd: totalCost, tokensUsed: totalTokens } };
@@ -222,14 +244,14 @@ INSTRUCTIONS:
 
     messages.push({ role: 'user', content: toolResults });
 
-    if (round >= MAX_TOOL_ROUNDS - 1) {
+    if (round >= maxRounds - 1) {
       console.warn(`[Executor] Task ${task.id} hit max tool rounds (${maxRounds})`);
     }
   }
 
   if (!finalResult) finalResult = { summary: 'Agent reached max tool rounds without final response' };
 
-  // 5. Capture to memory
+  // 6. Capture to memory
   captureMessage({
     brand_id: brandId,
     channel: 'agent',

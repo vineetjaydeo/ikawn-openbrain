@@ -474,7 +474,10 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
   } catch (err) {
     console.error('[IntelBot] Error:', err);
     try {
-      await sendTelegramMessage('Something went wrong on my end. Try again in a moment.', { chatId });
+      const debugMsg = process.env.NODE_ENV === 'production'
+        ? `Something went wrong on my end (${err.message?.slice(0, 100) || 'unknown'}). Try again in a moment.`
+        : `Error: ${err.message}`;
+      await sendTelegramMessage(debugMsg, { chatId });
     } catch (_) {}
   } finally {
     clearInterval(typingInterval);

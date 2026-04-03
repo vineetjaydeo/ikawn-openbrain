@@ -40,6 +40,7 @@ function calculateNextRun(task) {
  */
 function isInActiveWindow(task) {
   if (!task.active_window_start || !task.active_window_end) return true;
+  if (task.schedule_type === 'once') return true;
 
   const tz = task.timezone || 'Asia/Calcutta';
   const now = new Date();

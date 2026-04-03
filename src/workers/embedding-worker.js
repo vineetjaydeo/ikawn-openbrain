@@ -57,6 +57,13 @@ async function processIndividualMemories(rows, table, extraUpdateFields) {
   let succeeded = 0, retried = 0, failed = 0;
 
   for (const row of rows) {
+    if (!row.content || !row.content.trim()) {
+      try {
+        await pool.query(`UPDATE ${table} SET embedding_status = 'failed' WHERE id = $1`, [row.id]);
+      } catch (_) {}
+      failed++;
+      continue;
+    }
     try {
       await jitteredDelay();
       const embedding = await getEmbedding(row.content);
@@ -106,9 +113,23 @@ async function processPendingEmbeddings() {
 
     if (rows.length === 0) return;
 
-    const embeddings = await getBatchEmbeddings(rows.map(r => r.content));
+    // Skip empty content rows — Google API returns 400 on empty strings
+    const emptyRows = rows.filter(r => !r.content || !r.content.trim());
+    if (emptyRows.length > 0) {
+      for (const row of emptyRows) {
+        await pool.query(
+          `UPDATE memories SET embedding_status = 'failed' WHERE id = $1`,
+          [row.id]
+        );
+      }
+      console.log(`[EmbeddingWorker] Skipped ${emptyRows.length} empty-content memories (marked failed)`);
+    }
+    const validRows = rows.filter(r => r.content && r.content.trim());
+    if (validRows.length === 0) return;
 
-    for (let i = 0; i < rows.length; i++) {
+    const embeddings = await getBatchEmbeddings(validRows.map(r => r.content));
+
+    for (let i = 0; i < validRows.length; i++) {
       // Postgres float8[] expects array literal, not JSON string
       await pool.query(`
         UPDATE memories
@@ -117,7 +138,7 @@ async function processPendingEmbeddings() {
             embedding_model = $3,
             embedded_at = NOW()
         WHERE id = $2
-      `, [`{${embeddings[i].join(',')}}`, rows[i].id, EMBEDDING_MODEL]);
+      `, [`{${embeddings[i].join(',')}}`, validRows[i].id, EMBEDDING_MODEL]);
     }
 
     console.log(`[EmbeddingWorker] Batch processed ${rows.length} memories (model: ${EMBEDDING_MODEL})`);
@@ -160,15 +181,29 @@ async function processPendingDistilledEmbeddings() {
 
     if (rows.length === 0) return;
 
-    const embeddings = await getBatchEmbeddings(rows.map(r => r.content));
+    // Skip empty content rows
+    const emptyRows = rows.filter(r => !r.content || !r.content.trim());
+    if (emptyRows.length > 0) {
+      for (const row of emptyRows) {
+        await pool.query(
+          `UPDATE distilled_memory SET embedding_status = 'failed' WHERE id = $1`,
+          [row.id]
+        );
+      }
+      console.log(`[EmbeddingWorker] Skipped ${emptyRows.length} empty distilled memories (marked failed)`);
+    }
+    const validRows = rows.filter(r => r.content && r.content.trim());
+    if (validRows.length === 0) return;
 
-    for (let i = 0; i < rows.length; i++) {
+    const embeddings = await getBatchEmbeddings(validRows.map(r => r.content));
+
+    for (let i = 0; i < validRows.length; i++) {
       await pool.query(`
         UPDATE distilled_memory
         SET embedding = $1::float8[],
             embedding_status = 'done'
         WHERE id = $2
-      `, [`{${embeddings[i].join(',')}}`, rows[i].id]);
+      `, [`{${embeddings[i].join(',')}}`, validRows[i].id]);
     }
 
     console.log(`[EmbeddingWorker] Batch processed ${rows.length} distilled memories (model: ${EMBEDDING_MODEL})`);

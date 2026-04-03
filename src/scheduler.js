@@ -240,6 +240,16 @@ async function executeTask(task) {
         memory_tags: task.memory_tags || null,
       };
 
+      // Pass checkpoint reference if continuing from a previous run
+      if (task.config && task.config._continueFromRun) {
+        task._continueFromRun = task.config._continueFromRun;
+        // Clean up the continue flag from config so it doesn't persist
+        await pool.query(
+          "UPDATE scheduled_tasks SET config = config::jsonb - '_continueFromRun' WHERE id = $1",
+          [task.id]
+        ).catch(() => {});
+      }
+
       // Handle approval flow
       if (task.requires_approval) {
         const agentResult = await executeAgentTask(task, agentDef);

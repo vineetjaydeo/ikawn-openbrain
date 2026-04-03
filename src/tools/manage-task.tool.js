@@ -9,7 +9,7 @@ module.exports = {
   description: 'Create, list, update, enable, disable, delete, or immediately run scheduled tasks. For research or complex tasks, use tool="agent" which delegates to an AI agent with web search. For simple tool-based tasks, specify the exact tool name.',
   tier: 'direct',
   parameters: {
-    action: { type: 'string', required: true, description: 'Action', enum: ['create', 'list', 'enable', 'disable', 'delete', 'run_now', 'update'] },
+    action: { type: 'string', required: true, description: 'Action', enum: ['create', 'list', 'enable', 'disable', 'delete', 'run_now', 'continue', 'update'] },
     task_uuid: { type: 'string', required: false, description: 'Task UUID (for enable/disable/delete/run_now/update)' },
     name: { type: 'string', required: false, description: 'Task name (for create)' },
     tool: { type: 'string', required: false, description: 'Tool to execute. Use "agent" for research/complex tasks that need AI reasoning with web search. Use specific tool names (e.g. "web_search", "brand_analysis") for simple direct tasks.' },
@@ -107,6 +107,35 @@ module.exports = {
           [config.task_uuid, brandId]
         );
         return { success: rowCount > 0, data: null, summary: rowCount > 0 ? 'Task queued for immediate execution.' : 'Task not found or disabled.' };
+      }
+
+      case 'continue': {
+        // Resume a task that was paused by token/cost cap
+        if (!config.task_uuid) return { success: false, data: null, summary: 'task_uuid required' };
+        // Find the most recent run with a checkpoint
+        const { rows: checkpointRuns } = await pool.query(
+          `SELECT tr.id, tr.result FROM task_runs tr
+           JOIN scheduled_tasks st ON st.id = tr.task_id
+           WHERE st.uuid = $1 AND st.brand_id = $2
+             AND tr.result->'checkpoint' IS NOT NULL
+           ORDER BY tr.started_at DESC LIMIT 1`,
+          [config.task_uuid, brandId]
+        );
+        if (checkpointRuns.length === 0) {
+          return { success: false, data: null, summary: 'No checkpoint found for this task. Nothing to continue.' };
+        }
+        // Re-enable and queue for immediate execution with checkpoint reference
+        const { rowCount } = await pool.query(
+          `UPDATE scheduled_tasks SET enabled = true, next_run_at = NOW(),
+            config = jsonb_set(COALESCE(config, '{}')::jsonb, '{_continueFromRun}', $3::jsonb),
+            updated_at = NOW()
+           WHERE uuid = $1 AND brand_id = $2`,
+          [config.task_uuid, brandId, JSON.stringify(checkpointRuns[0].id)]
+        );
+        return {
+          success: rowCount > 0, data: { run_id: checkpointRuns[0].id },
+          summary: rowCount > 0 ? `Task queued for continuation from run #${checkpointRuns[0].id}.` : 'Task not found.',
+        };
       }
 
       case 'update': {

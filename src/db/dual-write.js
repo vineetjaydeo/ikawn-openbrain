@@ -159,12 +159,115 @@ class DualWritePool {
 
   /**
    * Expose connect() for callers that need a client (e.g., transactions).
-   * Connects to primary (Supabase). Secondary writes won't be mirrored
-   * in transaction mode — this is acceptable for schema init which
-   * bypasses dual-write anyway.
+   *
+   * Returns a wrapper that:
+   * - Runs all queries on the primary (Supabase) client
+   * - Collects write statements during the transaction
+   * - On COMMIT: replays all collected writes to secondary in a single transaction
+   * - On ROLLBACK: discards collected writes
+   * - release() releases the primary client
+   *
+   * This ensures transactional writes are mirrored to Fly PG as a single
+   * atomic batch, maintaining consistency.
    */
   async connect() {
-    return this.primary.connect();
+    const primaryClient = await this.primary.connect();
+    const secondaryPool = this.secondary;
+    const dualPool = this;
+    const collectedWrites = [];
+    let inTransaction = false;
+
+    const wrapper = {
+      /** Forward query to primary, collect writes for secondary replay */
+      async query(text, params) {
+        // Normalize config object form
+        let sql;
+        if (typeof text === 'object' && text !== null) {
+          sql = (text.text || text.query || '').trim().toUpperCase();
+        } else {
+          sql = (text || '').trim().toUpperCase();
+        }
+
+        // Track transaction state
+        if (sql === 'BEGIN') {
+          inTransaction = true;
+          collectedWrites.length = 0;
+        }
+
+        // Run on primary
+        const result = await primaryClient.query(text, params);
+
+        // On COMMIT — replay writes to secondary
+        if (sql === 'COMMIT' && inTransaction) {
+          inTransaction = false;
+          if (collectedWrites.length > 0) {
+            dualPool._replayToSecondary(secondaryPool, collectedWrites);
+          }
+          collectedWrites.length = 0;
+          return result;
+        }
+
+        // On ROLLBACK — discard writes
+        if (sql === 'ROLLBACK') {
+          inTransaction = false;
+          collectedWrites.length = 0;
+          return result;
+        }
+
+        // Collect write statements (not BEGIN/COMMIT/ROLLBACK)
+        if (inTransaction && dualPool.isWrite(typeof text === 'object' ? (text.text || text.query || '') : (text || ''))) {
+          collectedWrites.push({ text, params });
+        }
+
+        // Non-transactional write — mirror immediately
+        if (!inTransaction && dualPool.isWrite(typeof text === 'object' ? (text.text || text.query || '') : (text || ''))) {
+          const rawSql = typeof text === 'object' ? (text.text || text.query || '') : (text || '');
+          const table = dualPool._extractTable(rawSql);
+          const op = dualPool._extractOp(rawSql);
+          secondaryPool.query(text, params).catch(err => {
+            console.error(`[DualWrite] Secondary client write failed | table=${table} op=${op} | ${err.message}`);
+          });
+        }
+
+        return result;
+      },
+
+      /** Release the primary client */
+      release() {
+        return primaryClient.release();
+      },
+    };
+
+    return wrapper;
+  }
+
+  /**
+   * Replay collected transaction writes to secondary pool (best-effort, async).
+   * Wraps them in their own BEGIN/COMMIT on the secondary.
+   */
+  _replayToSecondary(secondaryPool, writes) {
+    (async () => {
+      let secondaryClient;
+      try {
+        secondaryClient = await secondaryPool.connect();
+        await secondaryClient.query('BEGIN');
+        for (const w of writes) {
+          await secondaryClient.query(w.text, w.params);
+        }
+        await secondaryClient.query('COMMIT');
+      } catch (err) {
+        if (secondaryClient) {
+          await secondaryClient.query('ROLLBACK').catch(() => {});
+        }
+        const tables = writes.map(w => {
+          const sql = typeof w.text === 'object' ? (w.text.text || '') : (w.text || '');
+          return this._extractTable(sql);
+        }).join(',');
+        console.error(`[DualWrite] Secondary transaction replay failed | tables=${tables} | ${err.message}`);
+      } finally {
+        if (secondaryClient) secondaryClient.release();
+      }
+    })();
   }
 
   /**

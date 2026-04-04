@@ -48,7 +48,7 @@ const TABLES = [
   // Agent platform
   { table: 'scheduled_tasks', pk: 'id', serial: true },
   { table: 'task_runs', pk: 'id', serial: true },
-  { table: 'agent_definitions', pk: 'id', serial: true },
+  { table: 'agent_definitions', pk: 'id', serial: true, sourceTable: 'domain_agents' },
 
   // Brand extras
   { table: 'brand_oauth_tokens', pk: 'id', serial: true },
@@ -158,7 +158,16 @@ function buildBatchInsert(tableName, columns, rows, pkTarget) {
     const placeholders = columns.map(() => `$${paramIdx++}`);
     valueSets.push(`(${placeholders.join(', ')})`);
     for (const col of columns) {
-      values.push(row[col] !== undefined ? row[col] : null);
+      let val = row[col] !== undefined ? row[col] : null;
+      // Handle type mismatches between Fly PG and Supabase:
+      // - JS objects (except arrays, Buffers, Dates) → JSON.stringify for JSONB columns
+      // - JS arrays stay as arrays (pg driver handles TEXT[])
+      // - Plain strings in JSONB columns need JSON.stringify wrapping too
+      //   (e.g., settings.value stores "gpt-5.3" as JSONB but Fly returns it as a string)
+      if (val !== null && typeof val === 'object' && !Buffer.isBuffer(val) && !(val instanceof Date) && !Array.isArray(val)) {
+        val = JSON.stringify(val);
+      }
+      values.push(val);
     }
   }
 
@@ -204,11 +213,13 @@ async function main() {
   const results = [];
 
   for (const spec of TABLES) {
-    const { table, pk, serial, skipCols = [] } = spec;
+    const { table, pk, serial, skipCols = [], sourceTable } = spec;
+    // sourceTable: name of the table in source DB (if different from destination table name)
+    const srcTable = sourceTable || table;
 
     // Check if table exists in source
-    if (!(await tableExists(sourcePool, table))) {
-      console.log(`[SKIP] ${table}: does not exist in source DB`);
+    if (!(await tableExists(sourcePool, srcTable))) {
+      console.log(`[SKIP] ${table}: does not exist in source DB (looked for "${srcTable}")`);
       results.push({ table, exported: 0, imported: 0, status: 'skipped (no source table)' });
       continue;
     }
@@ -221,8 +232,8 @@ async function main() {
     }
 
     try {
-      // Get columns from source
-      const allColumns = await getColumns(sourcePool, table);
+      // Get columns from source (using source table name)
+      const allColumns = await getColumns(sourcePool, srcTable);
       // Get columns from destination to find intersection
       const destColumns = await getColumns(destPool, table);
       const destColSet = new Set(destColumns);
@@ -239,7 +250,7 @@ async function main() {
       }
 
       // Count source rows
-      const countRes = await sourcePool.query(`SELECT COUNT(*) AS cnt FROM "${table}"`);
+      const countRes = await sourcePool.query(`SELECT COUNT(*) AS cnt FROM "${srcTable}"`);
       const totalRows = parseInt(countRes.rows[0].cnt, 10);
 
       if (totalRows === 0) {
@@ -250,7 +261,7 @@ async function main() {
 
       // Fetch all rows from source (columns that we want)
       const colSelect = columns.map((c) => `"${c}"`).join(', ');
-      const fetchRes = await sourcePool.query(`SELECT ${colSelect} FROM "${table}" ORDER BY "${columns[0]}"`);
+      const fetchRes = await sourcePool.query(`SELECT ${colSelect} FROM "${srcTable}" ORDER BY "${columns[0]}"`);
       const rows = fetchRes.rows;
 
       let importedCount = 0;

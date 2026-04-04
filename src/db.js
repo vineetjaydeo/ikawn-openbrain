@@ -1,13 +1,23 @@
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
+const { createDualWritePool } = require('./db/dual-write');
 
 const connectionString = process.env.DATABASE_URL || '';
 const useSSL = !connectionString.includes('sslmode=disable');
 
-const pool = new Pool({
+// The "raw" Fly PG pool — used for schema init and as fallback
+const _flyPool = new Pool({
   connectionString,
   ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
+
+// Dual-write pool: when enabled, routes writes to Supabase (primary) + Fly PG (secondary)
+// When disabled (default), all queries go to _flyPool as before
+const _dualWriteEnabled = process.env.DUAL_WRITE_ENABLED === 'true';
+const _dualWritePool = _dualWriteEnabled ? createDualWritePool() : null;
+
+// Exported pool: dual-write when enabled, otherwise raw Fly PG pool
+const pool = _dualWritePool && _dualWriteEnabled ? _dualWritePool : _flyPool;
 
 // ikawn-v3 read-only connection (for intelligence worker)
 const ikawnOsPool = process.env.IKAWN_OS_DATABASE_URL
@@ -23,7 +33,8 @@ const ikawnOsPool = process.env.IKAWN_OS_DATABASE_URL
   : null;
 
 async function initSchema() {
-  const client = await pool.connect();
+  // Schema init always runs on Fly PG directly, never through dual-write
+  const client = await _flyPool.connect();
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS memories (

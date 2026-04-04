@@ -719,7 +719,29 @@ The test: "If Anthropic's lawyers read this function — could they point to the
 
 ---
 
-## 6. What Comes After (Not In This Plan)
+## 6. Supabase Connection Details
+
+**Project:** `ahdixumfdnbrklhwtnlf` (Singapore, ap-southeast-1, Pro plan)
+**PostgreSQL:** 17.6, pgvector extension ENABLED
+**Dashboard:** https://supabase.com/dashboard/project/ahdixumfdnbrklhwtnlf
+
+Connection strings and keys are stored as Fly secrets on both `ikawn-openbrain` and `ruhi-os-brain`:
+
+| Secret | Purpose |
+|--------|---------|
+| `SUPABASE_DIRECT_URL` | Direct connection (IPv6) — for migrations and schema changes |
+| `SUPABASE_POOLED_URL` | Supavisor pooled connection (IPv4, port 6543) — for application use |
+| `SUPABASE_SERVICE_KEY` | Service role key — for admin operations (bypasses RLS) |
+| `SUPABASE_ANON_KEY` | Publishable key — for RLS-gated access (future use) |
+| `SUPABASE_PROJECT_REF` | Project reference ID |
+
+**Important:** Direct connection is IPv6-only. Works from Fly machines, NOT from local dev without IPv6. Use pooled connection for local development.
+
+**Credentials:** NEVER commit to repo. Always use `flyctl secrets set` or Supabase dashboard.
+
+---
+
+## 7. What Comes After (Not In This Plan)
 
 These are Phase 7+ and get their own design cycle:
 

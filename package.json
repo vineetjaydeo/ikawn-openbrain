@@ -13,7 +13,8 @@
     "lint": "eslint src/",
     "pre-deploy": "bash scripts/pre-deploy.sh",
     "backfill": "node scripts/backfill-supabase.js",
-    "reconcile": "node scripts/reconcile-counts.js"
+    "reconcile": "node scripts/reconcile-counts.js",
+    "reembed": "node scripts/reembed-supabase.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

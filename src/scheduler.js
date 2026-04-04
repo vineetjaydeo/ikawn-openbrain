@@ -97,7 +97,7 @@ async function runTaskScheduler() {
     const { rows: dueTasks } = await client.query(`
       SELECT st.*, da.persona, da.tools AS agent_tools, da.memory_tags
       FROM scheduled_tasks st
-      LEFT JOIN domain_agents da ON da.slug = st.agent_slug AND da.brand_id = st.brand_id
+      LEFT JOIN agent_definitions da ON da.slug = st.agent_slug AND da.brand_id = st.brand_id
       WHERE st.enabled
         AND st.next_run_at <= NOW()
         AND (st.last_status IS NULL OR st.last_status != 'running')
@@ -223,7 +223,7 @@ async function executeTask(task) {
       // Fallback to ruhi if agent not found
       if (!task.persona) {
         const { rows: [ruhiAgent] } = await pool.query(
-          "SELECT persona, tools, memory_tags FROM domain_agents WHERE slug = 'ruhi' AND brand_id = $1",
+          "SELECT persona, tools, memory_tags FROM agent_definitions WHERE slug = 'ruhi' AND brand_id = $1",
           [task.brand_id || 'ikawn']
         );
         if (ruhiAgent) {

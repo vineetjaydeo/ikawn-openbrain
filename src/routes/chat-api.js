@@ -421,7 +421,7 @@ async function handleChatSend(req, res) {
     if (mentionMatch) {
       const slug = mentionMatch[1].toLowerCase();
       const { rows } = await pool.query(
-        'SELECT slug, name, role, persona FROM domain_agents WHERE LOWER(slug) = $1 AND enabled = true AND brand_id = $2',
+        'SELECT slug, name, role, persona FROM agent_definitions WHERE LOWER(slug) = $1 AND enabled = true AND brand_id = $2',
         [slug, req.brand_id]
       );
       if (rows.length > 0) mentionedAgent = rows[0];

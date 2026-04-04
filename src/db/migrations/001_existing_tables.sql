@@ -520,8 +520,8 @@ CREATE TABLE IF NOT EXISTS task_runs (
 CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs (task_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_task_runs_brand ON task_runs(brand_id);
 
--- domain_agents
-CREATE TABLE IF NOT EXISTS domain_agents (
+-- agent_definitions (formerly domain_agents)
+CREATE TABLE IF NOT EXISTS agent_definitions (
   id SERIAL PRIMARY KEY,
   slug TEXT UNIQUE NOT NULL,
   brand_id TEXT NOT NULL DEFAULT 'ikawn',

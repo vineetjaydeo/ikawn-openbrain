@@ -13,7 +13,7 @@
 --   9. tool_results           — per-tool-call result tracking
 --  10. cost_events            — granular cost accounting per LLM/tool call
 --
--- Depends on: 001_existing_tables.sql (users, brands, domain_agents)
+-- Depends on: 001_existing_tables.sql (users, brands, agent_definitions)
 -- Requires: pgvector extension (enabled in 001)
 -- ============================================================================
 

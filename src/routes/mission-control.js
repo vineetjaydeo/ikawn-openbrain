@@ -13,7 +13,7 @@ router.get('/api/mission/mentions', requireAuth, async (req, res) => {
   try {
     const [agentsResult, usersResult] = await Promise.all([
       pool.query(
-        `SELECT slug, name, role FROM domain_agents WHERE enabled = true AND brand_id = $1 ORDER BY name`,
+        `SELECT slug, name, role FROM agent_definitions WHERE enabled = true AND brand_id = $1 ORDER BY name`,
         [req.brand_id]
       ),
       pool.query(
@@ -183,7 +183,7 @@ router.get('/api/mission/agents', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT slug, name, role, tools, memory_tags, enabled, created_at
-       FROM domain_agents WHERE brand_id = $1 ORDER BY name`,
+       FROM agent_definitions WHERE brand_id = $1 ORDER BY name`,
       [req.brand_id]
     );
     res.json({ agents: rows });
@@ -199,7 +199,7 @@ router.put('/api/mission/agents/:slug', requireAdmin, async (req, res) => {
     if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be boolean' });
 
     const { rowCount } = await pool.query(
-      `UPDATE domain_agents SET enabled = $1 WHERE slug = $2 AND brand_id = $3`,
+      `UPDATE agent_definitions SET enabled = $1 WHERE slug = $2 AND brand_id = $3`,
       [enabled, req.params.slug, req.brand_id]
     );
     if (rowCount === 0) return res.status(404).json({ error: 'Agent not found' });

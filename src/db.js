@@ -863,7 +863,7 @@ async function initSchema() {
     `);
 
     await client.query(`
-      CREATE TABLE IF NOT EXISTS domain_agents (
+      CREATE TABLE IF NOT EXISTS agent_definitions (
         id SERIAL PRIMARY KEY,
         slug TEXT UNIQUE NOT NULL,
         brand_id TEXT NOT NULL DEFAULT 'ikawn',

@@ -15,7 +15,7 @@ async function seedAgents() {
     if (!agent.slug || !agent.persona) continue;
 
     const { rowCount } = await pool.query(`
-      INSERT INTO domain_agents (slug, brand_id, name, role, persona, tools, memory_tags)
+      INSERT INTO agent_definitions (slug, brand_id, name, role, persona, tools, memory_tags)
       VALUES ($1, 'ikawn', $2, $3, $4, $5, $6)
       ON CONFLICT (slug) DO UPDATE SET
         name = EXCLUDED.name,

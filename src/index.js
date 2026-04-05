@@ -48,6 +48,10 @@ const { startIntelligenceWorker } = require('./workers/intelligence-worker');
 const { startResearchWorker } = require('./workers/research-worker');
 const { startSyncWorker } = require('./workers/sync-worker');
 const { startContextWorker } = require('./workers/context-worker');
+const { startProcessor } = require('./engine/task-processor');
+const { startEpisodicEmbeddingWorker } = require('./workers/episodic-embedding-worker');
+const { startSemanticExtractor } = require('./workers/semantic-extractor');
+const { cleanExpiredMemories } = require('./workers/memory-lifecycle');
 
 // Load Ruhi knowledge base at startup
 const docsDir = path.join(__dirname, '..', 'docs');
@@ -207,6 +211,13 @@ async function start() {
       startResearchWorker();
       startSyncWorker();
       startContextWorker();
+      // Lucy v3 workers
+      startProcessor();
+      startEpisodicEmbeddingWorker();
+      startSemanticExtractor();
+      // Memory lifecycle — run daily (clean expired memories)
+      cleanExpiredMemories().catch(err => console.error('Initial memory cleanup error:', err));
+      setInterval(() => cleanExpiredMemories().catch(err => console.error('Memory cleanup error:', err)), 24 * 60 * 60 * 1000);
     });
   } catch (err) {
     console.error('Failed to start:', err);

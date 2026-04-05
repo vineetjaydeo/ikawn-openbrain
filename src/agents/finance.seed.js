@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'system_status', 'notify',
   ],
+  tool_scope: ['observe', 'analyze', 'communicate'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['finance', 'costs', 'budgets', 'forecasting'],
   persona: `You are the CFO of iKawn Technologies. You own cost monitoring, budget management, financial forecasting, P&L statements, and ROI attribution across all initiatives.
 

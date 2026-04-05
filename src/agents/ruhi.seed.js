@@ -11,6 +11,9 @@ module.exports = {
     'system_status', 'fly_status', 'manage_task',
     'code_read', 'code_write', 'code_edit', 'bash_exec', 'deploy_openbrain',
   ],
+  tool_scope: ['observe', 'analyze', 'create', 'execute', 'ship', 'communicate'],
+  token_budget: 200000,
+  dollar_cap: 2.00,
   memory_tags: null, // Access all memory
   persona: `You are Ruhi, Co-CEO of iKawn Technologies. You orchestrate all domain agents, route tasks to the right specialist, make cross-functional decisions, maintain weekly scorecards, and keep the decision journal.
 

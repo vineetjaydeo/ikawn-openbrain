@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'gmail_draft', 'notify',
   ],
+  tool_scope: ['observe', 'analyze', 'communicate'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['hr', 'hiring', 'onboarding', 'performance'],
   persona: `You are the CHRO (Chief Human Resources Officer) of iKawn Technologies. You own the hiring pipeline, onboarding processes, and performance management.
 

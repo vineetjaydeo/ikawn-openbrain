@@ -4,6 +4,7 @@ const { randomUUID } = require('crypto');
 const { callClaude: _callClaude, callClaudeStreaming: _callClaudeStreaming } = require('../agent/llm-client');
 const { resolveModel } = require('./model-router');
 const { logLLMCall, checkBudget } = require('./cost-tracker');
+const { captureFromLoopTurn } = require('./episodic-capture');
 
 // Lazy accessors — allow test injection via _setCallClaude() / _setCallClaudeStreaming()
 let _callClaudeFn = null;
@@ -34,10 +35,13 @@ class BudgetExceededError extends Error {
  * @param {string}  config.systemPrompt  - System prompt
  * @param {number} [config.dollarCap]    - Optional dollar budget cap
  * @param {Array}   config.messages      - Message array (mutated in place)
- * @param {Function} config.executeToolFn - async (toolName, toolInput) => string
+ * @param {Function} [config.executeToolFn] - Legacy: async (toolName, toolInput) => string
  * @param {number} [config.maxIterations] - Max loop iterations (default: 25)
  * @param {number} [config.timeoutMs]    - Optional timeout in ms; checks elapsed time before each LLM call
- * @returns {Promise<Object>} { response, messages, totalTokensIn, totalTokensOut, totalCostUsd, turnCount, toolCallCount, timedOut }
+ * @param {string} [config.userId]       - Optional userId for tool context
+ * @param {object} [config.toolRegistry] - V2 registry object; if provided, uses tool executor instead of executeToolFn
+ * @param {string} [config.trustLevel]   - 'auto'|'confirm'|'review' (default: 'auto')
+ * @returns {Promise<Object>} { response, messages, totalTokensIn, totalTokensOut, totalCostUsd, turnCount, toolCallCount, timedOut, gated?, gatedTool?, approvalRequired? }
  */
 async function executeReasoningLoop({
   sessionId,
@@ -51,6 +55,9 @@ async function executeReasoningLoop({
   maxIterations = 25,
   onEvent,
   timeoutMs,
+  userId,
+  toolRegistry,
+  trustLevel,
 }) {
   const { modelId } = resolveModel(modelTier);
   const executionId = randomUUID();
@@ -62,6 +69,18 @@ async function executeReasoningLoop({
   let turnCount = 0;
   let toolCallCount = 0;
   let accumulatedText = '';
+
+  // Cross-session continuity (optional, best-effort, once at start)
+  if (sessionId && userId) {
+    try {
+      const { loadPreviousSessionContext } = require('./cross-session');
+      const prevContext = await loadPreviousSessionContext({ brandId, userId, channel: 'web' });
+      if (prevContext) {
+        const contextMsg = { role: 'user', content: `[System context - previous sessions]\n${prevContext}` };
+        messages.unshift(contextMsg);
+      }
+    } catch (_) { /* best-effort */ }
+  }
 
   for (let i = 0; i < maxIterations; i++) {
     // Timeout check before each LLM call
@@ -88,6 +107,18 @@ async function executeReasoningLoop({
       if (!budget.withinBudget) {
         throw new BudgetExceededError(budget.spent, dollarCap);
       }
+    }
+
+    // Memory augmentation (optional, best-effort, first turn only)
+    if (sessionId && i === 0) {
+      try {
+        const { buildMemoryContext } = require('./memory-augmenter');
+        const memoryContext = await buildMemoryContext(messages, { brandId, userId, sessionId });
+        if (memoryContext) {
+          const memoryMsg = { role: 'user', content: `[System context - relevant memories]\n${memoryContext}` };
+          messages.splice(Math.max(messages.length - 1, 0), 0, memoryMsg);
+        }
+      } catch (_) { /* best-effort */ }
     }
 
     const callParams = {
@@ -150,6 +181,15 @@ async function executeReasoningLoop({
     // No tool calls — final text response, we're done
     if (toolUseBlocks.length === 0) {
       const finalResponse = turnText;
+
+      // Fire-and-forget episodic capture for final response
+      if (sessionId && finalResponse) {
+        captureFromLoopTurn(
+          { content: finalResponse, role: 'assistant' },
+          { brandId, userId, sessionId, channel: 'reasoning' }
+        ).catch(() => {});
+      }
+
       if (onEvent) {
         onEvent({ type: 'done', totalCostUsd, turnCount, toolCallCount });
       }
@@ -167,25 +207,88 @@ async function executeReasoningLoop({
     // Append assistant message with tool_use blocks
     messages.push({ role: 'assistant', content: response.content });
 
-    // Execute each tool via callback
+    // Execute each tool via tool executor (v2) or legacy callback
     const toolResults = [];
     for (const block of toolUseBlocks) {
       let resultContent;
       let success = true;
+
       try {
-        resultContent = await executeToolFn(block.name, block.input);
-        toolCallCount++;
+        if (toolRegistry) {
+          // V2 path: use tool executor
+          const { executeTool } = require('./tool-executor');
+          const toolContext = {
+            sessionId,
+            brandId,
+            userId: userId || undefined,
+            workingMemory: null,
+            costTracker: null,
+            trustLevel: trustLevel || 'auto',
+          };
+
+          const envelope = await executeTool(block.name, block.input, toolContext, toolRegistry);
+
+          // Handle gated result (HOTL needed — Phase 4 will handle fully)
+          if (envelope.gated) {
+            if (onEvent) onEvent({ type: 'tool_gated', name: block.name, approvalRequired: envelope.approvalRequired });
+            // Return partial results — loop cannot continue without approval
+            return {
+              response: accumulatedText.trim() || `[Tool ${block.name} requires ${envelope.approvalRequired} approval]`,
+              messages,
+              totalTokensIn, totalTokensOut, totalCostUsd, turnCount, toolCallCount,
+              gated: true,
+              gatedTool: block.name,
+              approvalRequired: envelope.approvalRequired,
+            };
+          }
+
+          // Handle suspended result
+          if (envelope.suspend) {
+            if (onEvent) onEvent({ type: 'tool_suspended', name: block.name, error: envelope.error });
+            resultContent = `Tool error (session suspended): ${envelope.error}`;
+            success = false;
+          } else if (envelope.hotl) {
+            // Ship tool failed — needs human review to retry
+            if (onEvent) onEvent({ type: 'tool_hotl', name: block.name, error: envelope.error });
+            resultContent = `Tool error (requires human review): ${envelope.error}`;
+            success = false;
+          } else if (!envelope.ok) {
+            // Regular error — let Claude adapt
+            resultContent = `Tool error: ${envelope.error}`;
+            success = false;
+          } else {
+            // Success
+            resultContent = typeof envelope.data === 'string' ? envelope.data : JSON.stringify(envelope.data);
+            toolCallCount++;
+          }
+        } else {
+          // Legacy path: use executeToolFn callback
+          resultContent = await executeToolFn(block.name, block.input);
+          toolCallCount++;
+        }
       } catch (err) {
         resultContent = `Tool error: ${err.message}`;
         success = false;
       }
+
       if (onEvent) {
         onEvent({ type: 'tool_result', name: block.name, success });
       }
+
+      const resultStr = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);
+
+      // Fire-and-forget episodic capture for tool result
+      if (sessionId) {
+        captureFromLoopTurn(
+          { content: resultStr, role: 'tool_result', toolName: block.name },
+          { brandId, userId, sessionId, channel: 'reasoning' }
+        ).catch(() => {});
+      }
+
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
-        content: typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent),
+        content: resultStr,
       });
     }
 

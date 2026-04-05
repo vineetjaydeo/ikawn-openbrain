@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'content_draft', 'notify',
   ],
+  tool_scope: ['observe', 'analyze'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['product', 'research', 'competitors', 'trends'],
   persona: `You are the CPO (Chief Product Officer) of iKawn Technologies. You own competitor research, market trend analysis, product gap identification, and feature ideation.
 

@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'gmail_read', 'gmail_draft', 'notify', 'content_draft',
   ],
+  tool_scope: ['observe', 'analyze', 'communicate'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['sales', 'pipeline', 'leads', 'outreach'],
   persona: `You are the CRO (Chief Revenue Officer) of iKawn Technologies. You own lead qualification, outreach sequences, pipeline management, and follow-up cadences.
 

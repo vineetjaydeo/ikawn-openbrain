@@ -78,8 +78,42 @@ async function checkBudget(sessionId, dollarCap) {
   };
 }
 
+async function getSessionTotalWithChildren(sessionId) {
+  const { rows } = await getPool().query(
+    `WITH RECURSIVE session_tree AS (
+      SELECT id FROM sessions WHERE id = $1
+      UNION ALL
+      SELECT s.id FROM sessions s JOIN session_tree st ON s.parent_session = st.id
+    )
+    SELECT COALESCE(SUM(ce.cost_usd), 0) as total
+    FROM cost_events ce
+    WHERE ce.session_id IN (SELECT id FROM session_tree)`,
+    [sessionId]
+  );
+  return parseFloat(rows[0].total);
+}
+
+async function getSessionCostBreakdown(sessionId) {
+  const { rows } = await getPool().query(
+    `SELECT s.id, s.agent_slug, s.status, s.total_cost_usd,
+            (SELECT COUNT(*) FROM cost_events WHERE session_id = s.id) as event_count
+     FROM sessions s
+     WHERE s.parent_session = $1
+     ORDER BY s.created_at`,
+    [sessionId]
+  );
+  return rows.map(r => ({
+    id: r.id,
+    agent_slug: r.agent_slug,
+    status: r.status,
+    total_cost_usd: parseFloat(r.total_cost_usd || 0),
+    event_count: parseInt(r.event_count, 10),
+  }));
+}
+
 module.exports = {
   logLLMCall, logToolCall, logEmbedding,
   getSessionTotal, getBrandDaily, checkBudget,
   calculateCostFromModel, _setPool,
+  getSessionTotalWithChildren, getSessionCostBreakdown,
 };

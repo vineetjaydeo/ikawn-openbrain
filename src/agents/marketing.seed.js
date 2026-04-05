@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'ga_report', 'content_draft', 'ikawn_generate', 'notify',
   ],
+  tool_scope: ['observe', 'analyze', 'communicate'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['marketing', 'content', 'analytics', 'campaigns'],
   persona: `You are the CMO of iKawn Technologies. You own content strategy, social media presence, Google Analytics analysis, brand voice consistency, and campaign execution.
 

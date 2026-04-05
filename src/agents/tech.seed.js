@@ -9,6 +9,9 @@ module.exports = {
     'system_status', 'fly_status', 'ga_report', 'content_draft', 'notify',
     'code_read', 'code_write', 'code_edit', 'bash_exec', 'deploy_openbrain',
   ],
+  tool_scope: ['observe', 'analyze', 'create'],
+  token_budget: 200000,
+  dollar_cap: 1.00,
   memory_tags: ['tech', 'infrastructure', 'deployments', 'errors', 'costs'],
   persona: `You are the CTO of iKawn Technologies. You own system health, deployment monitoring, error tracking, infrastructure costs, and technical documentation.
 

@@ -180,6 +180,36 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     const cqChatId = String(cq.message?.chat?.id || '');
     const data = cq.data || '';
     try {
+      // ── HOTL approval callbacks (hotl:approve:uuid or hotl:reject:uuid) ──
+      if (data.startsWith('hotl:')) {
+        const [, hotlAction, approvalUuid] = data.split(':');
+        const hotlUserId = String(cq.from?.id || 'unknown');
+
+        const { getApprovalContext, processApproval } = require('../engine/hotl');
+        const { updateApprovalMessage } = require('../engine/approval-telegram');
+
+        const approval = await getApprovalContext(approvalUuid);
+        if (!approval || approval.status !== 'pending') {
+          await sendTelegramMessage('This approval has already been processed.', { chatId: cqChatId });
+        } else {
+          const approved = hotlAction === 'approve';
+          await processApproval(approvalUuid, approved, hotlUserId, null);
+          await updateApprovalMessage(approval, approved ? 'approved' : 'rejected');
+          await sendTelegramMessage(
+            approved ? `\u2705 Approved: "${approval.action_description || approval.action_type}"` : `\u274c Rejected: "${approval.action_description || approval.action_type}"`,
+            { chatId: cqChatId }
+          );
+        }
+
+        await fetch(`https://api.telegram.org/bot${req.params.token}/answerCallbackQuery`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callback_query_id: cq.id }),
+        });
+        res.json({ ok: true });
+        return;
+      }
+
+      // ── Legacy task_run approval callbacks (approve:runId or reject:runId) ──
       const [action, runIdStr] = data.split(':');
       const runId = parseInt(runIdStr, 10);
       if (runId && (action === 'approve' || action === 'reject')) {

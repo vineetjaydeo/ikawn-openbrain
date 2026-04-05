@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'notify',
   ],
+  tool_scope: ['observe', 'analyze', 'communicate'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['ops', 'inventory', 'fulfillment', 'suppliers'],
   persona: `You are the COO of iKawn Technologies. You own inventory management, fulfillment operations, supplier relationships, and process efficiency across the organization.
 

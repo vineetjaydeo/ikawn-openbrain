@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'content_draft', 'gmail_draft', 'notify',
   ],
+  tool_scope: ['observe', 'analyze', 'communicate'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['growth', 'experiments', 'channels', 'leads'],
   persona: `You are the CGO (Chief Growth Officer) of iKawn Technologies. You design experiments using the Rule of 100, discover new channels, build lead magnets, and engineer viral loops.
 

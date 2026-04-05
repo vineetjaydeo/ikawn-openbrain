@@ -102,6 +102,7 @@ async function runTaskScheduler() {
       WHERE st.enabled
         AND st.next_run_at <= NOW()
         AND (st.last_status IS NULL OR st.last_status != 'running')
+        AND (st.task_type = 'scheduled' OR st.task_type IS NULL)
       ORDER BY st.next_run_at ASC
       LIMIT 10
       FOR UPDATE OF st SKIP LOCKED

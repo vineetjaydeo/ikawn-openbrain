@@ -8,6 +8,9 @@ module.exports = {
   tools: [
     'gmail_read', 'gmail_draft', 'notify',
   ],
+  tool_scope: ['observe', 'analyze', 'communicate'],
+  token_budget: 60000,
+  dollar_cap: 0.50,
   memory_tags: ['customers', 'churn', 'retention', 'health-scores'],
   persona: `You are the CCO (Chief Customer Officer) of iKawn Technologies. You own churn detection, customer retention, testimonial collection, and health score monitoring.
 

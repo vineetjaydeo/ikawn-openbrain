@@ -102,9 +102,130 @@ async function evictMemory(sessionId) {
  */
 function _clearCache() { _cache.clear(); }
 
+// ── Structured working memory helpers (Task 5.7) ──
+
+/**
+ * Ensure structured fields exist in working memory.
+ * @param {Object} data - The working memory data object (mutated in place)
+ */
+function _ensureStructuredFields(data) {
+  if (!Array.isArray(data.decisions_made)) data.decisions_made = [];
+  if (!Array.isArray(data.files_modified)) data.files_modified = [];
+  if (!Array.isArray(data.key_findings)) data.key_findings = [];
+  if (!Array.isArray(data.pending_actions)) data.pending_actions = [];
+  if (data.current_plan === undefined) data.current_plan = null;
+  if (data.custom === undefined) data.custom = {};
+}
+
+/**
+ * Append a decision to decisions_made array.
+ */
+async function addDecision(sessionId, decision) {
+  if (!_cache.has(sessionId)) await loadMemory(sessionId);
+  const entry = _cache.get(sessionId);
+  _ensureStructuredFields(entry.data);
+  entry.data.decisions_made.push(decision);
+  entry.dirty = true;
+}
+
+/**
+ * Append a file path to files_modified array (deduplicates).
+ */
+async function addFileModified(sessionId, filePath) {
+  if (!_cache.has(sessionId)) await loadMemory(sessionId);
+  const entry = _cache.get(sessionId);
+  _ensureStructuredFields(entry.data);
+  if (!entry.data.files_modified.includes(filePath)) {
+    entry.data.files_modified.push(filePath);
+    entry.dirty = true;
+  }
+}
+
+/**
+ * Append a finding to key_findings array.
+ */
+async function addFinding(sessionId, finding) {
+  if (!_cache.has(sessionId)) await loadMemory(sessionId);
+  const entry = _cache.get(sessionId);
+  _ensureStructuredFields(entry.data);
+  entry.data.key_findings.push(finding);
+  entry.dirty = true;
+}
+
+/**
+ * Set (overwrite) the current plan.
+ */
+async function setPlan(sessionId, plan) {
+  if (!_cache.has(sessionId)) await loadMemory(sessionId);
+  const entry = _cache.get(sessionId);
+  _ensureStructuredFields(entry.data);
+  entry.data.current_plan = plan;
+  entry.dirty = true;
+}
+
+/**
+ * Append an action to pending_actions array.
+ */
+async function addPendingAction(sessionId, action) {
+  if (!_cache.has(sessionId)) await loadMemory(sessionId);
+  const entry = _cache.get(sessionId);
+  _ensureStructuredFields(entry.data);
+  entry.data.pending_actions.push(action);
+  entry.dirty = true;
+}
+
+/**
+ * Remove an action from pending_actions array.
+ */
+async function removePendingAction(sessionId, action) {
+  if (!_cache.has(sessionId)) await loadMemory(sessionId);
+  const entry = _cache.get(sessionId);
+  _ensureStructuredFields(entry.data);
+  const idx = entry.data.pending_actions.indexOf(action);
+  if (idx !== -1) {
+    entry.data.pending_actions.splice(idx, 1);
+    entry.dirty = true;
+  }
+}
+
+/**
+ * Returns a formatted summary of all structured working memory fields.
+ */
+async function getStructuredSummary(sessionId) {
+  if (!_cache.has(sessionId)) await loadMemory(sessionId);
+  const data = { ..._cache.get(sessionId).data };
+  _ensureStructuredFields(data);
+
+  const lines = [];
+
+  if (data.current_plan) {
+    lines.push(`## Current Plan\n${data.current_plan}`);
+  }
+
+  if (data.decisions_made.length > 0) {
+    lines.push(`## Decisions Made\n${data.decisions_made.map((d, i) => `${i + 1}. ${d}`).join('\n')}`);
+  }
+
+  if (data.files_modified.length > 0) {
+    lines.push(`## Files Modified\n${data.files_modified.map(f => `- ${f}`).join('\n')}`);
+  }
+
+  if (data.key_findings.length > 0) {
+    lines.push(`## Key Findings\n${data.key_findings.map((f, i) => `${i + 1}. ${f}`).join('\n')}`);
+  }
+
+  if (data.pending_actions.length > 0) {
+    lines.push(`## Pending Actions\n${data.pending_actions.map(a => `- ${a}`).join('\n')}`);
+  }
+
+  return lines.join('\n\n');
+}
+
 module.exports = {
   loadMemory, getMemory, setMemory, getAllMemory,
   flushMemory, flushIfStale, evictMemory,
+  addDecision, addFileModified, addFinding, setPlan,
+  addPendingAction, removePendingAction, getStructuredSummary,
   _setPool, _clearCache,
   MAX_MEMORY_BYTES, FLUSH_INTERVAL_MS,
 };

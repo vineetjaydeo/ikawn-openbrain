@@ -15,15 +15,19 @@ async function seedAgents() {
     if (!agent.slug || !agent.persona) continue;
 
     const { rowCount } = await pool.query(`
-      INSERT INTO agent_definitions (slug, brand_id, name, role, persona, tools, memory_tags)
-      VALUES ($1, 'ikawn', $2, $3, $4, $5, $6)
+      INSERT INTO agent_definitions (slug, brand_id, name, role, persona, tools, memory_tags, tool_scope, token_budget, dollar_cap)
+      VALUES ($1, 'ikawn', $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (slug) DO UPDATE SET
         name = EXCLUDED.name,
         role = EXCLUDED.role,
         persona = EXCLUDED.persona,
         tools = EXCLUDED.tools,
-        memory_tags = EXCLUDED.memory_tags
-    `, [agent.slug, agent.name, agent.role, agent.persona, agent.tools, agent.memory_tags]);
+        memory_tags = EXCLUDED.memory_tags,
+        tool_scope = EXCLUDED.tool_scope,
+        token_budget = EXCLUDED.token_budget,
+        dollar_cap = EXCLUDED.dollar_cap
+    `, [agent.slug, agent.name, agent.role, agent.persona, agent.tools, agent.memory_tags,
+        agent.tool_scope || [], agent.token_budget || 200000, agent.dollar_cap || 2.00]);
 
     if (rowCount > 0) {
       seeded++;

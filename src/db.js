@@ -877,6 +877,15 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_task_runs_brand ON task_runs(brand_id);
     `);
 
+    // ── Lucy v3: Sub-agent columns on scheduled_tasks ──
+    await client.query(`
+      ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS task_type TEXT DEFAULT 'scheduled';
+      ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS parent_session UUID;
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_parent_session ON scheduled_tasks(parent_session) WHERE parent_session IS NOT NULL;
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS agent_definitions (
         id SERIAL PRIMARY KEY,
@@ -891,6 +900,11 @@ async function initSchema() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+
+    // v3 agent budget columns
+    await client.query(`ALTER TABLE agent_definitions ADD COLUMN IF NOT EXISTS tool_scope TEXT[] DEFAULT '{}'`);
+    await client.query(`ALTER TABLE agent_definitions ADD COLUMN IF NOT EXISTS token_budget INTEGER DEFAULT 200000`);
+    await client.query(`ALTER TABLE agent_definitions ADD COLUMN IF NOT EXISTS dollar_cap NUMERIC(10,4) DEFAULT 2.0000`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS brand_oauth_tokens (
@@ -1179,7 +1193,114 @@ async function initSchema() {
       `);
     }
 
-    console.log('Database schema initialized (v14 — Lucy v3 sessions + cost_events tables)');
+    // ── Lucy v3 HOTL: approval_requests table (schema v15) ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS approval_requests (
+        id SERIAL PRIMARY KEY,
+        uuid UUID DEFAULT gen_random_uuid() UNIQUE,
+        session_id UUID REFERENCES sessions(id),
+        task_run_id INTEGER REFERENCES task_runs(id),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        permission_tier VARCHAR(20) NOT NULL,
+        action_type TEXT NOT NULL,
+        action_description TEXT,
+        context JSONB DEFAULT '{}',
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        timeout_hours NUMERIC(4,1) NOT NULL DEFAULT 2,
+        telegram_message_id BIGINT,
+        responded_at TIMESTAMPTZ,
+        responded_by TEXT,
+        response_note TEXT,
+        resume_token UUID,
+        requested_at TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_approval_requests_session ON approval_requests(session_id)`);
+
+    // ── Lucy v3 Trust System (schema v16) ──
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trust_ledger (
+        id BIGSERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        domain VARCHAR(50) NOT NULL,
+        action_type VARCHAR(100) NOT NULL,
+        outcome VARCHAR(20) NOT NULL CHECK (outcome IN ('success', 'failure', 'regression', 'false_positive')),
+        session_id UUID,
+        tool_name VARCHAR(100),
+        detail TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_trust_ledger_domain ON trust_ledger(brand_id, domain, created_at DESC)
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trust_scores (
+        id SERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        domain VARCHAR(50) NOT NULL,
+        current_tier VARCHAR(20) NOT NULL DEFAULT 'confirm',
+        consecutive_successes INTEGER DEFAULT 0,
+        last_evaluated TIMESTAMPTZ,
+        last_promoted TIMESTAMPTZ,
+        last_demoted TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brand_id, domain)
+      )
+    `);
+
+    // ── Lucy v3 Phase 5: Episodic Memories ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS episodic_memories (
+        id BIGSERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        user_id VARCHAR(100),
+        session_id UUID,
+        content TEXT NOT NULL,
+        content_type VARCHAR(30) NOT NULL DEFAULT 'message',
+        author_type VARCHAR(20) NOT NULL DEFAULT 'agent',
+        author_ref VARCHAR(100),
+        source VARCHAR(50),
+        embedding TEXT,
+        processed_for_extraction BOOLEAN DEFAULT false,
+        expires_at TIMESTAMPTZ,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_episodic_brand ON episodic_memories(brand_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_episodic_session ON episodic_memories(session_id);
+      CREATE INDEX IF NOT EXISTS idx_episodic_unembedded ON episodic_memories(id) WHERE embedding IS NULL;
+    `);
+
+    // ── Lucy v3 Phase 5: Semantic Knowledge ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS semantic_knowledge (
+        id BIGSERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        content TEXT NOT NULL,
+        fact_type VARCHAR(30) DEFAULT 'fact',
+        confidence NUMERIC(3,2) DEFAULT 0.5,
+        source_episodes BIGINT[],
+        embedding TEXT,
+        superseded_by BIGINT,
+        times_referenced INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_semantic_brand ON semantic_knowledge(brand_id);
+      CREATE INDEX IF NOT EXISTS idx_semantic_active ON semantic_knowledge(brand_id) WHERE superseded_by IS NULL;
+    `);
+
+    console.log('Database schema initialized (v18 — semantic knowledge)');
   } finally {
     client.release();
   }

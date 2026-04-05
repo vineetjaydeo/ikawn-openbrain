@@ -157,4 +157,91 @@ async function callWithFallback(params) {
   return await callGeminiFallback(params);
 }
 
-module.exports = { callClaude, callGeminiFallback, callWithFallback, calculateCost, PRICING };
+/**
+ * Streaming variant of callClaude. Returns an async generator of events + final cost.
+ * Events: { type: 'text_delta', text } | { type: 'tool_use_start', id, name } |
+ *         { type: 'tool_use_delta', partial_json } | { type: 'tool_use_end' } |
+ *         { type: 'content_block_stop' } | { type: 'message_delta', stop_reason }
+ *
+ * @returns {{ stream: AsyncIterable, getResult: () => Promise<{ response, cost }> }}
+ */
+function callClaudeStreaming(params) {
+  const { system, messages, tools = [], serverTools = [], maxTokens = 4096, model: modelOverride } = params;
+  const model = modelOverride || 'claude-sonnet-4-6';
+  const client = getAnthropic();
+
+  const allTools = [...tools, ...serverTools];
+  const { formatSystemForCaching } = require('../utils/llm');
+  const cachedSystem = formatSystemForCaching(system);
+
+  const apiParams = {
+    model,
+    max_tokens: maxTokens,
+    system: cachedSystem,
+    messages,
+  };
+  if (allTools.length > 0) apiParams.tools = allTools;
+
+  const anthropicStream = client.messages.stream(apiParams);
+
+  // Collect content blocks as they complete
+  const contentBlocks = [];
+  let currentBlock = null;
+  let stopReason = 'end_turn';
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  // Create an async iterable that yields events
+  async function* eventIterator() {
+    for await (const event of anthropicStream) {
+      if (event.type === 'content_block_start') {
+        const block = event.content_block;
+        if (block.type === 'text') {
+          currentBlock = { type: 'text', text: '' };
+        } else if (block.type === 'tool_use') {
+          currentBlock = { type: 'tool_use', id: block.id, name: block.name, input: '' };
+          yield { type: 'tool_use_start', id: block.id, name: block.name };
+        } else if (block.type === 'server_tool_use' || block.type === 'web_search_tool_use') {
+          currentBlock = { type: block.type, id: block.id, name: block.name, input: block.input || {} };
+          yield { type: 'server_tool_start', id: block.id, name: block.name, input: block.input };
+        }
+      } else if (event.type === 'content_block_delta') {
+        if (event.delta?.type === 'text_delta' && currentBlock?.type === 'text') {
+          currentBlock.text += event.delta.text;
+          yield { type: 'text_delta', text: event.delta.text };
+        } else if (event.delta?.type === 'input_json_delta' && currentBlock?.type === 'tool_use') {
+          currentBlock.input += event.delta.partial_json;
+        }
+      } else if (event.type === 'content_block_stop') {
+        if (currentBlock) {
+          if (currentBlock.type === 'tool_use') {
+            try { currentBlock.input = JSON.parse(currentBlock.input || '{}'); } catch (_) { currentBlock.input = {}; }
+          } else if (currentBlock.type === 'server_tool_use' || currentBlock.type === 'web_search_tool_use') {
+            yield { type: 'server_tool_done', name: currentBlock.name };
+          }
+          contentBlocks.push(currentBlock);
+          currentBlock = null;
+        }
+      } else if (event.type === 'message_delta') {
+        if (event.delta?.stop_reason) stopReason = event.delta.stop_reason;
+        if (event.usage) {
+          outputTokens = event.usage.output_tokens || outputTokens;
+        }
+      } else if (event.type === 'message_start' && event.message?.usage) {
+        inputTokens = event.message.usage.input_tokens || 0;
+      }
+    }
+  }
+
+  // After iteration completes, build the response object
+  function buildResult() {
+    return {
+      response: { content: contentBlocks, stop_reason: stopReason },
+      cost: { model, inputTokens, outputTokens, costUsd: calculateCost(model, inputTokens, outputTokens) },
+    };
+  }
+
+  return { events: eventIterator(), buildResult };
+}
+
+module.exports = { callClaude, callClaudeStreaming, callGeminiFallback, callWithFallback, calculateCost, PRICING };

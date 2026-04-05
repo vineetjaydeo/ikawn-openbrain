@@ -1,14 +1,18 @@
 'use strict';
 
 const { randomUUID } = require('crypto');
-const { callClaude: _callClaude } = require('../agent/llm-client');
+const { callClaude: _callClaude, callClaudeStreaming: _callClaudeStreaming } = require('../agent/llm-client');
 const { resolveModel } = require('./model-router');
 const { logLLMCall, checkBudget } = require('./cost-tracker');
 
-// Lazy accessor — allows test injection via _setCallClaude()
+// Lazy accessors — allow test injection via _setCallClaude() / _setCallClaudeStreaming()
 let _callClaudeFn = null;
 function getCallClaude() { return _callClaudeFn || _callClaude; }
 function _setCallClaude(fn) { _callClaudeFn = fn; }
+
+let _callClaudeStreamingFn = null;
+function getCallClaudeStreaming() { return _callClaudeStreamingFn || _callClaudeStreaming; }
+function _setCallClaudeStreaming(fn) { _callClaudeStreamingFn = fn; }
 
 class BudgetExceededError extends Error {
   constructor(spent, cap) {
@@ -44,6 +48,7 @@ async function executeReasoningLoop({
   messages,
   executeToolFn,
   maxIterations = 25,
+  onEvent,
 }) {
   const { modelId } = resolveModel(modelTier);
   const executionId = randomUUID();
@@ -63,13 +68,44 @@ async function executeReasoningLoop({
       }
     }
 
-    // Call Claude via existing llm-client
-    const { response, cost } = await getCallClaude()({
+    const callParams = {
       system: systemPrompt,
       messages,
       tools: tools.length > 0 ? tools : undefined,
       model: modelId,
-    });
+    };
+
+    let response, cost;
+
+    if (onEvent) {
+      // --- Streaming path ---
+      onEvent({ type: 'thinking' });
+
+      const { events, buildResult } = getCallClaudeStreaming()(callParams);
+
+      // Iterate through stream events, forwarding relevant ones to onEvent
+      for await (const event of events) {
+        if (event.type === 'text_delta') {
+          onEvent({ type: 'text_delta', text: event.text });
+        } else if (event.type === 'tool_use_start') {
+          onEvent({ type: 'tool_start', name: event.name });
+        } else if (event.type === 'server_tool_start') {
+          onEvent({ type: 'tool_start', name: event.name, detail: event.input?.query });
+        } else if (event.type === 'server_tool_done') {
+          onEvent({ type: 'tool_done', name: event.name, success: true });
+        }
+      }
+
+      // Build final result from accumulated stream data
+      const result = buildResult();
+      response = result.response;
+      cost = result.cost;
+    } else {
+      // --- Non-streaming path (unchanged) ---
+      const result = await getCallClaude()(callParams);
+      response = result.response;
+      cost = result.cost;
+    }
 
     totalTokensIn += cost.inputTokens;
     totalTokensOut += cost.outputTokens;
@@ -87,8 +123,12 @@ async function executeReasoningLoop({
 
     // No tool calls — final text response, we're done
     if (toolUseBlocks.length === 0) {
+      const finalResponse = textBlocks.map(b => b.text).join('\n');
+      if (onEvent) {
+        onEvent({ type: 'done', totalCostUsd, turnCount, toolCallCount });
+      }
       return {
-        response: textBlocks.map(b => b.text).join('\n'),
+        response: finalResponse,
         messages,
         totalTokensIn,
         totalTokensOut,
@@ -105,11 +145,16 @@ async function executeReasoningLoop({
     const toolResults = [];
     for (const block of toolUseBlocks) {
       let resultContent;
+      let success = true;
       try {
         resultContent = await executeToolFn(block.name, block.input);
         toolCallCount++;
       } catch (err) {
         resultContent = `Tool error: ${err.message}`;
+        success = false;
+      }
+      if (onEvent) {
+        onEvent({ type: 'tool_result', name: block.name, success });
       }
       toolResults.push({
         type: 'tool_result',
@@ -123,6 +168,9 @@ async function executeReasoningLoop({
   }
 
   // Max iterations reached
+  if (onEvent) {
+    onEvent({ type: 'done', totalCostUsd, turnCount, toolCallCount });
+  }
   return {
     response: '[Max iterations reached]',
     messages,
@@ -134,4 +182,4 @@ async function executeReasoningLoop({
   };
 }
 
-module.exports = { executeReasoningLoop, BudgetExceededError, _setCallClaude };
+module.exports = { executeReasoningLoop, BudgetExceededError, _setCallClaude, _setCallClaudeStreaming };

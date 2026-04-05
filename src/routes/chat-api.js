@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
-const { streamChat, chatCompletion, streamChatAnthropic } = require('../utils/llm');
+const { streamChat, chatCompletion, streamChatAnthropic, formatSystemForCaching } = require('../utils/llm');
 const { searchWeb } = require('../utils/web-search');
+const { executeReasoningLoop } = require('../engine/reasoning-loop');
+const sessionManager = require('../engine/session-manager');
 const { readLink } = require('../utils/link-reader');
 const { extractText, guessMimeFromFilename } = require('../utils/doc-parser');
 const { downloadFromUrl } = require('../utils/storage');
@@ -613,7 +615,6 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       }
     }
 
-    const isAnthropic = true; // All tiers use Claude
     console.log(`[Tier] ${tier} → ${model} (forced=${!!use_secondary})`);
 
     // Build tool schemas (Anthropic format — name, description, input_schema)
@@ -665,221 +666,161 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     const pendingGenerations = [];
     const TOOL_TIMEOUT_MS = 30000;
 
-    if (isAnthropic) {
-      // ── Claude path: native tool_use with multi-turn loop (same pattern as ruhi-chat.js) ──
-      const MAX_TOOL_ROUNDS = 5;
-      const MAX_TOOL_FAILURES = 2;
-      let messages = [...openaiMessages];
-      const toolFailureCounts = {}; // track per-tool failures
+    // ── Reasoning Loop: replaces manual multi-turn tool loop ──
+    // Map chat tiers to engine tiers
+    const TIER_TO_ENGINE = { regular: 'fast', pro: 'balanced', expert: 'deep' };
+    const engineTier = TIER_TO_ENGINE[tier] || 'balanced';
 
-      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        if (clientDisconnected) {
-          console.log(`[chat] Client disconnected, aborting tool round ${round}`);
-          break;
-        }
-        let roundText = '';
-        let result;
-        try {
-          result = await streamChatAnthropic(messages, {
-            model,
-            tools: toolSchemas.length > 0 ? toolSchemas : undefined,
-            onChunk: (chunk) => { roundText += chunk; },
-            onServerToolUse: (evt) => {
-              // Stream native web_search progress to frontend
-              if (evt.event === 'start') {
-                const detail = evt.input?.query || undefined;
-                res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'web_search', detail })}\n\n`);
-              } else if (evt.event === 'done') {
-                res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: 'web_search', success: true })}\n\n`);
-              }
-            },
-          });
-        } catch (streamErr) {
-          console.error(`[chat] Tool round ${round} streaming failed:`, streamErr.message);
-          // If first round fails, try Gemini fallback for basic conversation (no tool_use)
-          if (round === 0 && !roundText) {
-            console.log(`[chat] Attempting Gemini fallback...`);
-            try {
-              await streamChat(openaiMessages, {
-                model: 'gemini-2.5-flash',
-                onChunk: (chunk) => {
-                  fullResponse += chunk;
-                  res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
-                }
-              });
-              break; // fallback succeeded
-            } catch (fallbackErr) {
-              console.error(`[chat] Gemini fallback also failed:`, fallbackErr.message);
-            }
-          }
-          // Send whatever text we have + error notice
-          if (roundText) {
-            fullResponse += roundText;
-            res.write(`data: ${JSON.stringify({ type: 'chunk', text: roundText })}\n\n`);
-          }
-          const errMsg = '\n\n*[An error occurred while processing. Please try again.]*';
-          fullResponse += errMsg;
-          res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
-          break;
-        }
+    // Extract system prompt from message array (reasoning loop takes it separately)
+    const systemMsg = openaiMessages.find(m => m.role === 'system');
+    const systemPromptText = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
+    const loopMessages = openaiMessages.filter(m => m.role !== 'system');
 
-        // Stream pre-tool thinking text to client (don't suppress it)
-        if (roundText) {
-          fullResponse += roundText;
-          res.write(`data: ${JSON.stringify({ type: 'chunk', text: roundText })}\n\n`);
-        }
+    // Build tool executor with timeout, failure tracking, and generation handling
+    const toolFailureCounts = {};
+    const MAX_TOOL_FAILURES = 2;
 
-        // Final round (no tool_use) — done
-        if (result.stopReason !== 'tool_use') {
-          console.log(`[chat] Round ${round} ended with stopReason=${result.stopReason}, no tool calls`);
-          break;
-        }
-
-        // Tool round — execute only client-side tools (web_search is handled natively by Claude)
-        const toolUseBlocks = result.contentBlocks.filter(b => b.type === 'tool_use');
-        console.log(`[chat] Round ${round}: ${toolUseBlocks.length} tool calls: ${toolUseBlocks.map(b => b.name).join(', ')}`);
-        if (toolUseBlocks.length === 0) break;
-
-        // Build assistant message for conversation history (include only text + tool_use blocks)
-        const assistantContent = result.contentBlocks
-          .filter(b => b.type === 'text' || b.type === 'tool_use')
-          .map(b => {
-            if (b.type === 'text') return { type: 'text', text: b.text };
-            return { type: 'tool_use', id: b.id, name: b.name, input: b.input };
-          });
-        messages.push({ role: 'assistant', content: assistantContent });
-
-        // Execute each tool
-        const toolResults = [];
-        for (const block of toolUseBlocks) {
-          // Send rich tool_start with input details
-          const toolStartData = { type: 'tool_start', tool: block.name };
-          if (block.input) {
-            // Send a brief summary of the tool input
-            const inputKeys = Object.keys(block.input);
-            if (inputKeys.length > 0) {
-              const firstVal = block.input[inputKeys[0]];
-              toolStartData.detail = typeof firstVal === 'string' ? firstVal.slice(0, 100) : undefined;
-            }
-          }
-          res.write(`data: ${JSON.stringify(toolStartData)}\n\n`);
-          let toolOutput;
-
-          {
-            const registryTool = getTool(block.name);
-            if (!registryTool) {
-              toolOutput = JSON.stringify({ error: `Unknown tool: ${block.name}` });
-              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: `Unknown tool` })}\n\n`);
-            } else if ((toolFailureCounts[block.name] || 0) >= MAX_TOOL_FAILURES) {
-              toolOutput = JSON.stringify({ error: `Tool ${block.name} disabled after ${MAX_TOOL_FAILURES} failures this session` });
-              res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: `Disabled after repeated failures` })}\n\n`);
-            } else {
-              try {
-                const execResult = await Promise.race([
-                  registryTool.execute(
-                    block.input || {},
-                    { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: conversation_id, pool }
-                  ),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${block.name} timed out after 30s`)), TOOL_TIMEOUT_MS))
-                ]);
-                // Special handling for ikawn_generate
-                if (block.name === 'ikawn_generate' && execResult?.success && execResult?.data?.generationId) {
-                  const agent = block.input?.agent || 'genie';
-                  const batchSize = ['genie', 'remix'].includes(agent) ? 4 : 1;
-                  pool.query(`INSERT INTO generations (brand_id, agent_name, prompt, output_type, status, ikawn_generation_id, batch_size)
-                    VALUES ($1, $2, $3, $4, 'pending', $5, $6) ON CONFLICT DO NOTHING`,
-                    [req.brand_id, agent, block.input?.prompt, agent === 'lazarus' ? 'video' : 'image', execResult.data.generationId, batchSize])
-                    .catch(err => console.warn('[Chat] Failed to record generation:', err.message));
-                  pendingGenerations.push({ generationId: execResult.data.generationId, agent, prompt: block.input?.prompt, batchSize });
-                }
-                toolOutput = execResult?.summary || JSON.stringify(execResult?.data || execResult);
-                res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, success: true })}\n\n`);
-              } catch (toolErr) {
-                toolFailureCounts[block.name] = (toolFailureCounts[block.name] || 0) + 1;
-                console.error(`[Chat] Tool ${block.name} failed (${toolFailureCounts[block.name]}/${MAX_TOOL_FAILURES}):`, toolErr.message);
-                toolOutput = JSON.stringify({ error: `Tool ${block.name} failed: ${toolErr.message}` });
-                res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: block.name, error: toolErr.message })}\n\n`);
-              }
-            }
-          }
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput) });
-        }
-        messages.push({ role: 'user', content: toolResults });
-
-        // Send generation_started events
-        for (const gen of pendingGenerations) {
-          res.write(`data: ${JSON.stringify({ type: 'generation_started', generationId: gen.generationId, agent: gen.agent, prompt: gen.prompt, batchSize: gen.batchSize })}\n\n`);
-        }
+    const executeToolFn = async (toolName, toolInput) => {
+      const registryTool = getTool(toolName);
+      if (!registryTool) throw new Error(`Unknown tool: ${toolName}`);
+      if ((toolFailureCounts[toolName] || 0) >= MAX_TOOL_FAILURES) {
+        throw new Error(`Tool ${toolName} disabled after ${MAX_TOOL_FAILURES} failures`);
       }
 
-      // If the loop exhausted all rounds with tool_use still active, force a final synthesis call
-      // This happens when Claude keeps searching but never gets to write a text response
+      try {
+        const execResult = await Promise.race([
+          registryTool.execute(
+            toolInput || {},
+            { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: conversation_id, pool }
+          ),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 30s`)), TOOL_TIMEOUT_MS))
+        ]);
+
+        // Special handling for ikawn_generate
+        if (toolName === 'ikawn_generate' && execResult?.success && execResult?.data?.generationId) {
+          const agent = toolInput?.agent || 'genie';
+          const batchSize = ['genie', 'remix'].includes(agent) ? 4 : 1;
+          pool.query(`INSERT INTO generations (brand_id, agent_name, prompt, output_type, status, ikawn_generation_id, batch_size)
+            VALUES ($1, $2, $3, $4, 'pending', $5, $6) ON CONFLICT DO NOTHING`,
+            [req.brand_id, agent, toolInput?.prompt, agent === 'lazarus' ? 'video' : 'image', execResult.data.generationId, batchSize])
+            .catch(err => console.warn('[Chat] Failed to record generation:', err.message));
+          pendingGenerations.push({ generationId: execResult.data.generationId, agent, prompt: toolInput?.prompt, batchSize });
+        }
+
+        return execResult?.summary || JSON.stringify(execResult?.data || execResult);
+      } catch (err) {
+        toolFailureCounts[toolName] = (toolFailureCounts[toolName] || 0) + 1;
+        console.error(`[Chat] Tool ${toolName} failed (${toolFailureCounts[toolName]}/${MAX_TOOL_FAILURES}):`, err.message);
+        throw err;
+      }
+    };
+
+    // Bridge reasoning loop events to SSE
+    const onEvent = (event) => {
+      if (clientDisconnected || res.writableEnded) return;
+      switch (event.type) {
+        case 'text_delta':
+          fullResponse += event.text;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: event.text })}\n\n`);
+          break;
+        case 'tool_start':
+          res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: event.name, detail: event.detail })}\n\n`);
+          break;
+        case 'tool_done':
+          res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: event.name, success: event.success })}\n\n`);
+          break;
+        case 'tool_result':
+          res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: event.name, success: event.success, error: event.success ? undefined : 'Tool execution failed' })}\n\n`);
+          // Send generation_started events after tool results
+          for (const gen of pendingGenerations) {
+            res.write(`data: ${JSON.stringify({ type: 'generation_started', generationId: gen.generationId, agent: gen.agent, prompt: gen.prompt, batchSize: gen.batchSize })}\n\n`);
+          }
+          break;
+      }
+    };
+
+    // Create session for cost tracking
+    let chatSession = null;
+    try {
+      chatSession = await sessionManager.create({
+        brandId: req.brand_id,
+        userId: req.session.user.id,
+        channel: 'web',
+        modelTier: engineTier,
+        systemPrompt: systemPromptText.slice(0, 500),
+        dollarCap: 2.00,
+      });
+    } catch (sessErr) {
+      console.warn('[chat] Session creation failed, continuing without cost tracking:', sessErr.message);
+    }
+
+    try {
+      const result = await executeReasoningLoop({
+        sessionId: chatSession?.id || null,
+        brandId: req.brand_id,
+        modelTier: engineTier,
+        tools: toolSchemas,
+        systemPrompt: systemPromptText,
+        dollarCap: chatSession ? 2.00 : undefined,
+        messages: loopMessages,
+        executeToolFn,
+        maxIterations: 5,
+        onEvent,
+      });
+
+      if (chatSession) {
+        sessionManager.complete(chatSession.id, `${result.turnCount} turns, ${result.toolCallCount} tools, $${result.totalCostUsd.toFixed(6)}`)
+          .catch(err => console.warn('[chat] Session complete failed:', err.message));
+      }
+      console.log(`[chat] Reasoning loop: ${result.turnCount} turns, ${result.toolCallCount} tools, $${result.totalCostUsd.toFixed(6)}`);
+
+      // If loop exhausted with no streamed text, force a synthesis call
       if (!clientDisconnected && !fullResponse.trim()) {
-        console.log(`[chat] Tool loop exhausted with no text response — forcing final synthesis call`);
+        console.log(`[chat] No text after reasoning loop — forcing synthesis`);
         try {
-          // Add instruction to synthesize, call WITHOUT tools so Claude must respond with text
-          messages.push({ role: 'user', content: [{ type: 'text', text: 'Now synthesize all the information gathered above into a comprehensive response. Do not request any more searches.' }] });
-          const synthResult = await streamChatAnthropic(messages, {
+          loopMessages.push({ role: 'user', content: [{ type: 'text', text: 'Now synthesize all the information gathered above into a comprehensive response. Do not request any more searches.' }] });
+          const synthResult = await streamChatAnthropic([systemMsg, ...loopMessages], {
             model,
             onChunk: (chunk) => {
               fullResponse += chunk;
               res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
             },
           });
-          if (synthResult.textContent) {
-            // textContent already streamed via onChunk
-          }
         } catch (synthErr) {
-          console.error('[chat] Synthesis call failed:', synthErr.message);
+          console.error('[chat] Synthesis failed:', synthErr.message);
           const errMsg = '\n\nI gathered information but encountered an error generating the final response. Please try again.';
           fullResponse += errMsg;
           res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
         }
       }
-    } else {
-      // ── Gemini fallback path (secondary model only) ──
-      const openaiTools = toolSchemas.filter(t => !t.type?.startsWith('web_search')).map(t => ({
-        type: 'function',
-        function: { name: t.name, description: t.description, parameters: t.input_schema },
-      }));
-
-      let messagesForStream = [...openaiMessages];
-      const toolCheckResult = await chatCompletion(openaiMessages, { model, tools: openaiTools });
-
-      if (toolCheckResult.tool_calls && toolCheckResult.tool_calls.length > 0) {
-        const toolMsg = { role: toolCheckResult.role || 'assistant', tool_calls: toolCheckResult.tool_calls };
-        messagesForStream.push(toolMsg);
-
-        for (const toolCall of toolCheckResult.tool_calls) {
-          const toolName = toolCall.function.name;
-          const args = JSON.parse(toolCall.function.arguments || '{}');
-          const registryTool = toolName === 'web_search' ? null : getTool(toolName);
-          let content;
-
-          if (toolName === 'web_search') {
-            try { content = JSON.stringify(await searchWeb(args.query)); } catch { content = '[Web search failed]'; }
-          } else if (registryTool) {
-            try {
-              const result = await Promise.race([
-                registryTool.execute(args, { brandId: req.brand_id, userId: req.session?.user?.id, pool }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 30s`)), TOOL_TIMEOUT_MS))
-              ]);
-              content = JSON.stringify(result);
-            } catch (err) { content = JSON.stringify({ error: err.message }); }
-          } else {
-            content = `[Unknown tool: ${toolName}]`;
-          }
-          messagesForStream.push({ role: 'tool', tool_call_id: toolCall.id, content });
-        }
+    } catch (loopErr) {
+      console.error('[chat] Reasoning loop failed:', loopErr.message);
+      if (chatSession) {
+        sessionManager.fail(chatSession.id, loopErr.message).catch(() => {});
       }
 
-      await streamChat(messagesForStream, {
-        model,
-        onChunk: (chunk) => {
-          fullResponse += chunk;
-          res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+      // Gemini fallback if no text streamed yet
+      if (!fullResponse.trim()) {
+        console.log('[chat] Attempting Gemini fallback...');
+        try {
+          await streamChat(openaiMessages, {
+            model: 'gemini-2.5-flash',
+            onChunk: (chunk) => {
+              fullResponse += chunk;
+              res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
+            }
+          });
+        } catch (fallbackErr) {
+          console.error('[chat] Gemini fallback also failed:', fallbackErr.message);
+          const errMsg = '\n\n*[An error occurred while processing. Please try again.]*';
+          fullResponse += errMsg;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
         }
-      });
+      } else {
+        const errMsg = '\n\n*[An error occurred while processing. Please try again.]*';
+        fullResponse += errMsg;
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
+      }
     }
 
     // Save assistant message to DB (with tier for cost tracking)

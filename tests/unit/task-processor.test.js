@@ -141,7 +141,7 @@ describe('task-processor', () => {
       expect(result).toEqual(task);
       expect(mockQuery).toHaveBeenCalledTimes(1);
       const sql = mockQuery.mock.calls[0][0];
-      expect(sql).toContain('FOR UPDATE SKIP LOCKED');
+      expect(sql).toContain('FOR UPDATE OF st SKIP LOCKED');
       expect(sql).toContain("task_type IN ('sub_agent', 'on_demand', 'hotl_resume')");
     });
 
@@ -314,7 +314,7 @@ describe('task-processor', () => {
 
       // Set up query mocks that return a task on claim
       mockQuery.mockImplementation((sql) => {
-        if (sql.includes('FOR UPDATE SKIP LOCKED')) {
+        if (sql.includes('FOR UPDATE OF st SKIP LOCKED')) {
           return Promise.resolve({ rows: [makeTask({ id: callCount + 1 })] });
         }
         if (sql.includes('INSERT INTO task_runs')) {
@@ -332,13 +332,13 @@ describe('task-processor', () => {
 
       // 4th poll should not claim because concurrency limit reached
       const claimCallsBefore = mockQuery.mock.calls.filter(
-        c => c[0].includes('FOR UPDATE SKIP LOCKED')
+        c => c[0].includes('FOR UPDATE OF st SKIP LOCKED')
       ).length;
 
       await pollOnce();
 
       const claimCallsAfter = mockQuery.mock.calls.filter(
-        c => c[0].includes('FOR UPDATE SKIP LOCKED')
+        c => c[0].includes('FOR UPDATE OF st SKIP LOCKED')
       ).length;
 
       // Should NOT have made another claim query

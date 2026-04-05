@@ -81,7 +81,7 @@ async function claimTask() {
       AND (st.next_run_at IS NULL OR st.next_run_at <= NOW())
     ORDER BY st.next_run_at ASC NULLS FIRST
     LIMIT 1
-    FOR UPDATE SKIP LOCKED
+    FOR UPDATE OF st SKIP LOCKED
   `);
   return rows[0] || null;
 }

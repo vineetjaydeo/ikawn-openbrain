@@ -1193,6 +1193,29 @@ async function initSchema() {
       `);
     }
 
+    // ── Lucy v3 Migration: drop old-schema tables (empty, from prior iteration) ──
+    // These tables existed with incompatible schemas (different column names/types).
+    // All had 0 rows on 2026-04-05. Safe to drop and recreate with correct schema.
+    for (const oldTable of ['approval_requests', 'trust_ledger', 'trust_scores', 'episodic_memories', 'semantic_knowledge']) {
+      const colCheck = await client.query(`SELECT column_name FROM information_schema.columns WHERE table_name = $1 LIMIT 1`, [oldTable]);
+      if (colCheck.rows.length > 0) {
+        // Check if it matches expected schema by looking for a sentinel column
+        const sentinels = {
+          approval_requests: 'telegram_message_id',
+          trust_ledger: 'tool_name',
+          trust_scores: 'last_promoted',
+          episodic_memories: 'processed_for_extraction',
+          semantic_knowledge: 'fact_type',
+        };
+        const sentinel = sentinels[oldTable];
+        const hasCol = await client.query(`SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`, [oldTable, sentinel]);
+        if (hasCol.rows.length === 0) {
+          console.log(`[schema] Dropping old-schema ${oldTable} (missing ${sentinel})`);
+          await client.query(`DROP TABLE IF EXISTS ${oldTable} CASCADE`);
+        }
+      }
+    }
+
     // ── Lucy v3 HOTL: approval_requests table (schema v15) ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS approval_requests (

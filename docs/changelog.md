@@ -2,6 +2,18 @@
 
 This is my version history. I can cite specific versions when asked about my capabilities or recent changes.
 
+## v3.0.1 (2026-04-05) — Reliability Patch
+
+### Improvements
+- **Convergence Detector**: Reasoning loop now detects when it's going in circles (>85% similarity over last 6 turns) and breaks early to synthesize a response instead of wasting tokens
+- **Nuanced Trust Scoring**: Failure demotion is no longer binary. Failures are classified (EDGE_CASE=0.5x, CONFIGURATION=0.7x, EXTERNAL=0.3x, NEGLIGENCE=1.0x, UNKNOWN=0.8x) and penalties are weighted. Network timeouts no longer tank trust scores like code bugs do
+- **Episodic Dedup**: Duplicate episodic memories are caught at capture time via content hashing (djb2). Prevents redundant entries from repeated tool outputs or retries
+- **Context-Aware Retries**: Tool retries after HOTL approval skip backoff delays — when a human says "approved," the retry happens immediately instead of waiting 1s→2s→4s
+
+### Stats
+- 709 tests across 64 test files (44 new tests, zero regressions)
+- Version: 3.0.1
+
 ## v3.0.0 (2026-04-05) — Lucy v3 Engine
 
 ### New Capabilities

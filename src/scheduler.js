@@ -33,7 +33,8 @@ function withTimeout(promise, ms = TOOL_TIMEOUT_MS) {
 function startScheduler() {
   console.log('Starting ingestion scheduler...');
 
-  // GitHub sync: every 30 minutes
+  // GitHub sync: immediately + every 30 minutes
+  syncGitHub().catch(err => console.error('Initial GitHub sync failed:', err.message));
   githubInterval = setInterval(async () => {
     try {
       await syncGitHub();

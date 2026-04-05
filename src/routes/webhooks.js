@@ -6,7 +6,9 @@ const { handleUpdate, handleSelfReport } = require('../connectors/telegram');
 const { sendTelegramMessage, sendChatAction } = require('../utils/telegram');
 const { buildSystemPrompt } = require('../ruhi/persona');
 const { captureMessage } = require('../utils/capture');
-const { getTool, getToolSchemas } = require('../tools/registry');
+const { getTool, getToolSchemas, getTools } = require('../tools/registry');
+const { executeReasoningLoop } = require('../engine/reasoning-loop');
+const sessionManager = require('../engine/session-manager');
 
 const router = Router();
 
@@ -351,14 +353,14 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 20',
       [convId]
     );
-    const historyMessages = historyResult.rows.reverse().map(m => ({
+    const loopMessages = historyResult.rows.reverse().map(m => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
     }));
 
     // If current message has an image, replace the last user message with multimodal content
-    if (imageBase64 && historyMessages.length > 0) {
-      const lastMsg = historyMessages[historyMessages.length - 1];
+    if (imageBase64 && loopMessages.length > 0) {
+      const lastMsg = loopMessages[loopMessages.length - 1];
       if (lastMsg.role === 'user') {
         lastMsg.content = [
           { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
@@ -367,16 +369,12 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       }
     }
 
-    // 5. Call Anthropic with web search + all registry tools
-    const Anthropic = require('@anthropic-ai/sdk');
-    const { formatSystemForCaching } = require('../utils/llm');
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-    // Build tool definitions — all registry tools + web_search (gated by intent)
-    const { getTools: getAllTools } = require('../tools/registry');
-    const allRegistryTools = getAllTools();
-    const registrySchemas = getToolSchemas([...allRegistryTools.keys()]);
-    const allTools = [...registrySchemas];
+    // 5. Build tool schemas — all registry tools + web_search (gated by intent)
+    const allRegistryTools = getTools();
+    const chatToolNames = [...allRegistryTools.entries()]
+      .filter(([, tool]) => tool.tier !== 'agent')
+      .map(([name]) => name);
+    const toolSchemas = chatToolNames.length > 0 ? getToolSchemas(chatToolNames) : [];
 
     // Only attach web_search when the message likely needs it (saves tokens)
     const _needsSearch = (() => {
@@ -387,81 +385,106 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       return /\b(search|find|look up|lookup|latest|current|news|today|recent|update|price|weather|stock)\b/.test(lower);
     })();
     if (_needsSearch) {
-      allTools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 3 });
+      toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 3 });
     }
 
-    // Multi-turn loop: Claude may call manage_task, we execute and feed result back
-    let messages = [...historyMessages];
-    let ruhiReply = '';
-    const MAX_ROUNDS = 5;
+    // 6. Build tool executor (mirrors chat-api.js pattern)
     const TOOL_TIMEOUT_MS = 30000;
     const MAX_TOOL_FAILURES = 2;
     const toolFailureCounts = {};
 
-    for (let round = 0; round < MAX_ROUNDS; round++) {
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        system: formatSystemForCaching(systemPrompt),
-        messages,
-        tools: allTools,
+    const executeToolFn = async (toolName, toolInput) => {
+      const registryTool = getTool(toolName);
+      if (!registryTool) throw new Error(`Unknown tool: ${toolName}`);
+      if ((toolFailureCounts[toolName] || 0) >= MAX_TOOL_FAILURES) {
+        throw new Error(`Tool ${toolName} disabled after ${MAX_TOOL_FAILURES} failures`);
+      }
+      try {
+        const execResult = await Promise.race([
+          registryTool.execute(
+            toolInput || {},
+            { brandId: req.brand_id, userId, conversationId: String(chatId), pool }
+          ),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 30s`)), TOOL_TIMEOUT_MS))
+        ]);
+        return execResult?.summary || JSON.stringify(execResult?.data || execResult);
+      } catch (err) {
+        toolFailureCounts[toolName] = (toolFailureCounts[toolName] || 0) + 1;
+        console.error(`[IntelBot] Tool ${toolName} failed (${toolFailureCounts[toolName]}/${MAX_TOOL_FAILURES}):`, err.message);
+        throw err;
+      }
+    };
+
+    // 7. Create session for cost tracking ($0.50 cap for Telegram)
+    const TELEGRAM_DOLLAR_CAP = 0.50;
+    const engineTier = 'fast'; // Telegram defaults to fast (Haiku)
+    let tgSession = null;
+    try {
+      tgSession = await sessionManager.create({
+        brandId: req.brand_id,
+        userId,
+        channel: 'telegram',
+        modelTier: engineTier,
+        systemPrompt: systemPrompt.slice(0, 500),
+        dollarCap: TELEGRAM_DOLLAR_CAP,
       });
-
-      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use' && b.name !== 'web_search');
-      const textBlocks = response.content.filter(b => b.type === 'text');
-
-      if (toolUseBlocks.length === 0) {
-        // No more tool calls — extract final text
-        ruhiReply = textBlocks.map(b => b.text).join('\n') || 'I couldn\'t generate a response right now.';
-        break;
-      }
-
-      // Execute tool calls and feed results back
-      messages.push({ role: 'assistant', content: response.content });
-      const toolResults = [];
-      for (const toolBlock of toolUseBlocks) {
-        const tool = getTool(toolBlock.name);
-        let result;
-        if (!tool) {
-          result = { success: false, data: null, summary: `Unknown tool: ${toolBlock.name}` };
-        } else if ((toolFailureCounts[toolBlock.name] || 0) >= MAX_TOOL_FAILURES) {
-          result = { success: false, data: null, summary: `Tool ${toolBlock.name} disabled after ${MAX_TOOL_FAILURES} failures` };
-        } else {
-          try {
-            result = await Promise.race([
-              tool.execute(toolBlock.input || {}, { brandId: req.brand_id, userId, conversationId: String(chatId), pool }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolBlock.name} timed out after 30s`)), TOOL_TIMEOUT_MS))
-            ]);
-          } catch (err) {
-            toolFailureCounts[toolBlock.name] = (toolFailureCounts[toolBlock.name] || 0) + 1;
-            console.error(`[Telegram] Tool ${toolBlock.name} failed (${toolFailureCounts[toolBlock.name]}/${MAX_TOOL_FAILURES}):`, err.message);
-            result = { success: false, data: null, summary: `Tool error: ${err.message}` };
-          }
-        }
-        toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: JSON.stringify(result) });
-      }
-      messages.push({ role: 'user', content: toolResults });
+    } catch (sessErr) {
+      console.warn('[IntelBot] Session creation failed, continuing without cost tracking:', sessErr.message);
     }
 
-    if (!ruhiReply) ruhiReply = 'I ran out of processing rounds. Let me know if you need anything else.';
+    // 8. Execute reasoning loop (non-streaming — Telegram gets final response)
+    let ruhiReply = '';
+    try {
+      const result = await executeReasoningLoop({
+        sessionId: tgSession?.id || null,
+        brandId: req.brand_id,
+        modelTier: engineTier,
+        tools: toolSchemas,
+        systemPrompt,
+        dollarCap: tgSession ? TELEGRAM_DOLLAR_CAP : undefined,
+        messages: loopMessages,
+        executeToolFn,
+        maxIterations: 5,
+      });
 
-    // 6. Save assistant reply to messages table + update conversation
+      ruhiReply = result.response || 'I couldn\'t generate a response right now.';
+
+      if (tgSession) {
+        sessionManager.complete(tgSession.id, `${result.turnCount} turns, ${result.toolCallCount} tools, $${result.totalCostUsd.toFixed(6)}`)
+          .catch(err => console.warn('[IntelBot] Session complete failed:', err.message));
+      }
+      console.log(`[IntelBot] Reasoning loop: ${result.turnCount} turns, ${result.toolCallCount} tools, $${result.totalCostUsd.toFixed(6)}`);
+    } catch (loopErr) {
+      if (tgSession) {
+        sessionManager.fail(tgSession.id, loopErr)
+          .catch(err => console.warn('[IntelBot] Session fail failed:', err.message));
+      }
+      // If budget exceeded, send a friendly message instead of crashing
+      if (loopErr.name === 'BudgetExceededError') {
+        ruhiReply = 'I\'ve reached my processing budget for this session. Let me know if you need anything else and I\'ll continue in the next message.';
+        console.warn(`[IntelBot] Budget exceeded: ${loopErr.message}`);
+      } else {
+        throw loopErr;
+      }
+    }
+
+    // 9. Save assistant reply to messages table + update conversation
     await pool.query(
       "INSERT INTO messages (conversation_id, role, content, model, brand_id) VALUES ($1, 'assistant', $2, $3, $4)",
-      [convId, ruhiReply, 'claude-sonnet-4-6', req.brand_id]
+      [convId, ruhiReply, engineTier === 'fast' ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6', req.brand_id]
     );
     await pool.query(
       'UPDATE conversations SET updated_at = NOW() WHERE id = $1',
       [convId]
     );
 
-    // 7. Send reply via Telegram — split if > 4096 chars
+    // 10. Send reply via Telegram — split if > 4096 chars
     const chunks = splitTelegramMessage(ruhiReply);
     for (const chunk of chunks) {
       await sendTelegramMessage(chunk, { chatId });
     }
 
-    // 8. Capture both messages to memories for RAG (fire-and-forget, user-scoped)
+    // 11. Capture both messages to memories for RAG (fire-and-forget, user-scoped)
     captureMessage({
       brand_id: req.brand_id,
       channel: 'telegram-ruhi',

@@ -766,7 +766,15 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         executeToolFn,
         maxIterations: 5,
         onEvent,
+        timeoutMs: parseInt(process.env.CHAT_TURN_TIMEOUT_MS, 10) || 300000,
       });
+
+      // If loop timed out and there's text, append a note
+      if (result.timedOut && result.response.trim() && !clientDisconnected && !res.writableEnded) {
+        const timeoutNote = '\n\n*[Response time limit reached. Some work may still be in progress.]*';
+        fullResponse += timeoutNote;
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: timeoutNote })}\n\n`);
+      }
 
       if (chatSession) {
         sessionManager.complete(chatSession.id, `${result.turnCount} turns, ${result.toolCallCount} tools, $${result.totalCostUsd.toFixed(6)}`)

@@ -36,7 +36,8 @@ class BudgetExceededError extends Error {
  * @param {Array}   config.messages      - Message array (mutated in place)
  * @param {Function} config.executeToolFn - async (toolName, toolInput) => string
  * @param {number} [config.maxIterations] - Max loop iterations (default: 25)
- * @returns {Promise<Object>} { response, messages, totalTokensIn, totalTokensOut, totalCostUsd, turnCount, toolCallCount }
+ * @param {number} [config.timeoutMs]    - Optional timeout in ms; checks elapsed time before each LLM call
+ * @returns {Promise<Object>} { response, messages, totalTokensIn, totalTokensOut, totalCostUsd, turnCount, toolCallCount, timedOut }
  */
 async function executeReasoningLoop({
   sessionId,
@@ -49,17 +50,38 @@ async function executeReasoningLoop({
   executeToolFn,
   maxIterations = 25,
   onEvent,
+  timeoutMs,
 }) {
   const { modelId } = resolveModel(modelTier);
   const executionId = randomUUID();
+  const startTime = timeoutMs ? Date.now() : null;
 
   let totalTokensIn = 0;
   let totalTokensOut = 0;
   let totalCostUsd = 0;
   let turnCount = 0;
   let toolCallCount = 0;
+  let accumulatedText = '';
 
   for (let i = 0; i < maxIterations; i++) {
+    // Timeout check before each LLM call
+    if (startTime && (Date.now() - startTime) >= timeoutMs) {
+      if (onEvent) {
+        onEvent({ type: 'timeout', partial: !!accumulatedText.trim() });
+        onEvent({ type: 'done', totalCostUsd, turnCount, toolCallCount });
+      }
+      return {
+        response: accumulatedText.trim() || '[Response time limit reached]',
+        messages,
+        totalTokensIn,
+        totalTokensOut,
+        totalCostUsd,
+        turnCount,
+        toolCallCount,
+        timedOut: true,
+      };
+    }
+
     // Budget check before each LLM call
     if (dollarCap && sessionId) {
       const budget = await checkBudget(sessionId, dollarCap);
@@ -121,9 +143,13 @@ async function executeReasoningLoop({
     const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
     const textBlocks = response.content.filter(b => b.type === 'text');
 
+    // Accumulate text from each turn for timeout partial results
+    const turnText = textBlocks.map(b => b.text).join('\n');
+    if (turnText) accumulatedText += (accumulatedText ? '\n' : '') + turnText;
+
     // No tool calls — final text response, we're done
     if (toolUseBlocks.length === 0) {
-      const finalResponse = textBlocks.map(b => b.text).join('\n');
+      const finalResponse = turnText;
       if (onEvent) {
         onEvent({ type: 'done', totalCostUsd, turnCount, toolCallCount });
       }

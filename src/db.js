@@ -1060,6 +1060,58 @@ async function initSchema() {
       ) ON CONFLICT (flow_id) DO NOTHING
     `);
 
+    // ── Lucy v3 Engine tables (schema v14) ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        user_id VARCHAR(100),
+        agent_slug TEXT,
+        channel TEXT,
+        model_tier VARCHAR(20) NOT NULL DEFAULT 'balanced',
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        system_prompt TEXT,
+        working_memory JSONB DEFAULT '{}',
+        resume_token UUID,
+        message_count INTEGER DEFAULT 0,
+        total_tokens_in BIGINT DEFAULT 0,
+        total_tokens_out BIGINT DEFAULT 0,
+        total_cost_usd NUMERIC(12,6) DEFAULT 0,
+        dollar_cap NUMERIC(12,6),
+        turn_count INTEGER DEFAULT 0,
+        tool_call_count INTEGER DEFAULT 0,
+        summary TEXT,
+        error TEXT,
+        parent_session UUID,
+        suspended_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_sessions_brand_status ON sessions(brand_id, status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_sessions_resume ON sessions(resume_token) WHERE resume_token IS NOT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session) WHERE parent_session IS NOT NULL`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS cost_events (
+        id BIGSERIAL PRIMARY KEY,
+        session_id UUID REFERENCES sessions(id),
+        execution_id UUID,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        event_type VARCHAR(30) NOT NULL,
+        model VARCHAR(100),
+        tokens_in INTEGER DEFAULT 0,
+        tokens_out INTEGER DEFAULT 0,
+        cost_usd NUMERIC(12,8) NOT NULL DEFAULT 0,
+        tool_name VARCHAR(100),
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cost_events_session ON cost_events(session_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cost_events_brand_date ON cost_events(brand_id, created_at)`);
+
     // ── pgvector migration: float8[] → vector(768) + HNSW index ──
     // Converts embedding columns to native pgvector type for indexed similarity search.
     // Checks column type first to be idempotent — safe to run on every startup.
@@ -1127,7 +1179,7 @@ async function initSchema() {
       `);
     }
 
-    console.log('Database schema initialized (v13 — pgvector HNSW indexes on memories + distilled_memory)');
+    console.log('Database schema initialized (v14 — Lucy v3 sessions + cost_events tables)');
   } finally {
     client.release();
   }

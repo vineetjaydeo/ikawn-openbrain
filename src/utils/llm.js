@@ -202,7 +202,7 @@ async function callReflectionLLM(promptType, systemPrompt, userPrompt, opts = {}
     const response = await client.messages.create({
       model,
       max_tokens: maxTokens,
-      system: systemPrompt,
+      system: formatSystemForCaching(systemPrompt),
       messages: [{ role: 'user', content: userPrompt }],
     });
     const textBlock = response.content.find(b => b.type === 'text');
@@ -248,6 +248,23 @@ function parseJSONSafe(text) {
 }
 
 /**
+ * Convert a system prompt (string or block array) to Anthropic block format
+ * with cache_control on the last block for prompt caching (90% savings on cache hits).
+ */
+function formatSystemForCaching(system) {
+  if (!system) return undefined;
+  if (typeof system === 'string') {
+    return [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
+  }
+  if (Array.isArray(system)) {
+    return system.map((block, i, arr) =>
+      i === arr.length - 1 ? { ...block, cache_control: { type: 'ephemeral' } } : block
+    );
+  }
+  return system;
+}
+
+/**
  * Streaming chat completion via Anthropic Claude.
  * Converts messages to Anthropic format.
  * Supports tool_use: when tools are provided, returns structured content blocks
@@ -279,7 +296,7 @@ async function streamChatAnthropic(messages, opts = {}) {
   const apiParams = {
     model,
     max_tokens: maxTokens,
-    system: systemPrompt,
+    system: formatSystemForCaching(systemPrompt),
     messages: chatMessages,
   };
   if (tools && tools.length > 0) {
@@ -354,6 +371,7 @@ module.exports = {
   callReflectionLLM,
   parseJSONSafe,
   estimateTokens,
+  formatSystemForCaching,
   MODEL_ROUTING,
   DEFAULT_PRIMARY_MODEL,
   DEFAULT_SECONDARY_MODEL,

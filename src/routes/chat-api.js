@@ -16,6 +16,20 @@ const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 const { CHAT_CONTEXT_THRESHOLD } = require('../utils/similarity');
 const { compressContext, estimateMessagesTokens } = require('../utils/context-compressor');
 
+/**
+ * Lightweight intent check: does this message likely need web search?
+ * Avoids attaching web_search tool (and its token cost) to every message.
+ */
+function needsWebSearch(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase().trim();
+  if (lower.includes('?')) return true;
+  const questionWords = /^(what|who|where|when|why|how|is|are|do|does|can|will|should|which)\b/;
+  if (questionWords.test(lower)) return true;
+  const searchKeywords = /\b(search|find|look up|lookup|latest|current|news|today|recent|update|price|weather|stock)\b/;
+  return searchKeywords.test(lower);
+}
+
 // ── Dynamic Model Tier Detection ──
 const EXPERT_KEYWORDS = /\b(investor|valuation|funding|revenue|series\s*[abc]|due\s*diligence|term\s*sheet|cap\s*table|equity|partnership\s*agreement|legal|compliance|acquisition|board\s*meeting|arr|mrr|burn\s*rate|runway|dilution|convertible\s*note|safe\s*note)\b/i;
 const EXPERT_PHRASES = /how much is ikawn worth|tell me about the company|what(?:'s| is) our arr|what(?:'s| is) the valuation|investor deck|pitch deck|fundraising/i;
@@ -403,9 +417,9 @@ async function handleChatSend(req, res) {
       }
     }
 
-    // Build OpenAI messages array from conversation history
-    // If context summary exists, use fewer raw messages (20) + summary for better signal-to-noise
-    const historyLimit = convRows[0].context_summary ? 20 : 50;
+    // Build messages array from conversation history
+    // With context summary: fewer raw messages needed (summary provides older context)
+    const historyLimit = convRows[0].context_summary ? 10 : 15;
     const { rows: historyRows } = await pool.query(
       'SELECT role, content, attachments, tier FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT $2',
       [convInternalId, historyLimit]
@@ -587,6 +601,18 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     // Dynamic tier detection — forced_tier from UI toggle, use_secondary legacy compat
     tier = use_secondary ? 'expert' : detectTier(content, historyRows, forced_tier, contextSummary);
     model = TIER_MODELS[tier] || TIER_MODELS.pro;
+
+    // Opus guard: only use Opus if explicitly allowed via env var (prevents accidental burn)
+    if (tier === 'expert' && model === 'claude-opus-4-6') {
+      const messagePreview = (content || '').slice(0, 80);
+      if (process.env.ALLOW_OPUS === 'true') {
+        console.warn(`[OPUS] Expert tier triggered for message: ${messagePreview}`);
+      } else {
+        console.warn(`[OPUS] Expert tier blocked (ALLOW_OPUS not set) for message: ${messagePreview}`);
+        model = TIER_MODELS.pro; // Fall back to Sonnet
+      }
+    }
+
     const isAnthropic = true; // All tiers use Claude
     console.log(`[Tier] ${tier} → ${model} (forced=${!!use_secondary})`);
 
@@ -598,8 +624,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       .filter(([, tool]) => tool.tier !== 'agent')
       .map(([name]) => name);
     const toolSchemas = chatToolNames.length > 0 ? getToolSchemas(chatToolNames) : [];
-    // Add web_search as Claude native server tool (handles search internally, no manual Brave calls needed)
-    toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 5 });
+    // Only attach web_search when the message likely needs it (saves tokens on every non-search call)
+    if (needsWebSearch(content)) {
+      toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 3 });
+    }
 
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');

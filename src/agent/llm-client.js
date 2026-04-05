@@ -46,10 +46,14 @@ async function callClaude(params) {
 
   const allTools = [...tools, ...serverTools];
 
+  // Apply prompt caching: convert system to block format with cache_control on last block
+  const { formatSystemForCaching } = require('../utils/llm');
+  const cachedSystem = formatSystemForCaching(system);
+
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
-    system,
+    system: cachedSystem,
     messages,
     tools: allTools.length > 0 ? allTools : undefined,
   });

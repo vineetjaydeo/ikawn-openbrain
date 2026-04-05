@@ -369,16 +369,26 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
 
     // 5. Call Anthropic with web search + all registry tools
     const Anthropic = require('@anthropic-ai/sdk');
+    const { formatSystemForCaching } = require('../utils/llm');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // Build tool definitions — all registry tools + web_search (Anthropic native server tool)
+    // Build tool definitions — all registry tools + web_search (gated by intent)
     const { getTools: getAllTools } = require('../tools/registry');
     const allRegistryTools = getAllTools();
     const registrySchemas = getToolSchemas([...allRegistryTools.keys()]);
-    const allTools = [
-      ...registrySchemas,
-      { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
-    ];
+    const allTools = [...registrySchemas];
+
+    // Only attach web_search when the message likely needs it (saves tokens)
+    const _needsSearch = (() => {
+      if (!userText) return false;
+      const lower = userText.toLowerCase().trim();
+      if (lower.includes('?')) return true;
+      if (/^(what|who|where|when|why|how|is|are|do|does|can|will|should|which)\b/.test(lower)) return true;
+      return /\b(search|find|look up|lookup|latest|current|news|today|recent|update|price|weather|stock)\b/.test(lower);
+    })();
+    if (_needsSearch) {
+      allTools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 3 });
+    }
 
     // Multi-turn loop: Claude may call manage_task, we execute and feed result back
     let messages = [...historyMessages];
@@ -392,7 +402,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 4096,
-        system: systemPrompt,
+        system: formatSystemForCaching(systemPrompt),
         messages,
         tools: allTools,
       });

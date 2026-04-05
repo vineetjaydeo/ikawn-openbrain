@@ -19,9 +19,9 @@ const CODE_TOOLS = new Set(['code_read', 'code_write', 'code_edit', 'bash_exec',
 const RESEARCH_TOOLS = new Set(['web_search', 'ga_report', 'system_status', 'fly_status', 'search_memory']);
 
 const TOKEN_TIERS = {
-  coding:   { maxTokens: 200_000, maxRounds: 15 },
-  research: { maxTokens: 60_000,  maxRounds: 8 },
-  simple:   { maxTokens: 30_000,  maxRounds: 5 },
+  coding:   { maxTokens: 120_000, maxRounds: 6 },
+  research: { maxTokens: 40_000,  maxRounds: 4 },
+  simple:   { maxTokens: 20_000,  maxRounds: 3 },
 };
 
 /**

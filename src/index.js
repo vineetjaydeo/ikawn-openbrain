@@ -56,7 +56,7 @@ const { cleanExpiredMemories } = require('./workers/memory-lifecycle');
 // Load Ruhi knowledge base at startup
 const docsDir = path.join(__dirname, '..', 'docs');
 const ruhiKnowledge = {};
-for (const file of ['soul.md', 'memory.md', 'tools.md', 'user.md']) {
+for (const file of ['soul.md', 'memory.md', 'tools.md', 'user.md', 'changelog.md']) {
   const filePath = path.join(docsDir, file);
   try {
     ruhiKnowledge[file.replace('.md', '')] = fs.readFileSync(filePath, 'utf-8');

@@ -479,6 +479,9 @@ ${kb.memory || ''}
 
 === YOUR CAPABILITIES ===
 ${kb.tools || ''}
+
+=== YOUR VERSION HISTORY ===
+${kb.changelog || ''}
 ${memoryContext}
 ${contextSummary ? `=== CONVERSATION CONTEXT (auto-generated summary) ===
 Topic: ${contextSummary.topic || 'General conversation'}

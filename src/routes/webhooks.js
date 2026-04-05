@@ -378,6 +378,16 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     // 3. Build system prompt — full Ruhi persona + memory + intelligence
     const systemPrompt = await buildSystemPrompt(userName, 'admin', memoryContext + intelContext, null, req.brand_id);
 
+    // 3b. Append Lucy's knowledge base (soul.md, tools.md, memory.md, changelog.md)
+    const kb = global.ruhiKnowledge || {};
+    const knowledgeBase = [
+      kb.soul ? `\n=== YOUR IDENTITY ===\n${kb.soul}` : '',
+      kb.tools ? `\n=== YOUR TOOLS ===\n${kb.tools}` : '',
+      kb.memory ? `\n=== YOUR MEMORY SYSTEM ===\n${kb.memory}` : '',
+      kb.changelog ? `\n=== YOUR VERSION HISTORY ===\n${kb.changelog}` : '',
+    ].filter(Boolean).join('\n');
+    const fullSystemPrompt = systemPrompt + knowledgeBase;
+
     // 4. Get conversation history for context (last 20 messages)
     const historyResult = await pool.query(
       'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 20',
@@ -455,7 +465,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
         userId,
         channel: 'telegram',
         modelTier: engineTier,
-        systemPrompt: systemPrompt.slice(0, 500),
+        systemPrompt: fullSystemPrompt.slice(0, 500),
         dollarCap: TELEGRAM_DOLLAR_CAP,
       });
     } catch (sessErr) {
@@ -470,7 +480,7 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
         brandId: req.brand_id,
         modelTier: engineTier,
         tools: toolSchemas,
-        systemPrompt,
+        systemPrompt: fullSystemPrompt,
         dollarCap: tgSession ? TELEGRAM_DOLLAR_CAP : undefined,
         messages: loopMessages,
         executeToolFn,

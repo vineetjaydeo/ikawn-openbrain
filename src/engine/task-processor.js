@@ -288,11 +288,29 @@ async function executeClaimedTask(task) {
 
 function buildSystemPrompt(task) {
   const parts = [];
+  const kb = global.ruhiKnowledge || {};
 
   if (task.persona) {
     parts.push(task.persona);
   } else {
-    parts.push(`You are an AI assistant executing a background task: "${task.name}".`);
+    parts.push(`You are Lucy, iKawn's AI intelligence, executing a background task: "${task.name}".`);
+  }
+
+  // Inject knowledge base — full for coordinator/ruhi, tools-only for sub-agents
+  const subAgentTiers = ['researcher', 'builder', 'reviewer', 'deployer', 'analyst'];
+  const isSubAgent = subAgentTiers.includes(task.tier);
+
+  if (!isSubAgent && kb.soul) {
+    parts.push(`=== YOUR IDENTITY ===\n${kb.soul}`);
+  }
+  if (kb.tools) {
+    parts.push(`=== YOUR TOOLS ===\n${kb.tools}`);
+  }
+  if (!isSubAgent && kb.memory) {
+    parts.push(`=== YOUR MEMORY SYSTEM ===\n${kb.memory}`);
+  }
+  if (kb.changelog) {
+    parts.push(`=== YOUR VERSION HISTORY ===\n${kb.changelog}`);
   }
 
   // Add preset addition if applicable

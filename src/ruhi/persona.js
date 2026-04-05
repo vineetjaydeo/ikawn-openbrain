@@ -180,7 +180,7 @@ async function loadBrandKnowledge(brandId) {
           : row.content;
       }
       // Fill any missing doc types from global fallback
-      for (const docType of ['soul', 'memory', 'tools', 'user']) {
+      for (const docType of ['soul', 'memory', 'tools', 'user', 'changelog']) {
         if (!knowledge[docType]) {
           knowledge[docType] = globalKb[docType] || '';
         }
@@ -199,6 +199,7 @@ async function loadBrandKnowledge(brandId) {
     memory: globalKb.memory || '',
     tools: globalKb.tools || '',
     user: globalKb.user || '',
+    changelog: globalKb.changelog || '',
   };
   brandKnowledgeCache.set(key, { data: fallback, fetchedAt: Date.now() });
   return fallback;

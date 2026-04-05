@@ -148,18 +148,33 @@ describe('trust-scorer', () => {
   });
 
   describe('checkImmediateDemotion', () => {
-    it('demotes and sends alert when domain is auto', async () => {
-      // 1. SELECT current_tier
-      mockPool._pushResult({ rows: [{ current_tier: 'auto' }] });
+    it('demotes and sends alert when domain is auto with NEGLIGENCE failure', async () => {
+      // 1. SELECT current_tier + score
+      mockPool._pushResult({ rows: [{ current_tier: 'auto', score: 0.7 }] });
       // 2. UPDATE to demote
       mockPool._pushResult({ rows: [], rowCount: 1 });
 
-      const result = await scorer.checkImmediateDemotion('ikawn', 'monitoring');
+      const result = await scorer.checkImmediateDemotion('ikawn', 'monitoring', 'NEGLIGENCE');
 
-      expect(result).toEqual({ demoted: true });
+      // NEGLIGENCE weight=1.0, penalty=-0.2, newScore=0.5 < 0.6 threshold → demoted
+      expect(result.demoted).toBe(true);
+      expect(result.penalty).toBeCloseTo(-0.2);
+      expect(result.newScore).toBeCloseTo(0.5);
       expect(mockSendAlert).toHaveBeenCalledTimes(1);
       expect(mockSendAlert.mock.calls[0][0]).toContain('Trust Demotion');
       expect(mockSendAlert.mock.calls[0][0]).toContain('monitoring');
+    });
+
+    it('does not demote on minor failure (EXTERNAL) with high score', async () => {
+      mockPool._pushResult({ rows: [{ current_tier: 'auto', score: 1.0 }] });
+      mockPool._pushResult({ rows: [], rowCount: 1 });
+
+      const result = await scorer.checkImmediateDemotion('ikawn', 'monitoring', 'EXTERNAL');
+
+      // EXTERNAL weight=0.3, penalty=-0.06, newScore=0.94 → no demotion
+      expect(result.demoted).toBe(false);
+      expect(result.newScore).toBeCloseTo(0.94);
+      expect(mockSendAlert).not.toHaveBeenCalled();
     });
 
     it('does not demote when domain is confirm', async () => {

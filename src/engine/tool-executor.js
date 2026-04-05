@@ -28,6 +28,21 @@ function sleep(ms) {
 }
 
 /**
+ * Classify a tool execution failure by error type.
+ * Used to apply nuanced trust scoring penalties.
+ *
+ * @param {Error|{message: string}} error
+ * @returns {string} One of: 'EXTERNAL', 'NEGLIGENCE', 'CONFIGURATION', 'UNKNOWN'
+ */
+function classifyFailure(error) {
+  const msg = (error?.message || '').toLowerCase();
+  if (/econnrefused|etimedout|timeout|network|socket hang up|enotfound/i.test(msg)) return 'EXTERNAL';
+  if (/approval|permission|forbidden|unauthorized/i.test(msg)) return 'NEGLIGENCE';
+  if (/config|not configured|missing|undefined.*key|env.*not.*set/i.test(msg)) return 'CONFIGURATION';
+  return 'UNKNOWN';
+}
+
+/**
  * Central tool dispatch + retry engine.
  *
  * @param {string} toolName
@@ -93,9 +108,10 @@ async function executeTool(toolName, input, context, registry) {
     }
   }
 
-  // 4. Execute with retry
+  // 4. Execute with retry (context-aware: skip backoff if fromHOTLApproval)
   const { maxRetries, backoff, timeoutMs } = tool.retryPolicy;
   const totalAttempts = maxRetries + 1;
+  const skipBackoff = !!(context.fromHOTLApproval);
   let lastError = null;
 
   for (let attempt = 0; attempt < totalAttempts; attempt++) {
@@ -156,20 +172,24 @@ async function executeTool(toolName, input, context, registry) {
         } catch (_) { /* best-effort logging */ }
       }
 
-      // If retries remaining, wait and retry
+      // If retries remaining, wait and retry (skip backoff if HOTL-approved)
       if (attempt < totalAttempts - 1) {
-        const waitMs = backoff[attempt] ?? backoff[backoff.length - 1] ?? 1000;
-        await sleep(waitMs);
+        if (!skipBackoff) {
+          const waitMs = backoff[attempt] ?? backoff[backoff.length - 1] ?? 1000;
+          await sleep(waitMs);
+        }
       }
     }
   }
 
   // All attempts exhausted — category-based failure handling
   const errorMsg = lastError?.message ?? 'Unknown error';
+  const failureType = classifyFailure(lastError);
   const envelope = createEnvelope(false, null, errorMsg, {
     tool: toolName,
     attempt: totalAttempts,
     effectiveTier,
+    failureType,
   });
 
   // Log failure to trust ledger + check for immediate demotion (best-effort)
@@ -185,7 +205,7 @@ async function executeTool(toolName, input, context, registry) {
       detail: errorMsg,
     });
     if (outcome === 'failure' && context.brandId) {
-      await checkImmediateDemotion(context.brandId, domain);
+      await checkImmediateDemotion(context.brandId, domain, failureType);
     }
   } catch (_) { /* best-effort trust logging */ }
 
@@ -200,4 +220,4 @@ async function executeTool(toolName, input, context, registry) {
   return envelope;
 }
 
-module.exports = { executeTool, _setLogToolCall, _setGetTrustLevel };
+module.exports = { executeTool, classifyFailure, _setLogToolCall, _setGetTrustLevel };

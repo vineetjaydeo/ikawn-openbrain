@@ -310,7 +310,7 @@ describe('HOTL Cycle Integration', () => {
 
       // Verify checkImmediateDemotion was called (SELECT on trust_scores)
       const demotionCheck = mockPool.query.mock.calls.find(
-        ([sql]) => typeof sql === 'string' && sql.includes('SELECT current_tier FROM trust_scores')
+        ([sql]) => typeof sql === 'string' && sql.includes('SELECT current_tier') && sql.includes('trust_scores')
       );
       expect(demotionCheck).toBeTruthy();
     });

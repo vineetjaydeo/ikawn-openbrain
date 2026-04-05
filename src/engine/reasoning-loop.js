@@ -15,6 +15,57 @@ let _callClaudeStreamingFn = null;
 function getCallClaudeStreaming() { return _callClaudeStreamingFn || _callClaudeStreaming; }
 function _setCallClaudeStreaming(fn) { _callClaudeStreamingFn = fn; }
 
+/**
+ * Lightweight text similarity using word-overlap Jaccard coefficient.
+ * No external dependencies — pure in-process computation.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {number} 0..1 similarity score
+ */
+function textSimilarity(a, b) {
+  if (a === '' && b === '') return 1;
+  if (!a || !b) return 0;
+  const tokenize = (s) => {
+    const words = s.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+    return new Set(words);
+  };
+  const setA = tokenize(a);
+  const setB = tokenize(b);
+  if (setA.size === 0 && setB.size === 0) return 1;
+  if (setA.size === 0 || setB.size === 0) return 0;
+  let intersection = 0;
+  for (const w of setA) {
+    if (setB.has(w)) intersection++;
+  }
+  const union = new Set([...setA, ...setB]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
+ * Check if the reasoning loop has converged (diminishing returns).
+ * Compares the last 3 assistant turn texts to the 3 before them.
+ *
+ * @param {string[]} turnTexts - Array of assistant response texts per turn
+ * @param {number} currentTurn - Current turn index (0-based)
+ * @param {number} [threshold=0.85] - Similarity threshold
+ * @returns {{converged: boolean, avgSimilarity: number}}
+ */
+function checkConvergence(turnTexts, currentTurn, threshold = 0.85) {
+  if (currentTurn < 6 || turnTexts.length < 6) return { converged: false, avgSimilarity: 0 };
+
+  const recent = turnTexts.slice(-3);
+  const previous = turnTexts.slice(-6, -3);
+
+  let totalSim = 0;
+  for (let j = 0; j < 3; j++) {
+    totalSim += textSimilarity(recent[j], previous[j]);
+  }
+  const avgSimilarity = totalSim / 3;
+
+  return { converged: avgSimilarity >= threshold, avgSimilarity };
+}
+
 class BudgetExceededError extends Error {
   constructor(spent, cap) {
     super(`Budget exceeded: spent $${spent.toFixed(6)} of $${cap.toFixed(6)} cap`);
@@ -69,6 +120,7 @@ async function executeReasoningLoop({
   let turnCount = 0;
   let toolCallCount = 0;
   let accumulatedText = '';
+  const assistantTurnTexts = []; // For convergence detection
 
   // Cross-session continuity (optional, best-effort, once at start)
   if (sessionId && userId) {
@@ -177,6 +229,30 @@ async function executeReasoningLoop({
     // Accumulate text from each turn for timeout partial results
     const turnText = textBlocks.map(b => b.text).join('\n');
     if (turnText) accumulatedText += (accumulatedText ? '\n' : '') + turnText;
+
+    // Track assistant turn texts for convergence detection
+    if (turnText) assistantTurnTexts.push(turnText);
+
+    // Convergence check: after turn 6+, detect diminishing returns
+    if (i >= 6) {
+      const { converged, avgSimilarity } = checkConvergence(assistantTurnTexts, i);
+      if (converged) {
+        console.log(`[ReasoningLoop] Convergence detected at turn ${i} — synthesizing`);
+        if (onEvent) {
+          onEvent({ type: 'done', totalCostUsd, turnCount, toolCallCount });
+        }
+        return {
+          response: accumulatedText.trim() || '[Converged — no further progress]',
+          messages,
+          totalTokensIn,
+          totalTokensOut,
+          totalCostUsd,
+          turnCount,
+          toolCallCount,
+          converged: true,
+        };
+      }
+    }
 
     // No tool calls — final text response, we're done
     if (toolUseBlocks.length === 0) {
@@ -311,4 +387,4 @@ async function executeReasoningLoop({
   };
 }
 
-module.exports = { executeReasoningLoop, BudgetExceededError, _setCallClaude, _setCallClaudeStreaming };
+module.exports = { executeReasoningLoop, BudgetExceededError, _setCallClaude, _setCallClaudeStreaming, textSimilarity, checkConvergence };

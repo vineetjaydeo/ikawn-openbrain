@@ -9,6 +9,23 @@ function getPool() {
 function _setPool(p) { _pool = p; }
 
 /**
+ * Fast 32-bit djb2 hash for content deduplication.
+ * Not cryptographic — just a fast fingerprint for exact-match detection.
+ *
+ * @param {string} str
+ * @returns {string} Hex string hash
+ */
+function hashContent(str) {
+  if (!str) return '0';
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) & 0xFFFFFFFF;
+  }
+  // Convert to unsigned 32-bit then hex
+  return (hash >>> 0).toString(16);
+}
+
+/**
  * Heuristic content type classifier.
  * @param {string} content - The text content to classify
  * @param {string} role - 'user' | 'assistant' | 'tool_result'
@@ -56,7 +73,31 @@ async function captureEpisodic(event) {
 
     if (!content) return;
 
-    await getPool().query(
+    const pool = getPool();
+    const contentHash = hashContent(content);
+
+    // Dedup: check last 10 episodes for same session for exact content match
+    if (sessionId) {
+      try {
+        const { rows: recent } = await pool.query(
+          `SELECT id, content FROM episodic_memories
+           WHERE session_id = $1
+           ORDER BY id DESC LIMIT 10`,
+          [sessionId]
+        );
+
+        for (const ep of recent) {
+          if (hashContent(ep.content) === contentHash) {
+            console.log(`[EpisodicCapture] Skipping duplicate (matches episode ${ep.id})`);
+            return null;
+          }
+        }
+      } catch (_) {
+        // Best-effort dedup — proceed with capture on failure
+      }
+    }
+
+    await pool.query(
       `INSERT INTO episodic_memories (brand_id, user_id, session_id, content, content_type, author_type, author_ref, source, expires_at, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
@@ -115,4 +156,4 @@ async function captureFromLoopTurn(turnData, sessionContext) {
   });
 }
 
-module.exports = { captureEpisodic, classifyContentType, captureFromLoopTurn, _setPool };
+module.exports = { captureEpisodic, classifyContentType, captureFromLoopTurn, hashContent, _setPool };

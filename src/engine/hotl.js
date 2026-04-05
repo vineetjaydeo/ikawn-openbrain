@@ -117,8 +117,8 @@ async function processApproval(approvalUuid, approved, userId, note) {
 
   // Create a hotl_resume task for the task processor to pick up
   const config = approved
-    ? { resumeToken: approval.resume_token, approved: true, originalAction: approval.action_type }
-    : { resumeToken: approval.resume_token, approved: false, rejectionReason: note || 'Rejected by reviewer' };
+    ? { resumeToken: approval.resume_token, approved: true, originalAction: approval.action_type, fromHOTLApproval: true }
+    : { resumeToken: approval.resume_token, approved: false, rejectionReason: note || 'Rejected by reviewer', fromHOTLApproval: true };
 
   const { rows: [task] } = await pool.query(
     `INSERT INTO scheduled_tasks

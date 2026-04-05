@@ -25,6 +25,15 @@ function getSendAlert() {
 }
 function _setSendAlert(fn) { _sendAlert = fn; }
 
+// ── Failure type weights for nuanced demotion ──
+const FAILURE_WEIGHTS = Object.freeze({
+  EDGE_CASE: 0.5,
+  CONFIGURATION: 0.7,
+  NEGLIGENCE: 1.0,
+  EXTERNAL: 0.3,
+  UNKNOWN: 0.8,
+});
+
 // ── Promotion thresholds ──
 const THRESHOLDS = Object.freeze({
   monitoring:          20,
@@ -185,17 +194,20 @@ async function evaluateAllDomains(brandId) {
 
 /**
  * Immediate demotion check — called on each failure.
- * If the domain is currently 'auto', immediately demote to 'confirm' and alert.
+ * If the domain is currently 'auto', apply weighted penalty based on failure type.
+ * Base demotion = -0.2 score drop, multiplied by failure type weight.
+ * Score floors at 0.4. If score drops below 0.6, demote to 'confirm'.
  *
  * @param {string} brandId
  * @param {string} domain
- * @returns {Promise<{demoted: boolean}>}
+ * @param {string} [failureType='UNKNOWN'] - One of FAILURE_WEIGHTS keys
+ * @returns {Promise<{demoted: boolean, penalty?: number, newScore?: number}>}
  */
-async function checkImmediateDemotion(brandId, domain) {
+async function checkImmediateDemotion(brandId, domain, failureType = 'UNKNOWN') {
   const pool = getPool();
 
   const { rows } = await pool.query(
-    `SELECT current_tier FROM trust_scores WHERE brand_id = $1 AND domain = $2`,
+    `SELECT current_tier, score FROM trust_scores WHERE brand_id = $1 AND domain = $2`,
     [brandId, domain]
   );
 
@@ -203,27 +215,47 @@ async function checkImmediateDemotion(brandId, domain) {
     return { demoted: false };
   }
 
-  // Demote
-  await pool.query(
-    `UPDATE trust_scores SET current_tier = 'confirm', last_demoted = NOW(), updated_at = NOW()
-     WHERE brand_id = $1 AND domain = $2`,
-    [brandId, domain]
-  );
+  // Calculate weighted penalty
+  const weight = FAILURE_WEIGHTS[failureType] ?? FAILURE_WEIGHTS.UNKNOWN;
+  const penalty = -0.2 * weight;
+  const currentScore = rows[0].score ?? 1.0;
+  const newScore = Math.max(0.4, currentScore + penalty);
 
-  // Send alert
-  try {
-    const sendAlert = getSendAlert();
-    await sendAlert(
-      `⚠️ <b>Trust Demotion</b>\n\n` +
-      `Domain: <code>${domain}</code>\n` +
-      `Brand: <code>${brandId}</code>\n` +
-      `Action: auto → confirm (failure detected)`
+  // Demote if score drops below threshold
+  const shouldDemote = newScore < 0.6;
+
+  if (shouldDemote) {
+    await pool.query(
+      `UPDATE trust_scores SET current_tier = 'confirm', score = $3, last_demoted = NOW(), updated_at = NOW()
+       WHERE brand_id = $1 AND domain = $2`,
+      [brandId, domain, newScore]
     );
-  } catch (_) {
-    // Best-effort alerting
+
+    // Send alert
+    try {
+      const sendAlert = getSendAlert();
+      await sendAlert(
+        `⚠️ <b>Trust Demotion</b>\n\n` +
+        `Domain: <code>${domain}</code>\n` +
+        `Brand: <code>${brandId}</code>\n` +
+        `Failure type: <code>${failureType}</code>\n` +
+        `Penalty: ${penalty.toFixed(3)} (weight: ${weight})\n` +
+        `Score: ${currentScore.toFixed(2)} → ${newScore.toFixed(2)}\n` +
+        `Action: auto → confirm`
+      );
+    } catch (_) {
+      // Best-effort alerting
+    }
+  } else {
+    // Just update the score, don't demote
+    await pool.query(
+      `UPDATE trust_scores SET score = $3, updated_at = NOW()
+       WHERE brand_id = $1 AND domain = $2`,
+      [brandId, domain, newScore]
+    );
   }
 
-  return { demoted: true };
+  return { demoted: shouldDemote, penalty, newScore };
 }
 
 module.exports = {
@@ -231,6 +263,7 @@ module.exports = {
   checkImmediateDemotion,
   getTrustLevel,
   THRESHOLDS,
+  FAILURE_WEIGHTS,
   _setPool,
   _setSendAlert,
 };

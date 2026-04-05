@@ -65,8 +65,9 @@ describe('episodic-capture', () => {
         source: 'web',
       });
 
-      expect(mockQuery).toHaveBeenCalledOnce();
-      const [sql, params] = mockQuery.mock.calls[0];
+      // 2 calls: dedup SELECT + INSERT (sessionId triggers dedup check)
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      const [sql, params] = mockQuery.mock.calls[1]; // INSERT is the second call
       expect(sql).toContain('INSERT INTO episodic_memories');
       expect(params[0]).toBe('ikawn');
       expect(params[1]).toBe('user-1');
@@ -120,8 +121,8 @@ describe('episodic-capture', () => {
         { brandId: 'ikawn', userId: 'u1', sessionId: 'sess-1', channel: 'reasoning' }
       );
 
-      expect(mockQuery).toHaveBeenCalledOnce();
-      const [, params] = mockQuery.mock.calls[0];
+      expect(mockQuery).toHaveBeenCalledTimes(2); // dedup SELECT + INSERT
+      const [, params] = mockQuery.mock.calls[1]; // INSERT is second call
       expect(params[3]).toBe("I'll deploy now");    // content
       expect(params[4]).toBe('decision');             // auto-classified
       expect(params[5]).toBe('agent');                // authorType
@@ -134,8 +135,8 @@ describe('episodic-capture', () => {
         { brandId: 'ikawn', sessionId: 'sess-1' }
       );
 
-      expect(mockQuery).toHaveBeenCalledOnce();
-      const [, params] = mockQuery.mock.calls[0];
+      expect(mockQuery).toHaveBeenCalledTimes(2); // dedup SELECT + INSERT
+      const [, params] = mockQuery.mock.calls[1]; // INSERT is second call
       expect(params[4]).toBe('tool_result');          // contentType
       expect(params[5]).toBe('tool');                 // authorType
       expect(params[6]).toBe('code_write');           // authorRef = toolName
@@ -147,7 +148,7 @@ describe('episodic-capture', () => {
         { brandId: 'ikawn', sessionId: 'sess-1' }
       );
 
-      const [, params] = mockQuery.mock.calls[0];
+      const [, params] = mockQuery.mock.calls[1]; // INSERT is second call
       expect(params[4]).toBe('message');
       expect(params[5]).toBe('user');
     });
@@ -166,7 +167,7 @@ describe('episodic-capture', () => {
         { brandId: 'ikawn', sessionId: 'sess-1' }
       );
 
-      const [, params] = mockQuery.mock.calls[0];
+      const [, params] = mockQuery.mock.calls[1]; // INSERT is second call
       expect(params[7]).toBe('reasoning');
     });
   });

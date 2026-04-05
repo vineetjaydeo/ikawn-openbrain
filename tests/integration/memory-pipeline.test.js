@@ -79,11 +79,11 @@ describe('1. Episodic capture → content classification', () => {
     });
 
     const queries = mockDb.getQueries();
-    expect(queries.length).toBe(1);
-    expect(queries[0].text).toContain('INSERT INTO episodic_memories');
-    expect(queries[0].params[0]).toBe('test-brand');
-    expect(queries[0].params[3]).toBe('Hello world');
-    expect(queries[0].params[4]).toBe('message');
+    expect(queries.length).toBe(2); // dedup SELECT + INSERT
+    expect(queries[1].text).toContain('INSERT INTO episodic_memories');
+    expect(queries[1].params[0]).toBe('test-brand');
+    expect(queries[1].params[3]).toBe('Hello world');
+    expect(queries[1].params[4]).toBe('message');
   });
 
   it('captureFromLoopTurn auto-classifies and captures', async () => {
@@ -93,10 +93,10 @@ describe('1. Episodic capture → content classification', () => {
     );
 
     const queries = mockDb.getQueries();
-    expect(queries.length).toBe(1);
+    expect(queries.length).toBe(2); // dedup SELECT + INSERT
     // decision detected from "I decided"
-    expect(queries[0].params[4]).toBe('decision');
-    expect(queries[0].params[5]).toBe('agent'); // authorType
+    expect(queries[1].params[4]).toBe('decision');
+    expect(queries[1].params[5]).toBe('agent'); // authorType
   });
 
   it('captureEpisodic silently ignores empty content', async () => {

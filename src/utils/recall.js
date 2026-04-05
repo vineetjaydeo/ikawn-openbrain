@@ -53,12 +53,12 @@ async function recall(params) {
     return recallTextFallback(params);
   }
 
-  const embeddingStr = `{${embedding.join(',')}}`;
+  const vectorStr = `[${embedding.join(',')}]`;
   const results = [];
 
   // Query distilled_memory
   if (source !== 'memories_only') {
-    const distilledParams = [embeddingStr, brandId];
+    const distilledParams = [vectorStr, brandId];
     let paramIdx = 3;
     let distilledWhere = `
       WHERE brand_id = $2
@@ -90,7 +90,7 @@ async function recall(params) {
         (LEAST(1, LN(COALESCE(times_used, 0) + 1) / LN(20)) * 0.05)
       ) AS score FROM (
         SELECT id, memory_type, content, confidence, reasoning, last_updated, created_at, times_used,
-               cosine_similarity(embedding, $1::float8[]) AS similarity,
+               1 - (embedding <=> $1::vector) AS similarity,
                CASE WHEN last_updated IS NOT NULL
                  THEN EXP(-EXTRACT(EPOCH FROM (NOW() - last_updated)) / (30 * 86400))
                  ELSE 0.5 END AS time_decay
@@ -120,7 +120,7 @@ async function recall(params) {
 
   // Query memories (existing table)
   if (source !== 'distilled_only') {
-    const memoriesParams = [embeddingStr, brandId];
+    const memoriesParams = [vectorStr, brandId];
     let paramIdx = 3;
     let memoriesWhere = `
       WHERE brand_id = $2
@@ -142,13 +142,11 @@ async function recall(params) {
     }
 
     const memoriesQuery = `
-      SELECT * FROM (
-        SELECT id, memory_type, content, created_at,
-               cosine_similarity(embedding, $1::float8[]) AS similarity
-        FROM memories
-        ${memoriesWhere}
-      ) sub
-      ORDER BY similarity DESC
+      SELECT id, memory_type, content, created_at,
+             1 - (embedding <=> $1::vector) AS similarity
+      FROM memories
+      ${memoriesWhere}
+      ORDER BY embedding <=> $1::vector
       LIMIT $${paramIdx}
     `;
     memoriesParams.push(limit);

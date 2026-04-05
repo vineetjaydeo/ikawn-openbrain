@@ -46,17 +46,17 @@ router.post('/api/sync/receive', requireAuthOrApiKey, async (req, res) => {
       }
 
       // Check for similar existing memories
-      const embeddingStr = `{${embedding.join(',')}}`;
+      const vectorStr = `[${embedding.join(',')}]`;
       const { rows: similar } = await pool.query(`
-        SELECT id, cosine_similarity(embedding, $1::float8[]) AS similarity
+        SELECT id, 1 - (embedding <=> $1::vector) AS similarity
         FROM distilled_memory
         WHERE memory_type = $2
           AND superseded_by IS NULL
           AND embedding IS NOT NULL
           AND user_id IS NULL
-        ORDER BY cosine_similarity(embedding, $1::float8[]) DESC
+        ORDER BY embedding <=> $1::vector
         LIMIT 1
-      `, [embeddingStr, mem.memory_type]);
+      `, [vectorStr, mem.memory_type]);
 
       if (similar.length > 0 && similar[0].similarity > SIMILARITY_THRESHOLD) {
         skipped++; // Already know this
@@ -67,10 +67,10 @@ router.post('/api/sync/receive', requireAuthOrApiKey, async (req, res) => {
         INSERT INTO distilled_memory (
           brand_id, user_id, memory_type, content, confidence,
           source_event_ids, reasoning, embedding, embedding_status
-        ) VALUES ('ikawn', NULL, $1, $2, $3, $4, $5, $6::float8[], 'done')
+        ) VALUES ('ikawn', NULL, $1, $2, $3, $4, $5, $6::vector, 'done')
       `, [
         mem.memory_type, mem.content, adjustedConfidence,
-        [sourceRef], mem.reasoning || '', embeddingStr,
+        [sourceRef], mem.reasoning || '', vectorStr,
       ]);
       accepted++;
     } catch (err) {

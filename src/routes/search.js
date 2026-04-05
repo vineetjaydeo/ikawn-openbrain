@@ -26,12 +26,13 @@ router.get('/search', async (req, res) => {
     let paramIdx = 1;
 
     if (embedding) {
-      // Vector search with cosine similarity
+      // pgvector HNSW: native cosine distance for indexed search
+      const vectorStr = `[${embedding.join(',')}]`;
       query = `SELECT id, content, source, tags, memory_type, project, hashtags, author, access_level, brand_id, created_at,
-                      cosine_similarity(embedding, $1) AS similarity
+                      1 - (embedding <=> $1::vector) AS similarity
                FROM memories
                WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND deleted_at IS NULL`;
-      params.push(embedding);
+      params.push(vectorStr);
       paramIdx = 2;
     } else {
       // Fallback to ILIKE text search when embedding unavailable
@@ -84,7 +85,7 @@ router.get('/search', async (req, res) => {
     }
 
     if (embedding) {
-      query += ` ORDER BY cosine_similarity(embedding, $1) DESC LIMIT $${paramIdx++}`;
+      query += ` ORDER BY embedding <=> $1::vector LIMIT $${paramIdx++}`;
     } else {
       query += ` ORDER BY created_at DESC LIMIT $${paramIdx++}`;
     }

@@ -10,6 +10,7 @@ const router = Router();
 
 async function searchMemory(query, accessLevels, limit = 10, userId = null, brandId = 'ikawn', isAdmin = false) {
   const embedding = await getEmbedding(query);
+  const vectorStr = `[${embedding.join(',')}]`;
 
   const placeholders = accessLevels.map((_, i) => `$${i + 2}`).join(', ');
   // Brand isolation + user isolation (admin sees all team memories)
@@ -21,13 +22,13 @@ async function searchMemory(query, accessLevels, limit = 10, userId = null, bran
       ? ` AND (user_id = $${limitParam + 1} OR access_level NOT IN ('private') OR user_id IS NULL)`
       : '';
   const params = isAdmin
-    ? [embedding, ...accessLevels, brandId, limit]
+    ? [vectorStr, ...accessLevels, brandId, limit]
     : userId
-      ? [embedding, ...accessLevels, brandId, limit, userId]
-      : [embedding, ...accessLevels, brandId, limit];
+      ? [vectorStr, ...accessLevels, brandId, limit, userId]
+      : [vectorStr, ...accessLevels, brandId, limit];
 
   const result = await pool.query(
-    `SELECT id, content, memory_type, project, hashtags, author, user_id, created_at, cosine_similarity(embedding, $1) AS similarity
+    `SELECT id, content, memory_type, project, hashtags, author, user_id, created_at, 1 - (embedding <=> $1::vector) AS similarity
      FROM memories
      WHERE embedding IS NOT NULL
        AND (archived IS NULL OR archived = false)
@@ -35,7 +36,7 @@ async function searchMemory(query, accessLevels, limit = 10, userId = null, bran
        AND brand_id = $${brandParam}
        AND author != 'ruhi'
        ${userFilter}
-     ORDER BY cosine_similarity(embedding, $1) DESC
+     ORDER BY embedding <=> $1::vector
      LIMIT $${limitParam}`,
     params
   );

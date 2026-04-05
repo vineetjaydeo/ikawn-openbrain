@@ -225,7 +225,11 @@ async function initSchema() {
       ON CONFLICT (key) DO NOTHING
     `);
 
-    // Create a helper function for cosine similarity
+    // Enable pgvector extension (Supabase has it pre-installed)
+    await client.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+
+    // Legacy cosine_similarity function — kept for any remaining callers
+    // New queries should use the native <=> operator with HNSW index
     await client.query(`
       CREATE OR REPLACE FUNCTION cosine_similarity(a float8[], b float8[])
       RETURNS float8 AS $$
@@ -1056,7 +1060,74 @@ async function initSchema() {
       ) ON CONFLICT (flow_id) DO NOTHING
     `);
 
-    console.log('Database schema initialized (v12 — flow_configs for AP runtime intelligence)');
+    // ── pgvector migration: float8[] → vector(768) + HNSW index ──
+    // Converts embedding columns to native pgvector type for indexed similarity search.
+    // Checks column type first to be idempotent — safe to run on every startup.
+    const { rows: memColType } = await client.query(`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'memories' AND column_name = 'embedding'
+    `);
+    if (memColType.length > 0 && memColType[0].data_type === 'ARRAY') {
+      console.log('[pgvector] Migrating memories.embedding from float8[] to vector(768)...');
+      // Drop rows with wrong dimensions before converting (safety)
+      await client.query(`
+        UPDATE memories SET embedding = NULL, embedding_status = 'pending'
+        WHERE embedding IS NOT NULL AND array_length(embedding, 1) != 768
+      `);
+      await client.query(`
+        ALTER TABLE memories ALTER COLUMN embedding TYPE vector(768)
+        USING embedding::vector(768)
+      `);
+      console.log('[pgvector] memories.embedding converted to vector(768)');
+    }
+
+    // HNSW index on memories.embedding — approximate nearest neighbor, no maintenance needed
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_memories_embedding_hnsw
+      ON memories USING hnsw (embedding vector_cosine_ops)
+    `);
+
+    // Convert distilled_memory.embedding
+    const { rows: distColType } = await client.query(`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'distilled_memory' AND column_name = 'embedding'
+    `);
+    if (distColType.length > 0 && distColType[0].data_type === 'ARRAY') {
+      console.log('[pgvector] Migrating distilled_memory.embedding from float8[] to vector(768)...');
+      await client.query(`
+        UPDATE distilled_memory SET embedding = NULL, embedding_status = 'pending'
+        WHERE embedding IS NOT NULL AND array_length(embedding, 1) != 768
+      `);
+      await client.query(`
+        ALTER TABLE distilled_memory ALTER COLUMN embedding TYPE vector(768)
+        USING embedding::vector(768)
+      `);
+      console.log('[pgvector] distilled_memory.embedding converted to vector(768)');
+    }
+
+    // HNSW index on distilled_memory.embedding
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_distilled_embedding_hnsw
+      ON distilled_memory USING hnsw (embedding vector_cosine_ops)
+    `);
+
+    // Convert session_summaries.embedding if exists
+    const { rows: ssColType } = await client.query(`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'session_summaries' AND column_name = 'embedding'
+    `);
+    if (ssColType.length > 0 && ssColType[0].data_type === 'ARRAY') {
+      await client.query(`
+        UPDATE session_summaries SET embedding = NULL, embedding_status = 'pending'
+        WHERE embedding IS NOT NULL AND array_length(embedding, 1) != 768
+      `);
+      await client.query(`
+        ALTER TABLE session_summaries ALTER COLUMN embedding TYPE vector(768)
+        USING embedding::vector(768)
+      `);
+    }
+
+    console.log('Database schema initialized (v13 — pgvector HNSW indexes on memories + distilled_memory)');
   } finally {
     client.release();
   }

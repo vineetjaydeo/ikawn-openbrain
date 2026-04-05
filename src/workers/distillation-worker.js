@@ -325,24 +325,24 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
   }
 
   // Check for similar active memories — scoped by user_id to prevent cross-user supersession
-  const embeddingStr = `{${embedding.join(',')}}`;
+  const vectorStr = `[${embedding.join(',')}]`;
   const userClause = effectiveUserId != null
     ? `AND user_id = $4`
     : `AND user_id IS NULL`;
   const similarParams = effectiveUserId != null
-    ? [embeddingStr, brandId, insight.memory_type, effectiveUserId]
-    : [embeddingStr, brandId, insight.memory_type];
+    ? [vectorStr, brandId, insight.memory_type, effectiveUserId]
+    : [vectorStr, brandId, insight.memory_type];
 
   const { rows: similar } = await pool.query(`
     SELECT id, content, confidence, source_event_ids, reasoning,
-           cosine_similarity(embedding, $1::float8[]) AS similarity
+           1 - (embedding <=> $1::vector) AS similarity
     FROM distilled_memory
     WHERE brand_id = $2
       AND memory_type = $3
       ${userClause}
       AND superseded_by IS NULL
       AND embedding IS NOT NULL
-    ORDER BY cosine_similarity(embedding, $1::float8[]) DESC
+    ORDER BY embedding <=> $1::vector
     LIMIT 1
   `, similarParams);
 
@@ -380,8 +380,8 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
       // Still insert the new contradicting memory so it can compete
       await pool.query(`
         INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::float8[], 'done')
-      `, [brandId, effectiveUserId, insight.memory_type, insight.content, reducedNew, sourceEventIds, insight.reasoning, embeddingStr]);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, 'done')
+      `, [brandId, effectiveUserId, insight.memory_type, insight.content, reducedNew, sourceEventIds, insight.reasoning, vectorStr]);
 
       console.log(`[DistillationWorker] Contradiction: existing ${existing.id} (${existing.confidence}->${reducedExisting}), new (${insight.confidence}->${reducedNew})`);
     } else {
@@ -404,12 +404,12 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
   } else {
     // Cluster dedup: check if top 3 similar memories say essentially the same thing
     const { rows: top3 } = await pool.query(`
-      SELECT id, content, cosine_similarity(embedding, $1::float8[]) AS similarity
+      SELECT id, content, 1 - (embedding <=> $1::vector) AS similarity
       FROM distilled_memory
       WHERE brand_id = $2 AND memory_type = $3
         ${userClause}
         AND superseded_by IS NULL AND embedding IS NOT NULL
-      ORDER BY cosine_similarity(embedding, $1::float8[]) DESC
+      ORDER BY embedding <=> $1::vector
       LIMIT 3
     `, similarParams);
 
@@ -453,8 +453,8 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
     // Insert new
     await pool.query(`
       INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::float8[], 'done')
-    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, embeddingStr]);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, 'done')
+    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, vectorStr]);
 
     console.log(`[DistillationWorker] New ${insight.memory_type} memory (confidence ${insight.confidence})`);
   }

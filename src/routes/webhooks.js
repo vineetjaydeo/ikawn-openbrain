@@ -303,17 +303,18 @@ router.post('/webhooks/intelligence-telegram/:token', async (req, res) => {
     let memoryContext = '';
     try {
       const embedding = await getEmbedding(userText);
+      const vectorStr = `[${embedding.join(',')}]`;
       const memResult = await pool.query(
         `SELECT content, memory_type, project, author, created_at,
-                cosine_similarity(embedding, $1) AS similarity
+                1 - (embedding <=> $1::vector) AS similarity
          FROM memories
          WHERE embedding IS NOT NULL
            AND (archived IS NULL OR archived = false)
            AND brand_id = $2
            AND (user_id = $3 OR access_level NOT IN ('private') OR user_id IS NULL)
-         ORDER BY cosine_similarity(embedding, $1) DESC
+         ORDER BY embedding <=> $1::vector
          LIMIT 10`,
-        [embedding, req.brand_id, userId]
+        [vectorStr, req.brand_id, userId]
       );
       if (memResult.rows.length > 0) {
         memoryContext = memResult.rows.map((m, i) => {

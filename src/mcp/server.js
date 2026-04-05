@@ -58,9 +58,10 @@ server.tool(
     const embedding = await getEmbedding(query);
     const searchLimit = Math.min(limit || 10, 50);
 
-    let sql = `SELECT id, content, source, memory_type, project, hashtags, author, access_level, created_at, cosine_similarity(embedding, $1) AS similarity
+    const vectorStr = `[${embedding.join(',')}]`;
+    let sql = `SELECT id, content, source, memory_type, project, hashtags, author, access_level, created_at, 1 - (embedding <=> $1::vector) AS similarity
        FROM memories WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND brand_id = $2`;
-    const params = [embedding, MCP_BRAND_ID];
+    const params = [vectorStr, MCP_BRAND_ID];
     let idx = 3;
 
     if (type) { sql += ` AND memory_type = $${idx++}`; params.push(type); }
@@ -69,7 +70,7 @@ server.tool(
     if (from) { sql += ` AND created_at >= $${idx++}`; params.push(from); }
     if (to) { sql += ` AND created_at <= $${idx++}`; params.push(to); }
 
-    sql += ` ORDER BY cosine_similarity(embedding, $1) DESC LIMIT $${idx++}`;
+    sql += ` ORDER BY embedding <=> $1::vector LIMIT $${idx++}`;
     params.push(searchLimit);
 
     const result = await pool.query(sql, params);
@@ -205,11 +206,12 @@ server.tool(
     const { buildSystemPrompt } = require('../ruhi/persona');
 
     const embedding = await getEmbedding(message);
+    const vectorStr = `[${embedding.join(',')}]`;
     const memoryResults = await pool.query(
-      `SELECT content, memory_type, created_at, cosine_similarity(embedding, $1) AS similarity
+      `SELECT content, memory_type, created_at, 1 - (embedding <=> $1::vector) AS similarity
        FROM memories WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND brand_id = $2
-       ORDER BY cosine_similarity(embedding, $1) DESC LIMIT 10`,
-      [embedding, MCP_BRAND_ID]
+       ORDER BY embedding <=> $1::vector LIMIT 10`,
+      [vectorStr, MCP_BRAND_ID]
     );
 
     let memoryContext = '';

@@ -79,19 +79,20 @@ async function searchMemories(query, limit = 8, userId = null, brandId = 'ikawn'
 
     let result;
     if (embedding) {
-      // Fetch more candidates, then re-rank with recency
+      // pgvector HNSW index: uses <=> (cosine distance) for fast approximate nearest neighbor
+      const vectorStr = `[${embedding.join(',')}]`;
       // Exclude author='ruhi' — Ruhi's own past responses pollute RAG with echoed denials
       result = await pool.query(
         `SELECT content, memory_type, source, project, author, user_id, created_at,
-                cosine_similarity(embedding, $1) AS similarity
+                1 - (embedding <=> $1::vector) AS similarity
          FROM memories
          WHERE embedding IS NOT NULL AND (archived IS NULL OR archived = false) AND deleted_at IS NULL
          AND brand_id = $2
          AND author != 'ruhi'
          ${userFilter}
-         ORDER BY cosine_similarity(embedding, $1) DESC
+         ORDER BY embedding <=> $1::vector
          LIMIT 30`,
-        [embedding, brandId]
+        [vectorStr, brandId]
       );
     } else {
       // Fallback to text search

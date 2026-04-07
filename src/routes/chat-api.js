@@ -12,7 +12,8 @@ const sharp = require('sharp');
 const { getEmbedding } = require('../embeddings');
 const { captureMessage } = require('../utils/capture');
 const { extractMemories } = require('../utils/memory-extractor');
-const { getTool, getTools } = require('../tools/registry');
+const { lookupTool, getToolDefinitions } = require('../engine/tool-registry-v2');
+const { executeTool: executeToolV2 } = require('../engine/tool-executor');
 const { loadBrandKnowledge } = require('../ruhi/persona');
 const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 const { CHAT_CONTEXT_THRESHOLD } = require('../utils/similarity');
@@ -368,7 +369,7 @@ async function handleChatSend(req, res) {
     if (skillMatch) {
       const toolName = skillMatch[1];
       const toolArgs = (skillMatch[2] || '').trim();
-      const tool = getTool(toolName);
+      const tool = lookupTool(toolName);
 
       if (tool) {
         // Set up SSE
@@ -381,13 +382,33 @@ async function handleChatSend(req, res) {
         res.write(`data: ${JSON.stringify({ type: 'agent_identity', agent: 'ruhi', name: INSTANCE_NAME })}\n\n`);
 
         try {
-          const result = await tool.execute(
+          const toolContext = {
+            sessionId: null,
+            brandId: req.brand_id,
+            userId: req.session.user.id,
+            workingMemory: null,
+            costTracker: null,
+            trustLevel: 'confirm', // web chat user = confirm level (auto + confirm tools)
+          };
+          const toolRegistry = { lookupTool };
+          const envelope = await executeToolV2(
+            toolName,
             toolArgs ? { query: toolArgs, prompt: toolArgs } : {},
-            { brandId: req.brand_id, userId: req.session.user.id, pool }
+            toolContext,
+            toolRegistry
           );
 
-          const summary = result?.summary || JSON.stringify(result?.data || result, null, 2);
-          const formatted = `**/${toolName}** result:\n\n${summary}`;
+          let formatted;
+          if (envelope.ok) {
+            const summary = typeof envelope.data === 'string'
+              ? envelope.data
+              : JSON.stringify(envelope.data, null, 2);
+            formatted = `**/${toolName}** result:\n\n${summary}`;
+          } else if (envelope.gated) {
+            formatted = `**/${toolName}** requires ${envelope.approvalRequired} approval and cannot be run directly.`;
+          } else {
+            formatted = `**/${toolName}** failed: ${envelope.error}`;
+          }
 
           // Stream as chunk
           res.write(`data: ${JSON.stringify({ type: 'chunk', text: formatted })}\n\n`);
@@ -620,14 +641,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
 
     console.log(`[Tier] ${tier} → ${model} (forced=${!!use_secondary})`);
 
-    // Build tool schemas (Anthropic format — name, description, input_schema)
-    // Only expose 'direct' tier tools to chat — 'agent' tier tools are restricted to executor
-    const { getToolSchemas } = require('../tools/registry');
-    const registryTools = getTools();
-    const chatToolNames = [...registryTools.entries()]
-      .filter(([, tool]) => tool.tier !== 'agent')
-      .map(([name]) => name);
-    const toolSchemas = chatToolNames.length > 0 ? getToolSchemas(chatToolNames) : [];
+    // Build tool schemas from v2 registry (Anthropic format — name, description, input_schema)
+    // Web chat exposes all v2 tool categories; permission gating handled by tool-executor trust system
+    const WEB_CHAT_TOOL_SCOPE = ['observe', 'analyze', 'create', 'communicate'];
+    const toolSchemas = getToolDefinitions(WEB_CHAT_TOOL_SCOPE);
     // Only attach web_search when the message likely needs it (saves tokens on every non-search call)
     if (needsWebSearch(content)) {
       toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 3 });
@@ -667,7 +684,6 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     }
 
     const pendingGenerations = [];
-    const TOOL_TIMEOUT_MS = 30000;
 
     // ── Reasoning Loop: replaces manual multi-turn tool loop ──
     // Map chat tiers to engine tiers
@@ -679,46 +695,35 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     const systemPromptText = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
     const loopMessages = openaiMessages.filter(m => m.role !== 'system');
 
-    // Build tool executor with timeout, failure tracking, and generation handling
-    const toolFailureCounts = {};
-    const MAX_TOOL_FAILURES = 2;
-
-    const executeToolFn = async (toolName, toolInput) => {
-      const registryTool = getTool(toolName);
-      if (!registryTool) throw new Error(`Unknown tool: ${toolName}`);
-      if ((toolFailureCounts[toolName] || 0) >= MAX_TOOL_FAILURES) {
-        throw new Error(`Tool ${toolName} disabled after ${MAX_TOOL_FAILURES} failures`);
-      }
-
-      try {
-        const execResult = await Promise.race([
-          registryTool.execute(
-            toolInput || {},
-            { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: conversation_id, pool }
-          ),
-          new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 30s`)), TOOL_TIMEOUT_MS))
-        ]);
-
-        // Special handling for ikawn_generate
-        if (toolName === 'ikawn_generate' && execResult?.success && execResult?.data?.generationId) {
-          const agent = toolInput?.agent || 'genie';
-          const batchSize = ['genie', 'remix'].includes(agent) ? 4 : 1;
-          pool.query(`INSERT INTO generations (brand_id, agent_name, prompt, output_type, status, ikawn_generation_id, batch_size)
-            VALUES ($1, $2, $3, $4, 'pending', $5, $6) ON CONFLICT DO NOTHING`,
-            [req.brand_id, agent, toolInput?.prompt, agent === 'lazarus' ? 'video' : 'image', execResult.data.generationId, batchSize])
-            .catch(err => console.warn('[Chat] Failed to record generation:', err.message));
-          pendingGenerations.push({ generationId: execResult.data.generationId, agent, prompt: toolInput?.prompt, batchSize });
-        }
-
-        return execResult?.summary || JSON.stringify(execResult?.data || execResult);
-      } catch (err) {
-        toolFailureCounts[toolName] = (toolFailureCounts[toolName] || 0) + 1;
-        console.error(`[Chat] Tool ${toolName} failed (${toolFailureCounts[toolName]}/${MAX_TOOL_FAILURES}):`, err.message);
-        throw err;
-      }
+    // V2 tool registry with generation tracking wrapper
+    // Wraps ikawn_generate to track pending generations for SSE events
+    const toolRegistry = {
+      lookupTool(name) {
+        const tool = lookupTool(name);
+        if (!tool || name !== 'ikawn_generate') return tool;
+        // Wrap execute to intercept generation results
+        return {
+          ...tool,
+          async execute(input, context) {
+            const result = await tool.execute(input, context);
+            // Track generation for SSE notification (mirrors legacy behavior)
+            const data = result?.data;
+            if (data?.generationId || (data && typeof data === 'object' && data.generationId)) {
+              const agent = input?.agent || 'genie';
+              const batchSize = ['genie', 'remix'].includes(agent) ? 4 : 1;
+              pool.query(`INSERT INTO generations (brand_id, agent_name, prompt, output_type, status, ikawn_generation_id, batch_size)
+                VALUES ($1, $2, $3, $4, 'pending', $5, $6) ON CONFLICT DO NOTHING`,
+                [req.brand_id, agent, input?.prompt, agent === 'lazarus' ? 'video' : 'image', data.generationId, batchSize])
+                .catch(err => console.warn('[Chat] Failed to record generation:', err.message));
+              pendingGenerations.push({ generationId: data.generationId, agent, prompt: input?.prompt, batchSize });
+            }
+            return result;
+          },
+        };
+      },
     };
 
-    // Bridge reasoning loop events to SSE
+    // Bridge reasoning loop events to SSE (handles both v1 and v2 event types)
     const onEvent = (event) => {
       if (clientDisconnected || res.writableEnded) return;
       switch (event.type) {
@@ -738,6 +743,16 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           for (const gen of pendingGenerations) {
             res.write(`data: ${JSON.stringify({ type: 'generation_started', generationId: gen.generationId, agent: gen.agent, prompt: gen.prompt, batchSize: gen.batchSize })}\n\n`);
           }
+          break;
+        // V2-specific events from tool-executor trust system
+        case 'tool_gated':
+          res.write(`data: ${JSON.stringify({ type: 'tool_gated', tool: event.name, approvalRequired: event.approvalRequired })}\n\n`);
+          break;
+        case 'tool_suspended':
+          res.write(`data: ${JSON.stringify({ type: 'tool_error', tool: event.name, error: event.error, suspended: true })}\n\n`);
+          break;
+        case 'tool_hotl':
+          res.write(`data: ${JSON.stringify({ type: 'tool_error', tool: event.name, error: event.error, needsReview: true })}\n\n`);
           break;
       }
     };
@@ -766,7 +781,9 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         systemPrompt: systemPromptText,
         dollarCap: chatSession ? 2.00 : undefined,
         messages: loopMessages,
-        executeToolFn,
+        toolRegistry, // V2: uses tool-executor with trust system instead of legacy callback
+        trustLevel: 'confirm', // Web chat user = confirm level (can use auto + confirm tools)
+        userId: req.session?.user?.id ? String(req.session.user.id) : undefined,
         maxIterations: 5,
         onEvent,
         timeoutMs: parseInt(process.env.CHAT_TURN_TIMEOUT_MS, 10) || 300000,

@@ -1,7 +1,7 @@
 const { pool } = require('../db');
 const { callReflectionLLM } = require('../utils/llm');
 
-const INTERVAL_MS = 30000; // Check every 30s
+const INTERVAL_MS = 300000; // Check every 5 minutes (cost optimization)
 const MSG_THRESHOLD = 3;   // Summarize after every 3 user messages since last summary
 
 let intervalId = null;
@@ -121,7 +121,7 @@ Previous summary (update, don't start from scratch): ${existing}`,
 }
 
 function startContextWorker() {
-  console.log('[ContextWorker] Started (interval: 30s)');
+  console.log('[ContextWorker] Started (interval: 300s)');
   intervalId = setInterval(processContextSummaries, INTERVAL_MS);
   // Run once on start after a brief delay
   setTimeout(processContextSummaries, 5000);

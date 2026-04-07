@@ -14,7 +14,10 @@
     "pre-deploy": "bash scripts/pre-deploy.sh",
     "backfill": "node scripts/backfill-supabase.js",
     "reconcile": "node scripts/reconcile-counts.js",
-    "reembed": "node scripts/reembed-supabase.js"
+    "reembed": "node scripts/reembed-supabase.js",
+    "dev:frontend": "cd src/frontend && npx vite",
+    "build:frontend": "cd src/frontend && npx vite build",
+    "dev:all": "concurrently \"node src/index.js\" \"cd src/frontend && npx vite\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -23,7 +26,11 @@
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@mozilla/readability": "^0.6.0",
+    "@tanstack/react-query": "^5.62.0",
     "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.0.4",
+    "concurrently": "^9.1.0",
     "cookie-session": "^2.1.1",
     "croner": "^10.0.1",
     "eventemitter2": "^6.4.9",
@@ -31,17 +38,37 @@
     "express-rate-limit": "^8.3.0",
     "googleapis": "^171.4.0",
     "jsdom": "^28.1.0",
+    "lucide-react": "^0.468.0",
     "mammoth": "^1.12.0",
     "openai": "^4.73.0",
     "pdf-parse": "^2.4.5",
     "pg": "^8.13.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^7.1.0",
+    "react-syntax-highlighter": "^15.6.1",
+    "remark-gfm": "^4.0.0",
     "resend": "^6.9.3",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "sonner": "^1.7.1",
+    "tailwind-merge": "^2.6.0",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
     "eslint": "^10.1.0",
+    "postcss": "^8.4.49",
     "supertest": "^7.2.2",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
     "vitest": "^4.1.0"
   }
 }

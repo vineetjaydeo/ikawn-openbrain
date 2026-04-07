@@ -1,0 +1,281 @@
+@import "tailwindcss";
+
+@layer base {
+  @font-face {
+    font-family: 'Google Sans';
+    src: url('https://fonts.gstatic.com/s/googlesans/v58/4Ua_rENHsxJlGDuGo1OIlJfC6l_24rlCK1Yo_Iqcsih3SAyH6cAwhX9RFD48TE63OOYKtrwEIJllpyk.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'Google Sans';
+    src: url('https://fonts.gstatic.com/s/googlesans/v58/4Ua_rENHsxJlGDuGo1OIlJfC6l_24rlCK1Yo_Iqcsih3SAyH6cAwhX9RFD48TE63OOYKtrwEIJlNpyk.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'Parkinsans';
+    src: url('https://fonts.gstatic.com/s/parkinsans/v1/TUZxzYQ_hYq-bf-n3QPGdm6k_v0GaFMEkKk_cwL1MYs.woff2') format('woff2');
+    font-weight: 400 800;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  :root {
+    --background: 0 0% 2%;           /* rgb(5,5,5) — true black */
+    --foreground: 0 0% 90%;
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 90%;
+    --primary: 43 100% 55%;          /* #FFC01C gold */
+    --primary-foreground: 0 0% 2%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 43 100% 55%;
+    --accent-foreground: 0 0% 2%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 43 100% 55%;
+    --radius: 0.625rem;
+
+    /* iKawn-specific tokens */
+    --gold: #FFC01C;
+    --gold-hover: #F59E0B;
+    --navy: #0A0F2E;
+    --surface-1: rgb(12, 12, 12);
+    --surface-2: rgb(18, 18, 18);
+    --surface-3: rgb(24, 24, 24);
+    --text: rgb(230, 230, 230);
+    --text-secondary: rgb(160, 160, 160);
+    --text-tertiary: rgb(100, 100, 100);
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Google Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Scrollbar styling */
+  .scrollbar-thin::-webkit-scrollbar { width: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+  /* Typography polish */
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  p, li, span, div {
+    line-height: 1.6;
+  }
+
+  button, input, select, label {
+    line-height: 1.4;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  }
+
+  /* Gold text selection */
+  ::selection {
+    background: rgba(255, 192, 28, 0.25);
+    color: inherit;
+  }
+
+  /* Scrollbar styling (global) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(0 0% 22%); }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* Scrollbar thin override */
+  .scrollbar-thin::-webkit-scrollbar { width: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+  /* Focus-visible ring — gold, accessible */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Remove focus outline for mouse users */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Typing cursor animation */
+  @keyframes dotPulse {
+    0%, 60%, 100% { opacity: 0.25; transform: scale(0.8); }
+    30% { opacity: 1; transform: scale(1); }
+  }
+
+  /* Skeleton pulse — subtle, not distracting */
+  @keyframes skeletonPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.15; }
+  }
+
+  /* Message enter — fade-in + slide-up */
+  @keyframes messageEnter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Modal scale-in */
+  @keyframes modalEnter {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Toast slide-in from bottom-right */
+  @keyframes toastSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(16px) translateX(0);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) translateX(0);
+    }
+  }
+
+  /* Fade out for conversation switching */
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  /* Fade in */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+/* Animation utility classes */
+.animate-skeleton-pulse {
+  animation: skeletonPulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-message-enter {
+  animation: messageEnter 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-modal-enter {
+  animation: modalEnter 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-toast-enter {
+  animation: toastSlideIn 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-in {
+  animation: fadeIn 150ms ease both;
+}
+
+.animate-fade-out {
+  animation: fadeOut 100ms ease both;
+}
+
+/* Transition utilities */
+.transition-default {
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.transition-fast {
+  transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Button press feedback */
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Hover surface utility */
+.hover-surface:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* will-change hints for animated elements */
+.will-change-transform {
+  will-change: transform;
+}
+
+/* Modal input shared style */
+.modal-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+.modal-input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(255, 192, 28, 0.12);
+}
+.modal-input:disabled {
+  opacity: 0.5;
+}
+
+/* Reduced motion: respect user preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-skeleton-pulse,
+  .animate-message-enter,
+  .animate-modal-enter,
+  .animate-toast-enter,
+  .animate-fade-in,
+  .animate-fade-out {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  button:active:not(:disabled) {
+    transform: none;
+  }
+}

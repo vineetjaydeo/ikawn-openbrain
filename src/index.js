@@ -7,8 +7,6 @@ const { initSchema } = require('./db');
 const { requireAuth, requireAuthOrApiKey, requireBrand, requireBrandAccess } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
 const adminApi = require('./routes/admin-api');
-const pages = require('./routes/pages');
-const chatPage = require('./routes/chat-page');
 const chatApi = require('./routes/chat-api');
 const uploadRoute = require('./routes/upload');
 const captureRoute = require('./routes/capture');
@@ -26,7 +24,7 @@ const gdprRoute = require('./routes/gdpr');
 const brainHealthRoute = require('./routes/brain-health');
 const adminCostsRoute = require('./routes/admin-costs');
 const adminApiKeysRoute = require('./routes/admin-api-keys');
-const sharedRoute = require('./routes/shared');
+const sharedRoute = require('./routes/shared');  // JSON API only (HTML removed)
 const recallRoute = require('./routes/recall');
 const governanceRoute = require('./routes/governance');
 const brandsApiRoute = require('./routes/brands-api');
@@ -39,7 +37,9 @@ const reportsRoute = require('./routes/reports');
 const flowConfigRoute = require('./routes/flow-config');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
+const { seedOperatorTasks } = require('./seeds/operator-tasks');
 const { loadTools } = require('./tools/registry');
+const { loadToolsV2 } = require('./engine/tool-registry-v2');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
 const { startMothershipWorker } = require('./workers/mothership-worker');
@@ -137,9 +137,6 @@ app.use(brandChatApiRoute);
 // Auth routes — no auth required
 app.use(authRoutes);
 
-// Login/admin/settings pages — no auth on login, auth on others
-app.use(pages);
-
 // Memory API — requires auth or API key (MUST be before chatApi to avoid requireAuth interception)
 app.use(requireAuthOrApiKey, captureRoute);
 app.use(requireAuthOrApiKey, searchRoute);
@@ -158,10 +155,7 @@ app.use(requireAuthOrApiKey, brandsApiRoute);
 app.use(skillsRoute);
 app.use(flowConfigRoute);
 
-// Chat UI at / — requires auth
-app.use(chatPage);
-
-// Reports page + API — requires auth (handled inside route)
+// Reports API — requires auth (handled inside route)
 app.use(reportsRoute);
 
 // Mission Control API — requires auth + brand access
@@ -177,6 +171,31 @@ app.use(adminApi);
 app.use(adminCostsRoute);
 app.use(adminApiKeysRoute);
 app.use(intelligenceRoute);
+
+// ── React Frontend (SPA) ──
+const frontendDist = path.join(__dirname, 'frontend', 'dist');
+if (fs.existsSync(frontendDist)) {
+  // Serve static assets from the Vite build
+  app.use(express.static(frontendDist, { index: false }));
+
+  // SPA catch-all: serve index.html for any non-API route
+  app.get('*', (req, res, next) => {
+    // Skip API and known backend routes
+    const backendPrefixes = ['/api', '/auth', '/health', '/capture', '/search', '/webhooks',
+      '/admin', '/brain-health', '/shared', '/recent', '/stats', '/decisions', '/notify',
+      '/recall', '/governance', '/brands', '/brand', '/skills', '/flow-config', '/mission',
+      '/reports', '/upload', '/ruhi-chat', '/actions', '/edit-deltas', '/generations', '/gdpr',
+      '/robots.txt', '/favicon'];
+    if (backendPrefixes.some(p => req.path.startsWith(p))) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+
+  console.log('React frontend active, serving from', frontendDist);
+} else {
+  console.warn('No frontend build found at', frontendDist, '— run "cd src/frontend && npx vite build"');
+}
 
 // Admin sync endpoint — owner only
 app.post('/admin/sync/:source', requireAuth, async (req, res) => {
@@ -197,24 +216,30 @@ async function start() {
   try {
     await initSchema();
     await seedAgents();
+    await seedOperatorTasks(require('./db').pool);
     loadTools();
+    loadToolsV2();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`OpenBrain running on port ${PORT}`);
       // Start ingestion scheduler
       startScheduler();
       // Start v3 workers
-      startEmbeddingWorker();
+      // PAUSED: cost optimization — re-enable after embedding dimension fix
+      // startEmbeddingWorker();
       startModerationWorker();
       startMothershipWorker();
       startDistillationWorker();
       startIntelligenceWorker();
-      startResearchWorker();
+      // PAUSED: cost optimization — re-enable after embedding dimension fix
+      // startResearchWorker();
       startSyncWorker();
       startContextWorker();
       // Lucy v3 workers
       startProcessor();
-      startEpisodicEmbeddingWorker();
-      startSemanticExtractor();
+      // PAUSED: cost optimization — re-enable after embedding dimension fix
+      // startEpisodicEmbeddingWorker();
+      // PAUSED: cost optimization — re-enable after embedding dimension fix
+      // startSemanticExtractor();
       // Memory lifecycle — run daily (clean expired memories)
       cleanExpiredMemories().catch(err => console.error('Initial memory cleanup error:', err));
       setInterval(() => cleanExpiredMemories().catch(err => console.error('Memory cleanup error:', err)), 24 * 60 * 60 * 1000);

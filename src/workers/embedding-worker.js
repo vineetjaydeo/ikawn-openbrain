@@ -42,7 +42,10 @@ function jitteredDelay() {
 async function getEmbedding(text) {
   const genAI = getGenAI();
   const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
-  const result = await model.embedContent(text.slice(0, 8000));
+  const result = await model.embedContent({
+    content: { parts: [{ text: text.slice(0, 8000) }] },
+    outputDimensionality: 768
+  });
   return result.embedding.values;
 }
 
@@ -55,6 +58,7 @@ async function getBatchEmbeddings(texts) {
   const result = await model.batchEmbedContents({
     requests: texts.map(text => ({
       content: { parts: [{ text: text.slice(0, 8000) }] },
+      outputDimensionality: 768
     })),
   });
   return result.embeddings.map(e => e.values);

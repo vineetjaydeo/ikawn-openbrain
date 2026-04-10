@@ -28,21 +28,27 @@ function loadToolsV2(toolsDir) {
     try {
       // Clear require cache so reloads work in tests
       delete require.cache[require.resolve(filePath)];
-      const tool = require(filePath);
-      const result = validateTool(tool);
+      const exported = require(filePath);
 
-      if (!result.valid) {
-        console.warn(`[ToolRegistryV2] Skipping ${file}: ${result.errors.join(', ')}`);
-        continue;
+      // Support both single tool objects and arrays of tools
+      const toolList = Array.isArray(exported) ? exported : [exported];
+
+      for (const tool of toolList) {
+        const result = validateTool(tool);
+
+        if (!result.valid) {
+          console.warn(`[ToolRegistryV2] Skipping ${tool.name || file}: ${result.errors.join(', ')}`);
+          continue;
+        }
+
+        if (registry.has(tool.name)) {
+          console.warn(`[ToolRegistryV2] Duplicate tool name '${tool.name}' from ${file}, overwriting`);
+        }
+
+        registry.set(tool.name, tool);
+        loaded++;
+        console.log(`[ToolRegistryV2] Loaded: ${tool.name} [${tool.category}/${tool.permissionTier}]`);
       }
-
-      if (registry.has(tool.name)) {
-        console.warn(`[ToolRegistryV2] Duplicate tool name '${tool.name}' from ${file}, overwriting`);
-      }
-
-      registry.set(tool.name, tool);
-      loaded++;
-      console.log(`[ToolRegistryV2] Loaded: ${tool.name} [${tool.category}/${tool.permissionTier}]`);
     } catch (err) {
       console.warn(`[ToolRegistryV2] Failed to load ${file}: ${err.message}`);
     }

@@ -11,6 +11,7 @@ module.exports = {
     properties: {
       query: { type: 'string', description: 'Natural language search query' },
       limit: { type: 'number', description: 'Max results to return (default 8)' },
+      domain: { type: 'string', description: 'Filter by domain: marketing, product, content, analytics, operations, strategy, customer, technical' },
     },
     required: ['query'],
   },

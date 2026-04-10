@@ -7,15 +7,21 @@
  */
 
 let _searchMemoryFn = null;
+let _essentialKnowledge = null;
 
 function getSearchMemory() {
   if (!_searchMemoryFn) _searchMemoryFn = require('./memory-search').searchMemory;
   return _searchMemoryFn;
 }
 
+function getEssentialKnowledge() {
+  if (!_essentialKnowledge) _essentialKnowledge = require('./essential-knowledge');
+  return _essentialKnowledge;
+}
+
 function _setSearchMemory(fn) { _searchMemoryFn = fn; }
 
-const MAX_MEMORY_CONTEXT_CHARS = 2000;
+const MAX_MEMORY_CONTEXT_CHARS = 5000;
 
 /**
  * Retrieve relevant memories for a query and format as a context string.
@@ -73,6 +79,21 @@ async function retrieveRelevantMemories(query, context) {
 async function buildMemoryContext(messages, context) {
   if (!messages || messages.length === 0) return null;
 
+  const parts = [];
+
+  // L1: Essential knowledge (always loaded)
+  const brandId = context?.brandId || context?.brand_id || 'ikawn';
+  const userId = context?.userId || context?.user_id;
+  try {
+    const essentials = await getEssentialKnowledge().loadEssentialKnowledge(brandId, userId);
+    if (essentials) {
+      parts.push(essentials);
+    }
+  } catch (err) {
+    // L1 failure is non-fatal
+  }
+
+  // L2: Query-relevant memories (existing behavior)
   // Find the last user message
   let query = null;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -89,9 +110,20 @@ async function buildMemoryContext(messages, context) {
     }
   }
 
-  if (!query) return null;
+  if (query) {
+    const queryMemories = await retrieveRelevantMemories(query, context);
+    if (queryMemories) {
+      parts.push(`## Relevant to Current Query\n${queryMemories}`);
+    }
+  }
 
-  return retrieveRelevantMemories(query, context);
+  if (parts.length === 0) return null;
+
+  let combined = parts.join('\n\n');
+  if (combined.length > MAX_MEMORY_CONTEXT_CHARS) {
+    combined = combined.slice(0, MAX_MEMORY_CONTEXT_CHARS - 3) + '...';
+  }
+  return combined;
 }
 
 module.exports = { retrieveRelevantMemories, buildMemoryContext, _setSearchMemory };

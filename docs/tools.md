@@ -1,6 +1,6 @@
 # Lucy — Tool Catalog v2
 
-I have 24 tools at my disposal, organized across six categories. Each tool has a permission tier that determines whether I can use it automatically, need your confirmation first, or require explicit review and approval. Here is everything I can do.
+I have 28 tools at my disposal, organized across seven categories. Each tool has a permission tier that determines whether I can use it automatically, need your confirmation first, or require explicit review and approval. Here is everything I can do.
 
 ---
 
@@ -32,6 +32,10 @@ I have 24 tools at my disposal, organized across six categories. Each tool has a
 | `content_draft` | Draft social media content using brand voice | confirm |
 | `ikawn_generate` | Trigger visual agents on iKawn OS (Genie, Remix, Prism, Lazarus) | confirm |
 | `manage_automation` | Manage ActivePieces orchestration flows | confirm |
+| `kg_query` | Query relationships for an entity in the knowledge graph | auto |
+| `kg_add` | Add a relationship (triple) to the knowledge graph | auto |
+| `kg_invalidate` | Mark a relationship as no longer true (preserves history) | auto |
+| `kg_timeline` | Show chronological history of knowledge graph changes | auto |
 
 ---
 
@@ -143,6 +147,24 @@ Manage ActivePieces orchestration flows — list flows, get flow details, update
 
 ---
 
+## Knowledge Graph
+
+My structured memory layer. While `search_memory` does vector search across unstructured memories, the knowledge graph stores explicit relationships between entities (people, projects, companies, concepts) as subject-predicate-object triples with temporal awareness.
+
+### `kg_query` — auto
+Query all known relationships for a given entity. Returns triples (subject, predicate, object) involving that entity. Supports an optional `as_of` date to see relationships as they were at a specific point in time. I use this when asked about how entities relate to each other.
+
+### `kg_add` — auto
+Add a new relationship triple to the knowledge graph. Format: subject -[predicate]-> object. Common predicates include `works_at`, `is_a`, `located_in`, `reports_to`, `owns`, `uses`. Supports an optional `valid_from` date to record when the relationship began. I use this to capture structured facts from conversations.
+
+### `kg_invalidate` — auto
+Mark a relationship as no longer true by setting a `valid_to` timestamp. Does not delete the triple, preserving full history. I use this when facts change: someone leaves a company, a project is discontinued, a tool is replaced.
+
+### `kg_timeline` — auto
+Show the chronological history of knowledge graph changes. If an entity is provided, shows that entity's history (when relationships were added or invalidated). Without an entity, returns graph-wide statistics (total triples, active vs. invalidated, most connected entities). I use this for auditing and understanding how knowledge has evolved.
+
+---
+
 ## Permission Tiers
 
 Every tool falls into one of three permission levels:
@@ -173,3 +195,6 @@ My tools are most powerful in combination. Here are the flows I use most often:
 
 **Morning briefing flow:**
 `calendar_read` → today's schedule → `gmail_read` → unread messages → `system_status` → my health → `search_memory` → recent decisions and context → synthesize and present
+
+**Knowledge graph flow:**
+`kg_query` → find entity relationships → `search_memory` → enrich with unstructured context → `kg_add` → capture new facts discovered → `kg_timeline` → verify the graph is accurate

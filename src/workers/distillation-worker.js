@@ -4,8 +4,10 @@
 const { pool } = require('../db');
 const { getEmbedding } = require('../embeddings');
 const { callReflectionLLM, parseJSONSafe } = require('../utils/llm');
+const kg = require('../engine/knowledge-graph');
 const { createWorkerGuard } = require('../utils/worker-guards');
 const { isPersonalMemory } = require('../utils/memory-types');
+const { classifyByKeywords } = require('../engine/domain-taxonomy');
 
 const { resetExpiredBudgets, expireStaleActions } = require('../utils/governance');
 const { SUPERSESSION_THRESHOLD, HIGH_SIMILARITY_THRESHOLD } = require('../utils/similarity');
@@ -276,6 +278,11 @@ Rules:
           await upsertDistilledMemory(chunk[0].brand_id, userId, insight, chunk.map(e => e.id));
         }
 
+        // KG triple extraction (non-blocking, best-effort)
+        extractTriples(chunk, chunk[0].brand_id).catch(err =>
+          console.warn('[distillation] KG extraction error:', err.message)
+        );
+
         const eventIds = chunk.map(e => e.id);
         await pool.query(`
           UPDATE memory_events SET processed_at = NOW()
@@ -289,6 +296,66 @@ Rules:
         }
       }
     }
+  }
+}
+
+/**
+ * Extract knowledge graph triples from a batch of events using LLM.
+ * Non-fatal — failures are logged but never stop distillation.
+ *
+ * @param {Array} events - Batch of memory_events rows
+ * @param {string} brandId
+ */
+async function extractTriples(events, brandId) {
+  if (!events || events.length < 2) return;
+
+  try {
+    const conversationText = events.map(e => {
+      const data = typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload;
+      return `[${e.event_type}] ${data.content || data.text || JSON.stringify(data)}`;
+    }).join('\n');
+
+    const response = await callReflectionLLM('kg_extraction',
+      `You extract entity relationships from conversation data as JSON triples.
+Return ONLY a JSON array. If no relationships found, return [].
+Common predicates: works_at, manages, decided, prefers, uses, created, launched, reported, targets, competes_with, is_a, part_of, located_in`,
+      `Extract entity relationships from these events:
+
+${conversationText.slice(0, 4000)}
+
+Return format:
+[{"subject": "Entity Name", "subject_type": "person|brand|concept|product|campaign", "predicate": "relationship_verb", "object": "Entity Name", "object_type": "person|brand|concept|product|campaign", "valid_from": null, "confidence": 0.8}]
+
+Only extract relationships between NAMED entities. Skip generic/vague references.`
+    );
+
+    let triples;
+    try {
+      const text = typeof response === 'string' ? response : response?.content?.[0]?.text || '[]';
+      const match = text.match(/\[[\s\S]*\]/);
+      triples = match ? JSON.parse(match[0]) : [];
+    } catch {
+      return;
+    }
+
+    for (const t of triples) {
+      if (!t.subject || !t.predicate || !t.object) continue;
+      try {
+        await kg.addEntity(brandId, t.subject, t.subject_type || 'unknown');
+        await kg.addEntity(brandId, t.object, t.object_type || 'unknown');
+        await kg.addTriple(brandId, t.subject, t.predicate, t.object, {
+          confidence: t.confidence || 0.7,
+          sourceType: 'distillation',
+          validFrom: t.valid_from ? new Date(t.valid_from) : null
+        });
+      } catch (err) {
+        console.warn(`[distillation] KG triple insert failed: ${err.message}`);
+      }
+    }
+
+    console.log(`[distillation] Extracted ${triples.length} KG triples from ${events.length} events`);
+  } catch (err) {
+    console.warn(`[distillation] KG extraction failed (non-fatal): ${err.message}`);
   }
 }
 
@@ -317,10 +384,11 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
     embedding = await getEmbedding(insight.content);
   } catch (err) {
     console.error('[DistillationWorker] Embedding failed for insight, inserting without:', err.message);
+    const fallbackDomain = classifyByKeywords(insight.content);
     await pool.query(`
-      INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning]);
+      INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding_status, domain)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
+    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, fallbackDomain]);
     return;
   }
 
@@ -378,10 +446,11 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
       `, [reducedExisting, existing.id]);
 
       // Still insert the new contradicting memory so it can compete
+      const contradictDomain = classifyByKeywords(insight.content);
       await pool.query(`
-        INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, 'done')
-      `, [brandId, effectiveUserId, insight.memory_type, insight.content, reducedNew, sourceEventIds, insight.reasoning, vectorStr]);
+        INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status, domain)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, 'done', $9)
+      `, [brandId, effectiveUserId, insight.memory_type, insight.content, reducedNew, sourceEventIds, insight.reasoning, vectorStr, contradictDomain]);
 
       console.log(`[DistillationWorker] Contradiction: existing ${existing.id} (${existing.confidence}->${reducedExisting}), new (${insight.confidence}->${reducedNew})`);
     } else {
@@ -451,12 +520,13 @@ async function upsertDistilledMemory(brandId, userId, insight, sourceEventIds) {
     }
 
     // Insert new
+    const newDomain = classifyByKeywords(insight.content);
     await pool.query(`
-      INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, 'done')
-    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, vectorStr]);
+      INSERT INTO distilled_memory (brand_id, user_id, memory_type, content, confidence, source_event_ids, reasoning, embedding, embedding_status, domain)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, 'done', $9)
+    `, [brandId, effectiveUserId, insight.memory_type, insight.content, insight.confidence, sourceEventIds, insight.reasoning, vectorStr, newDomain]);
 
-    console.log(`[DistillationWorker] New ${insight.memory_type} memory (confidence ${insight.confidence})`);
+    console.log(`[DistillationWorker] New ${insight.memory_type} memory (confidence ${insight.confidence}, domain: ${newDomain || 'unclassified'})`);
   }
 }
 

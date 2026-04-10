@@ -10,6 +10,7 @@ module.exports = {
   parameters: {
     query: { type: 'string', required: true, description: 'Natural language search query' },
     limit: { type: 'number', required: false, description: 'Max results to return (default 8)' },
+    domain: { type: 'string', required: false, description: 'Filter by domain: marketing, product, content, analytics, operations, strategy, customer, technical' },
   },
   async execute(config, context) {
     const query = config.query;
@@ -22,6 +23,7 @@ module.exports = {
       userId: context.userId,
       query,
       limit: config.limit || 8,
+      domain: config.domain,
     });
 
     if (result.memories.length === 0) {

@@ -1323,7 +1323,54 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_semantic_active ON semantic_knowledge(brand_id) WHERE superseded_by IS NULL;
     `);
 
-    console.log('Database schema initialized (v18 — semantic knowledge)');
+    // ── Phase 3.1: domain column on semantic_knowledge & distilled_memory ──
+    await client.query(`ALTER TABLE semantic_knowledge ADD COLUMN IF NOT EXISTS domain VARCHAR(50)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_semantic_domain ON semantic_knowledge(brand_id, domain) WHERE superseded_by IS NULL`);
+    await client.query(`ALTER TABLE distilled_memory ADD COLUMN IF NOT EXISTS domain VARCHAR(50)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_distilled_domain ON distilled_memory(brand_id, domain) WHERE superseded_by IS NULL`);
+
+    // ── MemPalace Phase 1.1: Knowledge Graph tables ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS kg_entities (
+        id TEXT PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        name TEXT NOT NULL,
+        entity_type VARCHAR(30) DEFAULT 'unknown',
+        properties JSONB DEFAULT '{}',
+        seen_count INTEGER DEFAULT 1,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_kg_entities_brand ON kg_entities(brand_id);
+      CREATE INDEX IF NOT EXISTS idx_kg_entities_type ON kg_entities(brand_id, entity_type);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS kg_triples (
+        id BIGSERIAL PRIMARY KEY,
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        subject TEXT NOT NULL REFERENCES kg_entities(id),
+        predicate VARCHAR(100) NOT NULL,
+        object TEXT NOT NULL REFERENCES kg_entities(id),
+        valid_from TIMESTAMPTZ,
+        valid_to TIMESTAMPTZ,
+        confidence NUMERIC(3,2) DEFAULT 0.80,
+        source_type VARCHAR(30),
+        source_ref TEXT,
+        extracted_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_kg_triples_brand ON kg_triples(brand_id);
+      CREATE INDEX IF NOT EXISTS idx_kg_triples_subject ON kg_triples(subject);
+      CREATE INDEX IF NOT EXISTS idx_kg_triples_object ON kg_triples(object);
+      CREATE INDEX IF NOT EXISTS idx_kg_triples_temporal ON kg_triples(valid_from, valid_to);
+      CREATE INDEX IF NOT EXISTS idx_kg_triples_active ON kg_triples(brand_id) WHERE valid_to IS NULL;
+    `);
+
+    console.log('Database schema initialized (v19 — knowledge graph)');
   } finally {
     client.release();
   }

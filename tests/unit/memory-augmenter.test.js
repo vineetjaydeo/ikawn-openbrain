@@ -65,35 +65,32 @@ describe('memory-augmenter', () => {
       expect(mockSearchMemory).not.toHaveBeenCalled();
     });
 
-    it('truncates to 2000 chars', async () => {
-      // Content is capped at 200 chars per snippet, so we need many results
-      // to exceed 2000. Instead, we'll mock searchMemory to return enough results
-      // by testing the truncation boundary directly with many entries.
+    it('truncates to 5000 chars', async () => {
+      // Each entry produces ~240 chars in output. We need enough entries
+      // to exceed the 5000-char limit and trigger truncation.
       const longContent = 'A'.repeat(300);
-      const entries = Array.from({ length: 5 }, (_, i) => ({
+      const entries = Array.from({ length: 13 }, (_, i) => ({
         content: longContent,
         source_table: 'semantic_knowledge',
         confidence: 0.9,
-        // Use a very long fact_type to pad each line
-        created_at: `2026-01-0${i + 1}T00:00:00Z`,
+        created_at: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
         similarity: 0.9,
       }));
-      // Also add entries that together with header exceed 2000 chars
-      // Each semantic line: ~240 chars. 5 = ~1200. Under 2000.
-      // So add 5 more episodic entries to push over
-      for (let i = 0; i < 5; i++) {
+      // Add 12 more episodic entries to push well over 5000 chars
+      // 25 entries × ~240 chars each = ~6000 chars + header
+      for (let i = 0; i < 12; i++) {
         entries.push({
           content: longContent,
           source_table: 'episodic_memories',
-          created_at: `2026-02-0${i + 1}T00:00:00Z`,
+          created_at: `2026-02-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
           similarity: 0.9,
         });
       }
       mockSearchMemory.mockResolvedValue(entries);
 
       const result = await retrieveRelevantMemories('test', { brandId: 'ikawn', userId: 'u1' });
-      expect(result.length).toBeLessThanOrEqual(2000);
-      // With 10 entries of ~230 chars each = ~2300+header, truncation should trigger
+      expect(result.length).toBeLessThanOrEqual(5000);
+      // With 25 entries of ~240 chars each = ~6000+header, truncation should trigger
       expect(result).toMatch(/\.\.\.$/);
     });
   });

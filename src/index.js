@@ -40,6 +40,7 @@ const flowConfigRoute = require('./routes/flow-config');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
 const { loadTools } = require('./tools/registry');
+const { loadToolsV2 } = require('./engine/tool-registry-v2');
 const { startEmbeddingWorker } = require('./workers/embedding-worker');
 const { startModerationWorker } = require('./workers/moderation-worker');
 const { startMothershipWorker } = require('./workers/mothership-worker');
@@ -198,6 +199,7 @@ async function start() {
     await initSchema();
     await seedAgents();
     loadTools();
+    loadToolsV2();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`OpenBrain running on port ${PORT}`);
       // Start ingestion scheduler

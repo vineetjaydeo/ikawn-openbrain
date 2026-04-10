@@ -8,6 +8,8 @@
 
 let _pool = null;
 let _getEmbedding = null;
+let _kg = null;
+function getKG() { if (!_kg) _kg = require('./knowledge-graph'); return _kg; }
 
 function getPool() {
   if (!_pool) _pool = require('../db').pool;
@@ -21,6 +23,18 @@ function getEmbeddingFn() {
 
 function _setPool(p) { _pool = p; }
 function _setGetEmbedding(fn) { _getEmbedding = fn; }
+
+/**
+ * Extract capitalized words/phrases that look like named entities.
+ * Returns deduplicated lowercase array.
+ */
+function extractEntityMentions(text) {
+  if (!text) return [];
+  // Extract capitalized words/phrases that look like named entities
+  const matches = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/g) || [];
+  // Deduplicate and return lowercase
+  return [...new Set(matches.map(m => m.toLowerCase()))];
+}
 
 /**
  * Cosine similarity between two float arrays.
@@ -77,6 +91,7 @@ function parseEmbedding(raw) {
  * @param {number} [params.minSimilarity=0.5] - Minimum similarity threshold
  * @param {string} [params.tables='both'] - 'episodic', 'semantic', or 'both'
  * @param {string[]} [params.contentTypes] - Optional content_type filter (episodic only)
+ * @param {string} [params.domain] - Optional domain filter (semantic_knowledge only)
  * @returns {Promise<Array>} Ranked results with combined score
  */
 async function searchMemory(params) {
@@ -89,6 +104,7 @@ async function searchMemory(params) {
     minSimilarity = 0.5,
     tables = 'both',
     contentTypes,
+    domain,
   } = params;
 
   if (!query || !brandId) return [];
@@ -112,9 +128,28 @@ async function searchMemory(params) {
   // --- Semantic knowledge ---
   if (tables === 'semantic' || tables === 'both') {
     const semanticResults = await _searchSemantic(pool, {
-      brandId, queryEmbedding, now,
+      brandId, queryEmbedding, now, domain,
     });
     results.push(...semanticResults);
+  }
+
+  // KG entity boost (best-effort, non-blocking)
+  try {
+    const queryEntities = extractEntityMentions(query);
+    if (queryEntities.length > 0) {
+      const kgConnections = await getKG().getEntityConnections(brandId, queryEntities);
+      if (kgConnections.size > 0) {
+        for (const result of results) {
+          const mentionedEntities = extractEntityMentions(result.content);
+          const overlap = mentionedEntities.filter(e => kgConnections.has(e));
+          if (overlap.length > 0) {
+            result.combinedScore += Math.min(0.1, overlap.length * 0.05);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    // KG boost is best-effort, don't fail search
   }
 
   // Filter by minSimilarity, sort by combined score descending, take topK
@@ -198,14 +233,19 @@ async function _searchEpisodic(pool, opts) {
  * @private Search semantic_knowledge table (active facts only).
  */
 async function _searchSemantic(pool, opts) {
-  const { brandId, queryEmbedding, now } = opts;
+  const { brandId, queryEmbedding, now, domain } = opts;
 
-  const { rows } = await pool.query(
-    `SELECT id, content, fact_type, confidence, embedding, created_at, times_referenced
+  let sql = `SELECT id, content, fact_type, confidence, embedding, created_at, times_referenced
      FROM semantic_knowledge
-     WHERE brand_id = $1 AND superseded_by IS NULL AND embedding IS NOT NULL`,
-    [brandId]
-  );
+     WHERE brand_id = $1 AND superseded_by IS NULL AND embedding IS NOT NULL`;
+  const params = [brandId];
+
+  if (domain) {
+    sql += ` AND domain = $2`;
+    params.push(domain);
+  }
+
+  const { rows } = await pool.query(sql, params);
 
   return rows.map(row => {
     const emb = parseEmbedding(row.embedding);

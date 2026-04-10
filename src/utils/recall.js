@@ -11,6 +11,7 @@ const { getEmbedding } = require('../embeddings');
  * @property {string} [userId] - Scope personal memories to this user (shared memories always included)
  * @property {string[]} [memoryTypes] - Filter by memory types (e.g. ['BRAND_VOICE_RULE', 'CREATIVE_PATTERN'])
  * @property {'both' | 'memories_only' | 'distilled_only'} [source='both'] - Which tables to query
+ * @property {string} [domain] - Filter distilled_memory by domain (e.g. 'marketing', 'product', 'technical')
  * @property {number} [limit=10] - Max results
  * @property {boolean} [includeReasoning=true] - Include reasoning field
  */
@@ -40,6 +41,7 @@ async function recall(params) {
     query,
     userId,
     memoryTypes,
+    domain,
     source = 'both',
     limit = 10,
     includeReasoning = true,
@@ -78,6 +80,11 @@ async function recall(params) {
     if (memoryTypes && memoryTypes.length > 0) {
       distilledWhere += ` AND memory_type = ANY($${paramIdx++})`;
       distilledParams.push(memoryTypes);
+    }
+
+    if (domain) {
+      distilledWhere += ` AND domain = $${paramIdx++}`;
+      distilledParams.push(domain);
     }
 
     const distilledQuery = `

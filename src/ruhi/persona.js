@@ -1,4 +1,5 @@
 const { getTools } = require('../tools/registry');
+const { listAllTools } = require('../engine/tool-registry-v2');
 const { pool } = require('../db');
 const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 
@@ -206,10 +207,15 @@ async function loadBrandKnowledge(brandId) {
 }
 
 async function buildSystemPrompt(userName, userRole, memoryContext, customInstructions, brandId) {
-  // Build dynamic tool list from registry
+  // Build dynamic tool list from v1 + v2 registries
   const tools = getTools();
-  const toolsList = tools.size > 0
-    ? 'Available tools: ' + [...tools.values()].map(t => `${t.name} (${t.description || 'no description'})`).join(', ')
+  const v2Tools = listAllTools();
+  const allToolDescriptions = [
+    ...[...tools.values()].map(t => `${t.name} (${t.description || 'no description'})`),
+    ...v2Tools.map(t => `${t.name} (${t.description || 'no description'})`),
+  ];
+  const toolsList = allToolDescriptions.length > 0
+    ? 'Available tools: ' + allToolDescriptions.join(', ')
     : 'No tools currently available.';
 
   // Load brand-specific context

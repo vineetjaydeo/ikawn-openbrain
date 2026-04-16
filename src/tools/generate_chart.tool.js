@@ -1,7 +1,7 @@
 // src/tools/generate_chart.tool.js
 'use strict';
 
-const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
+const https = require('https');
 const { uploadToR2 } = require('../utils/storage');
 
 const DEFAULT_PALETTE = [
@@ -27,7 +27,6 @@ function buildDatasets(datasets, chartType) {
     };
 
     if (isPieType) {
-      // Pie/doughnut: each segment gets its own color
       base.backgroundColor = ds.data.map((_, j) =>
         hexToRgba(DEFAULT_PALETTE[j % DEFAULT_PALETTE.length], 0.85)
       );
@@ -39,7 +38,6 @@ function buildDatasets(datasets, chartType) {
       base.borderWidth = 2.5;
       base.pointBackgroundColor = color;
       base.pointRadius = 4;
-      base.pointHoverRadius = 6;
       base.tension = 0.3;
       base.fill = true;
     } else if (chartType === 'radar') {
@@ -49,7 +47,6 @@ function buildDatasets(datasets, chartType) {
       base.pointBackgroundColor = color;
       base.pointRadius = 3;
     } else {
-      // bar
       base.backgroundColor = hexToRgba(color, 0.85);
       base.borderColor = color;
       base.borderWidth = 1;
@@ -61,7 +58,7 @@ function buildDatasets(datasets, chartType) {
 }
 
 function buildChartConfig(config) {
-  const { title, type, labels, datasets, width, height } = config;
+  const { title, type, labels, datasets } = config;
   const isPieType = type === 'pie' || type === 'doughnut';
   const isRadar = type === 'radar';
 
@@ -73,7 +70,6 @@ function buildChartConfig(config) {
     },
     options: {
       responsive: false,
-      animation: false,
       layout: {
         padding: { top: 10, bottom: 10, left: 10, right: 10 },
       },
@@ -95,41 +91,12 @@ function buildChartConfig(config) {
             usePointStyle: true,
           },
         },
-        tooltip: {
-          enabled: true,
-        },
       },
     },
   };
 
-  // Configure scales
   if (!isPieType) {
-    chartConfig.options.scales = {
-      x: {
-        grid: {
-          display: !isRadar,
-          color: 'rgba(0, 0, 0, 0.06)',
-        },
-        ticks: {
-          font: { size: 11 },
-          color: '#6B7280',
-        },
-      },
-      y: {
-        grid: {
-          display: true,
-          color: 'rgba(0, 0, 0, 0.06)',
-        },
-        ticks: {
-          font: { size: 11 },
-          color: '#6B7280',
-        },
-        beginAtZero: true,
-      },
-    };
-
     if (isRadar) {
-      delete chartConfig.options.scales;
       chartConfig.options.scales = {
         r: {
           grid: { color: 'rgba(0, 0, 0, 0.08)' },
@@ -138,10 +105,80 @@ function buildChartConfig(config) {
           beginAtZero: true,
         },
       };
+    } else {
+      chartConfig.options.scales = {
+        x: {
+          grid: { display: true, color: 'rgba(0, 0, 0, 0.06)' },
+          ticks: { font: { size: 11 }, color: '#6B7280' },
+        },
+        y: {
+          grid: { display: true, color: 'rgba(0, 0, 0, 0.06)' },
+          ticks: { font: { size: 11 }, color: '#6B7280' },
+          beginAtZero: true,
+        },
+      };
     }
   }
 
   return chartConfig;
+}
+
+function fetchChartImage(chartConfig, width, height) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({
+      chart: chartConfig,
+      width,
+      height,
+      backgroundColor: '#ffffff',
+      format: 'png',
+      version: '4',
+    });
+
+    const options = {
+      hostname: 'quickchart.io',
+      path: '/chart/create',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+      timeout: 15000,
+    };
+
+    const req = https.request(options, (res) => {
+      if (res.statusCode === 200) {
+        const body = [];
+        res.on('data', (chunk) => body.push(chunk));
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(Buffer.concat(body).toString());
+            if (json.success && json.url) {
+              const imgReq = https.get(json.url, (imgRes) => {
+                const imgBuf = [];
+                imgRes.on('data', (chunk) => imgBuf.push(chunk));
+                imgRes.on('end', () => resolve(Buffer.concat(imgBuf)));
+              });
+              imgReq.on('error', reject);
+              imgReq.setTimeout(15000, () => { imgReq.destroy(); reject(new Error('Image download timeout')); });
+            } else {
+              reject(new Error(json.message || 'QuickChart API returned no URL'));
+            }
+          } catch (e) {
+            reject(new Error('Failed to parse QuickChart response'));
+          }
+        });
+      } else {
+        const body = [];
+        res.on('data', (chunk) => body.push(chunk));
+        res.on('end', () => reject(new Error(`QuickChart API returned ${res.statusCode}: ${Buffer.concat(body).toString().substring(0, 200)}`)));
+      }
+    });
+
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('QuickChart API timeout')); });
+    req.write(payload);
+    req.end();
+  });
 }
 
 module.exports = {
@@ -180,14 +217,8 @@ module.exports = {
     }
 
     try {
-      const chartCanvas = new ChartJSNodeCanvas({
-        width,
-        height,
-        backgroundColour: '#ffffff',
-      });
-
       const chartConfig = buildChartConfig({ title, type, labels, datasets, width, height });
-      const pngBuffer = await chartCanvas.renderToBuffer(chartConfig);
+      const pngBuffer = await fetchChartImage(chartConfig, width, height);
 
       const safeTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 60);
       const filename = `${safeTitle}_${Date.now()}.png`;
@@ -198,7 +229,7 @@ module.exports = {
       return {
         success: true,
         data: { url, filename, type, width, height },
-        summary: `Generated ${type} chart "${title}" (${width}x${height}) with ${datasets.length} dataset(s).`,
+        summary: `Generated ${type} chart "${title}" (${width}x${height}) with ${datasets.length} dataset(s). Download: ${url}`,
       };
     } catch (err) {
       return { success: false, data: null, summary: `Chart generation failed: ${err.message}` };

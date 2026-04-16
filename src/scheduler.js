@@ -14,6 +14,11 @@ let githubInterval = null;
 let calendarInterval = null;
 let retentionInterval = null;
 let taskSchedulerInterval = null;
+let gmailSyncInterval = null;
+let outlookSyncInterval = null;
+let outlookCalendarSyncInterval = null;
+let analyticsSyncInterval = null;
+let metaSyncInterval = null;
 
 const BASE_URL = process.env.BASE_URL || 'https://ikawn-openbrain.fly.dev';
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -70,13 +75,24 @@ function startScheduler() {
     }
   }, 24 * 60 * 60 * 1000);
 
+  // ── Connector syncs: email (15min), calendar (2hr), analytics (6hr), meta (6hr) ──
+  const FIFTEEN_MIN = 15 * 60 * 1000;
+  const TWO_HOURS = 2 * 60 * 60 * 1000;
+  const SIX_HOURS = 6 * 60 * 60 * 1000;
+
+  gmailSyncInterval = setInterval(() => runConnectorSync('gmail'), FIFTEEN_MIN);
+  outlookSyncInterval = setInterval(() => runConnectorSync('outlook'), FIFTEEN_MIN);
+  outlookCalendarSyncInterval = setInterval(() => runConnectorSync('outlook-calendar'), TWO_HOURS);
+  analyticsSyncInterval = setInterval(() => runConnectorSync('google-analytics'), SIX_HOURS);
+  metaSyncInterval = setInterval(() => runConnectorSync('meta-campaigns'), SIX_HOURS);
+
   // ── Agent Platform: Task Scheduler (30s polling) ──
   taskSchedulerInterval = setInterval(runTaskScheduler, 30_000);
 
   // ── Event Bus: trigger-based tasks ──
   setupEventListeners();
 
-  console.log('Scheduler started: GitHub 30min, Calendar 2hr, Retention daily, Tasks 30s');
+  console.log('Scheduler started: GitHub 30min, Calendar 2hr, Retention daily, Tasks 30s, Connectors active');
 }
 
 /**
@@ -406,15 +422,101 @@ function setupEventListeners() {
   });
 }
 
+/**
+ * Query ob_connector_credentials for active connectors of a given type.
+ */
+async function getActiveConnectors(connectorType) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT brand_id, credentials, config FROM ob_connector_credentials
+       WHERE connector_type = $1 AND status = 'active'`,
+      [connectorType]
+    );
+    return rows;
+  } catch (err) {
+    console.error(`[Connectors] Failed to query active ${connectorType} connectors:`, err.message);
+    return [];
+  }
+}
+
+/**
+ * Connector sync dispatch map. Each key maps to a lazy-loaded sync function.
+ */
+const CONNECTOR_SYNC_MAP = {
+  'gmail': () => require('./connectors/gmail').syncEmails,
+  'outlook': () => require('./connectors/outlook').syncEmails,
+  'outlook-calendar': () => require('./connectors/outlook-calendar').syncCalendarEvents,
+  'google-analytics': () => require('./connectors/google-analytics').syncAnalyticsReport,
+  'meta-campaigns': () => require('./connectors/meta-campaigns').syncCampaigns,
+};
+
+/**
+ * Run sync for all active connectors of a given type.
+ */
+async function runConnectorSync(connectorType) {
+  const getSyncFn = CONNECTOR_SYNC_MAP[connectorType];
+  if (!getSyncFn) {
+    console.error(`[Connectors] Unknown connector type: ${connectorType}`);
+    return;
+  }
+
+  const connectors = await getActiveConnectors(connectorType);
+  if (connectors.length === 0) return;
+
+  let syncFn;
+  try {
+    syncFn = getSyncFn();
+  } catch (err) {
+    // Connector module not yet available (being built by other agents)
+    console.warn(`[Connectors] Module for ${connectorType} not loaded yet:`, err.message);
+    return;
+  }
+
+  for (const conn of connectors) {
+    try {
+      await syncFn(conn.brand_id, conn.credentials);
+      // Update last_sync and sync_count on success
+      await pool.query(
+        `UPDATE ob_connector_credentials SET last_sync = NOW(), sync_count = sync_count + 1,
+         error_message = NULL, updated_at = NOW()
+         WHERE brand_id = $1 AND connector_type = $2`,
+        [conn.brand_id, connectorType]
+      );
+    } catch (err) {
+      console.error(`[Connectors] ${connectorType} sync failed for ${conn.brand_id}:`, err.message);
+      // Record the error but don't disable the connector
+      await pool.query(
+        `UPDATE ob_connector_credentials SET error_message = $1, updated_at = NOW()
+         WHERE brand_id = $2 AND connector_type = $3`,
+        [err.message, conn.brand_id, connectorType]
+      ).catch(() => {});
+    }
+  }
+}
+
 async function triggerSync(source) {
   switch (source) {
     case 'github':
       return await syncGitHub();
     case 'calendar':
       return await syncCalendar();
+    case 'gmail':
+    case 'outlook':
+    case 'outlook-calendar':
+    case 'google-analytics':
+    case 'meta-campaigns':
+      return await runConnectorSync(source);
     case 'all':
       const github = await syncGitHub();
       const calendar = await syncCalendar();
+      // Also trigger all connector syncs
+      await Promise.allSettled([
+        runConnectorSync('gmail'),
+        runConnectorSync('outlook'),
+        runConnectorSync('outlook-calendar'),
+        runConnectorSync('google-analytics'),
+        runConnectorSync('meta-campaigns'),
+      ]);
       return { github, calendar };
     default:
       throw new Error(`Unknown sync source: ${source}`);
@@ -426,6 +528,11 @@ function stopScheduler() {
   if (calendarInterval) clearInterval(calendarInterval);
   if (retentionInterval) clearInterval(retentionInterval);
   if (taskSchedulerInterval) clearInterval(taskSchedulerInterval);
+  if (gmailSyncInterval) clearInterval(gmailSyncInterval);
+  if (outlookSyncInterval) clearInterval(outlookSyncInterval);
+  if (outlookCalendarSyncInterval) clearInterval(outlookCalendarSyncInterval);
+  if (analyticsSyncInterval) clearInterval(analyticsSyncInterval);
+  if (metaSyncInterval) clearInterval(metaSyncInterval);
   stopFlushTimer();
 }
 

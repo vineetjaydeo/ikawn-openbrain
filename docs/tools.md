@@ -1,6 +1,6 @@
-# Lucy — Tool Catalog v2
+# Lucy — Tool Catalog v3
 
-I have 28 tools at my disposal, organized across seven categories. Each tool has a permission tier that determines whether I can use it automatically, need your confirmation first, or require explicit review and approval. Here is everything I can do.
+I have 37 tools at my disposal, organized across nine categories. Each tool has a permission tier that determines whether I can use it automatically, need your confirmation first, or require explicit review and approval. Here is everything I can do.
 
 ---
 
@@ -36,6 +36,15 @@ I have 28 tools at my disposal, organized across seven categories. Each tool has
 | `kg_add` | Add a relationship (triple) to the knowledge graph | auto |
 | `kg_invalidate` | Mark a relationship as no longer true (preserves history) | auto |
 | `kg_timeline` | Show chronological history of knowledge graph changes | auto |
+| `generate_pdf` | Generate professional PDF reports from structured content | confirm |
+| `generate_pptx` | Generate PowerPoint presentations with customizable themes | confirm |
+| `generate_document` | Generate Word documents (DOCX) with proper formatting | confirm |
+| `generate_spreadsheet` | Generate Excel spreadsheets with formatted data | confirm |
+| `generate_chart` | Generate charts (bar, line, pie, etc.) as PNG images | confirm |
+| `email_access` | Read, search, or draft emails across Gmail and Outlook | confirm |
+| `calendar_manage` | Read, create, or manage calendar events | confirm |
+| `analytics_report` | Fetch Google Analytics traffic and conversion data | auto |
+| `campaign_report` | Fetch Meta campaign performance data | auto |
 
 ---
 
@@ -165,6 +174,45 @@ Show the chronological history of knowledge graph changes. If an entity is provi
 
 ---
 
+## Document Generation
+
+My ability to produce professional business documents on demand. When a user asks me to create a report, presentation, spreadsheet, or any formatted document, these are the tools I reach for.
+
+### `generate_pdf` -- confirm
+Generate professional PDF reports from structured content. I use this when someone asks for a summary report, analysis document, or any deliverable that should be polished and printable. I provide the title, sections, and optional styling, and the tool produces a downloadable PDF. Best for: executive summaries, brand reports, analytics recaps, project status documents.
+
+### `generate_pptx` -- confirm
+Generate PowerPoint presentations with customizable themes and slide layouts. I use this when someone needs a deck for a meeting, pitch, or internal review. I provide the slide content, structure, and theme preferences, and the tool builds a complete PPTX file. Best for: pitch decks, campaign reviews, strategy presentations, quarterly business reviews.
+
+### `generate_document` -- confirm
+Generate Word documents (DOCX) with proper formatting, headings, and structure. I use this when the output needs to be editable after delivery, or when the recipient expects a Word file specifically. Best for: proposals, SOPs, briefs, content drafts that need collaborative editing.
+
+### `generate_spreadsheet` -- confirm
+Generate Excel spreadsheets with formatted data, headers, and multiple sheets when needed. I use this for structured data exports, financial summaries, inventory reports, or any tabular data that benefits from Excel's filtering and formula capabilities. Best for: data exports, budget trackers, campaign performance tables, inventory lists.
+
+### `generate_chart` -- confirm
+Generate charts and data visualizations as PNG images. Supports bar charts, line charts, pie charts, area charts, and more. I use this when data needs to be visualized for quick comprehension, whether standalone or as part of a larger report. Best for: trend analysis, performance comparisons, distribution breakdowns, dashboard-style visuals.
+
+---
+
+## Connected Services
+
+My connections to external platforms. These tools sync data from Gmail, Outlook, Google Calendar, Google Analytics, and Meta into my memory, and allow me to take actions on behalf of the user.
+
+### `email_access` -- confirm
+Read, search, and draft emails across both Gmail and Outlook. I can search by sender, subject, date range, or keywords. I can read full message threads and draft replies or new emails. Drafts are never sent automatically. I use this when someone asks about their email, needs a summary of recent correspondence, or wants me to compose a message. Requires the brand to have Gmail or Outlook credentials connected.
+
+### `calendar_manage` -- confirm
+Read, create, and manage calendar events across Google Calendar and Outlook Calendar. I can list upcoming events, check for conflicts, create new events with attendees, and update existing ones. I use this for scheduling, meeting preparation, availability checks, and daily briefings. Requires calendar credentials to be connected.
+
+### `analytics_report` -- auto
+Fetch Google Analytics traffic and conversion data for a connected property. Returns sessions, page views, top pages, traffic sources, user demographics, and engagement metrics over a specified date range. I use this when someone asks about website performance, traffic trends, or conversion rates. Syncs automatically every 6 hours for connected brands.
+
+### `campaign_report` -- auto
+Fetch Meta (Facebook/Instagram) campaign performance data including impressions, clicks, spend, conversions, and ROAS. I use this when someone asks about ad performance, campaign ROI, or wants a comparison across campaigns. Syncs automatically every 6 hours for connected brands.
+
+---
+
 ## Permission Tiers
 
 Every tool falls into one of three permission levels:
@@ -198,3 +246,12 @@ My tools are most powerful in combination. Here are the flows I use most often:
 
 **Knowledge graph flow:**
 `kg_query` → find entity relationships → `search_memory` → enrich with unstructured context → `kg_add` → capture new facts discovered → `kg_timeline` → verify the graph is accurate
+
+**Report generation flow:**
+`search_memory` → gather data and context → `analytics_report` or `campaign_report` → pull live metrics → `generate_chart` → visualize key data → `generate_pdf` or `generate_pptx` → package into a deliverable → `notify` or `gmail_draft` → deliver to the recipient
+
+**Email triage flow:**
+`email_access` → read recent emails → `search_memory` → check for relevant context → `calendar_manage` → check scheduling conflicts → synthesize and present a summary with recommended actions
+
+**Document analysis flow:**
+User uploads a file → auto-captured to memory via `captureMessage` → `search_memory` → find the uploaded content → analyze, summarize, or answer questions about it

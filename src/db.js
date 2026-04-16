@@ -1370,7 +1370,32 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_kg_triples_active ON kg_triples(brand_id) WHERE valid_to IS NULL;
     `);
 
-    console.log('Database schema initialized (v19 — knowledge graph)');
+    // ── v20: Connector Credentials ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ob_connector_credentials (
+        id SERIAL PRIMARY KEY,
+        brand_id TEXT NOT NULL,
+        connector_type TEXT NOT NULL,
+        credentials JSONB NOT NULL,
+        config JSONB DEFAULT '{}',
+        status TEXT DEFAULT 'active',
+        last_sync TIMESTAMPTZ,
+        sync_count INTEGER DEFAULT 0,
+        error_message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brand_id, connector_type)
+      )
+    `);
+
+    // Add columns that may be missing from earlier schema versions
+    await client.query(`
+      ALTER TABLE ob_connector_credentials ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}';
+      ALTER TABLE ob_connector_credentials ADD COLUMN IF NOT EXISTS sync_count INTEGER DEFAULT 0;
+      ALTER TABLE ob_connector_credentials ADD COLUMN IF NOT EXISTS error_message TEXT;
+    `);
+
+    console.log('Database schema initialized (v20 — connector credentials)');
   } finally {
     client.release();
   }

@@ -13,7 +13,7 @@ describe('tool permissions', () => {
     getToolCostTier = registry.getToolCostTier;
     // Load tools so the registry is populated
     registry.loadTools();
-  });
+  }, 30000);
 
   // ── getToolCostTier ──────────────────────────────────────────────────
 

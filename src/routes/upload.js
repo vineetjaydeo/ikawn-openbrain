@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { uploadToR2, getPresignedUploadUrl } = require('../utils/storage');
 const { extractText } = require('../utils/doc-parser');
+const { captureMessage } = require('../utils/capture');
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -75,6 +76,20 @@ router.post('/api/upload/direct', async (req, res, next) => {
         // Non-fatal — return upload result without extracted text
         console.error('Text extraction failed:', err.message);
       }
+    }
+
+    // Auto-capture extracted document text to memory (fire-and-forget)
+    if (result.extracted_text && result.extracted_text.length > 50) {
+      captureMessage({
+        brand_id: req.brand_id || 'ikawn',
+        user_id: req.session?.user?.id,
+        channel: 'file_upload',
+        direction: 'inbound',
+        content: `[Uploaded file: ${filename}]\n\n${result.extracted_text.substring(0, 10000)}`,
+        source_ref: `upload-${key}`,
+        access_level: 'private',
+        memory_type: 'document',
+      });
     }
 
     res.json(result);

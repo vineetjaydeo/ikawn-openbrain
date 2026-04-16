@@ -61,6 +61,8 @@ const DEFAULT_COST_TIERS = {
   notify: 'high',
   gmail_send: 'high',
   deploy_openbrain: 'critical',
+  start_background_task: 'medium',
+  check_task_status: 'low',
 };
 
 function getToolCostTier(toolName) {

@@ -1395,7 +1395,35 @@ async function initSchema() {
       ALTER TABLE ob_connector_credentials ADD COLUMN IF NOT EXISTS error_message TEXT;
     `);
 
-    console.log('Database schema initialized (v20 — connector credentials)');
+    // ── v21: Background Tasks ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ob_background_tasks (
+        id SERIAL PRIMARY KEY,
+        brand_id TEXT NOT NULL,
+        user_id TEXT,
+        conversation_id TEXT,
+        task_type TEXT NOT NULL,
+        task_description TEXT NOT NULL,
+        deliverables TEXT,
+        context TEXT,
+        status TEXT DEFAULT 'pending',
+        progress TEXT,
+        result JSONB,
+        model_used TEXT DEFAULT 'haiku',
+        tokens_used INTEGER DEFAULT 0,
+        started_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        error_message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bg_tasks_status ON ob_background_tasks(status) WHERE status = 'pending';
+      CREATE INDEX IF NOT EXISTS idx_bg_tasks_brand_user ON ob_background_tasks(brand_id, user_id);
+    `);
+
+    console.log('Database schema initialized (v21 — background tasks)');
   } finally {
     client.release();
   }

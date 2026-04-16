@@ -3,7 +3,7 @@ const cookieSession = require('cookie-session');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
-const { initSchema } = require('./db');
+const { initSchema, pool } = require('./db');
 const { requireAuth, requireAuthOrApiKey, requireBrand, requireBrandAccess } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
 const adminApi = require('./routes/admin-api');
@@ -37,6 +37,7 @@ const intelligenceRoute = require('./routes/intelligence');
 const missionControlRoute = require('./routes/mission-control');
 const reportsRoute = require('./routes/reports');
 const flowConfigRoute = require('./routes/flow-config');
+const connectorRoutes = require('./routes/connector-routes');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
 const { loadTools } = require('./tools/registry');
@@ -50,6 +51,7 @@ const { startResearchWorker } = require('./workers/research-worker');
 const { startSyncWorker } = require('./workers/sync-worker');
 const { startContextWorker } = require('./workers/context-worker');
 const { startProcessor } = require('./engine/task-processor');
+const { BackgroundExecutor } = require('./engine/background-executor');
 const { startEpisodicEmbeddingWorker } = require('./workers/episodic-embedding-worker');
 const { startSemanticExtractor } = require('./workers/semantic-extractor');
 const { cleanExpiredMemories } = require('./workers/memory-lifecycle');
@@ -158,6 +160,7 @@ app.use(requireAuthOrApiKey, governanceRoute);
 app.use(requireAuthOrApiKey, brandsApiRoute);
 app.use(skillsRoute);
 app.use(flowConfigRoute);
+app.use(connectorRoutes);
 
 // Chat UI at / — requires auth
 app.use(chatPage);
@@ -215,6 +218,8 @@ async function start() {
       startContextWorker();
       // Lucy v3 workers
       startProcessor();
+      const bgExecutor = new BackgroundExecutor(pool);
+      bgExecutor.start();
       startEpisodicEmbeddingWorker();
       startSemanticExtractor();
       // Memory lifecycle — run daily (clean expired memories)

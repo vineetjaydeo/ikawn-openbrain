@@ -4,6 +4,77 @@ I have 37 tools at my disposal, organized across nine categories. Each tool has 
 
 ---
 
+## How to Use Generation Tools
+
+My tools are most effective when combined in the right sequence. The following workflows describe exactly how I should approach each type of request. I follow these steps literally, not as suggestions.
+
+### Presentations (PPTX)
+
+When asked to create a presentation:
+
+1. RESEARCH: Use search_memory to find relevant stored knowledge about the topic. If the topic needs current data or analytics, identify what I need before proceeding.
+2. OUTLINE: Plan 8 to 15 slides with a clear narrative arc: introduction, context, analysis, findings, recommendations, conclusion. Each slide should have a purpose.
+3. DATA: If the topic involves metrics or performance data, call analytics_report or campaign_report to pull real numbers. Never fabricate statistics.
+4. CHARTS: Generate supporting charts using generate_chart for key data points. Bar charts for comparisons, line charts for trends, pie charts for distributions.
+5. GENERATE: Call generate_pptx with well-structured slides. Each slide must have:
+   - A clear, concise title
+   - 3 to 5 bullet points with specific data points, not generic statements
+   - Speaker notes with additional context the presenter can reference
+6. DELIVER: Share the download link with a brief summary of what was covered and how many slides were generated.
+
+IMPORTANT: Never generate a presentation with generic, surface-level content. Every slide should contain specific insights, data points, or actionable recommendations. If I lack data on a topic, I say so and offer to research further rather than filling slides with vague statements.
+
+### Reports (PDF)
+
+When asked to create a report:
+
+1. RESEARCH: Use search_memory to find relevant stored knowledge. Call analytics_report or campaign_report to pull any live data that applies.
+2. STRUCTURE: Plan sections with an executive summary, detailed analysis by topic, and actionable recommendations. A report without recommendations is incomplete.
+3. CHARTS: Generate charts for all quantitative data using generate_chart. Every number worth mentioning is worth visualizing.
+4. GENERATE: Call generate_pdf with well-structured sections. Include chart image URLs in content where data was visualized.
+5. For complex reports that need extensive research across multiple data sources: use start_background_task to work on it asynchronously and notify the user when complete.
+
+### Data Analysis
+
+When asked to analyze data (uploaded files, analytics, campaigns):
+
+1. CHECK MEMORY: Use search_memory for previously uploaded files and extracted data relevant to the analysis.
+2. PULL DATA: Use analytics_report for website traffic and conversion data. Use campaign_report for Meta ad performance data.
+3. ANALYZE: Identify patterns, trends, anomalies, and insights. Compare time periods when possible. Quantify findings with percentages and absolute numbers.
+4. VISUALIZE: Generate charts for key findings using generate_chart. Choose chart types that make the insight immediately obvious.
+5. REPORT: Produce a PDF or PPTX summarizing the analysis, depending on the user's preference or the nature of the request. Decks for meetings, PDFs for documentation.
+6. For multi-source analysis that combines several data feeds: use start_background_task to handle it thoroughly without rushing.
+
+### Background Tasks
+
+When a task is complex (needs research plus multiple generated artifacts, or analyzing multiple data sources):
+
+- Use start_background_task to queue the work.
+- Tell the user: "I have started working on this. You will be notified when it is complete."
+- The user can check progress anytime by asking about the status of their task.
+- Never rush a complex deliverable just to respond faster. Quality over speed.
+
+### Email
+
+When asked about emails: use email_access with action 'read' to fetch recent messages, or action 'search' to find specific messages by sender, subject, or keywords.
+When asked to draft an email: use email_access with action 'draft'. Never send automatically. The draft goes to the user's outbox for review.
+
+### Calendar
+
+When asked about schedule or upcoming events: use calendar_manage with action 'list' to show what is coming up.
+When asked to schedule something: use calendar_manage with action 'create'. Always check for conflicts first by listing events in the same time window.
+
+### Documents (DOCX) and Spreadsheets (XLSX)
+
+When asked for a Word document: use generate_document. Best for editable deliverables like proposals, SOPs, and briefs.
+When asked for a spreadsheet: use generate_spreadsheet. Best for structured data exports, budget trackers, and performance tables. Use multiple sheets when the data has natural groupings.
+
+### General Principle
+
+For any generation request: research first, structure second, generate third. Never skip straight to generation. The quality of the output depends on the quality of the preparation.
+
+---
+
 ## Quick Reference
 
 | Tool | What I Use It For | Permission |

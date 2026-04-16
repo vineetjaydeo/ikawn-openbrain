@@ -305,8 +305,8 @@ function settingsPage(user) {
   ${GOOGLE_FONTS}
   <style>
     ${BASE_STYLES}
-    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .container { padding: 40px; width: 100%; max-width: 420px; }
+    body { display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding-top: 40px; padding-bottom: 40px; }
+    .container { padding: 40px; width: 100%; max-width: 460px; }
     h1 { font-size: 1.5rem; margin-bottom: 4px; font-weight: 600; }
     .subtitle { color: #a1a1aa; margin-bottom: 28px; font-size: 0.875rem; }
     .form-group { margin-bottom: 14px; }
@@ -324,6 +324,60 @@ function settingsPage(user) {
     .msg-success { color: #22c55e; }
     .msg-error { color: #ef4444; }
     .back { margin-bottom: 20px; display: inline-block; }
+
+    /* Connected Services */
+    .connector-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border: 1px solid #27272a;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+    .connector-info { display: flex; align-items: center; gap: 12px; }
+    .connector-icon {
+      width: 34px; height: 34px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 15px; color: #fff; flex-shrink: 0;
+    }
+    .connector-name { font-size: 0.9rem; font-weight: 600; color: #fafafa; }
+    .connector-services { font-size: 0.75rem; color: #71717a; margin-top: 1px; }
+    .connector-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .btn-connect {
+      background: #e5a819; color: #0a0a0a; border: none;
+      padding: 7px 18px; border-radius: 8px; font-weight: 600;
+      cursor: pointer; font-size: 0.85rem; font-family: inherit;
+      white-space: nowrap; width: auto; margin-top: 0;
+    }
+    .btn-connect:hover { background: #d19a15; }
+    .btn-connected {
+      background: rgba(16, 185, 129, 0.12); color: #10B981;
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 7px 14px; border-radius: 8px; font-weight: 500;
+      font-size: 0.85rem; font-family: inherit; cursor: default;
+      white-space: nowrap;
+    }
+    .btn-disconnect {
+      background: transparent; color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      padding: 5px 12px; border-radius: 8px; font-size: 0.78rem;
+      cursor: pointer; font-family: inherit; white-space: nowrap;
+      width: auto; margin-top: 0;
+    }
+    .btn-disconnect:hover { background: rgba(239, 68, 68, 0.08); }
+    .btn-connect:disabled, .btn-disconnect:disabled {
+      opacity: 0.5; cursor: not-allowed;
+    }
+    .connect-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #18181b; border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #10B981; padding: 10px 20px; border-radius: 10px;
+      font-size: 0.85rem; font-weight: 500; z-index: 1000;
+      opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+    }
+    .connect-toast.visible { opacity: 1; }
   </style>
 </head>
 <body>
@@ -353,6 +407,53 @@ function settingsPage(user) {
       <button type="submit">Change Password</button>
     </form>
     <p class="msg" id="msg"></p>
+
+    <hr class="divider">
+
+    <p class="section-title">Connected Services</p>
+    <p class="section-desc">Connect external accounts so ${INSTANCE_NAME} can read your email, calendar, and analytics data.</p>
+
+    <div id="connectors-loading" style="text-align:center;color:#71717a;font-size:0.85rem;padding:16px 0;">Loading services...</div>
+    <div id="connectors-error" style="display:none;text-align:center;color:#ef4444;font-size:0.85rem;padding:16px 0;">
+      Unable to load connectors. <a href="#" onclick="loadConnectors();return false;" style="color:#e5a819;">Retry</a>
+    </div>
+
+    <div id="connector-google" class="connector-card" style="display:none;">
+      <div class="connector-info">
+        <div class="connector-icon" style="background:#4285F4;">G</div>
+        <div>
+          <div class="connector-name">Google</div>
+          <div class="connector-services">Gmail, Calendar, Analytics</div>
+        </div>
+      </div>
+      <div class="connector-actions" id="google-actions"></div>
+    </div>
+
+    <div id="connector-microsoft" class="connector-card" style="display:none;">
+      <div class="connector-info">
+        <div class="connector-icon" style="background:#00A4EF;">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect width="6" height="6" fill="#fff"/><rect x="8" width="6" height="6" fill="#fff"/><rect y="8" width="6" height="6" fill="#fff"/><rect x="8" y="8" width="6" height="6" fill="#fff"/></svg>
+        </div>
+        <div>
+          <div class="connector-name">Microsoft</div>
+          <div class="connector-services">Outlook, Calendar</div>
+        </div>
+      </div>
+      <div class="connector-actions" id="microsoft-actions"></div>
+    </div>
+
+    <div id="connector-meta" class="connector-card" style="display:none;">
+      <div class="connector-info">
+        <div class="connector-icon" style="background:#1877F2;">M</div>
+        <div>
+          <div class="connector-name">Meta</div>
+          <div class="connector-services">Campaign Insights</div>
+        </div>
+      </div>
+      <div class="connector-actions" id="meta-actions"></div>
+    </div>
+
+    <div id="connect-toast" class="connect-toast"></div>
   </div>
   <script>
     // Custom Instructions
@@ -416,6 +517,132 @@ function settingsPage(user) {
       } catch(err) { showMsg(err.message, 'error'); }
     }
     function showMsg(text, type) { showMsgOn(document.getElementById('msg'), text, type); }
+
+    // ── Connected Services ──
+    var PROVIDERS = {
+      google: { types: ['gmail', 'google_calendar', 'google_analytics'], oauth: 'google' },
+      microsoft: { types: ['outlook', 'outlook_calendar'], oauth: 'microsoft' },
+      meta: { types: ['meta_campaigns'], oauth: 'meta' },
+    };
+
+    function renderActions(provider, connectedTypes) {
+      var cfg = PROVIDERS[provider];
+      var el = document.getElementById(provider + '-actions');
+      if (!el) return;
+      // Clear existing children
+      while (el.firstChild) el.removeChild(el.firstChild);
+      var isConnected = cfg.types.some(function(t) { return connectedTypes.has(t); });
+      if (isConnected) {
+        var badge = document.createElement('span');
+        badge.className = 'btn-connected';
+        badge.textContent = 'Connected';
+        el.appendChild(badge);
+        var dcBtn = document.createElement('button');
+        dcBtn.className = 'btn-disconnect';
+        dcBtn.textContent = 'Disconnect';
+        dcBtn.setAttribute('data-provider', provider);
+        dcBtn.addEventListener('click', function() { disconnectProvider(this.getAttribute('data-provider')); });
+        el.appendChild(dcBtn);
+      } else {
+        var cBtn = document.createElement('button');
+        cBtn.className = 'btn-connect';
+        cBtn.textContent = 'Connect';
+        cBtn.setAttribute('data-provider', provider);
+        cBtn.addEventListener('click', function() { connectProvider(this.getAttribute('data-provider')); });
+        el.appendChild(cBtn);
+      }
+    }
+
+    async function loadConnectors() {
+      var loadingEl = document.getElementById('connectors-loading');
+      var errorEl = document.getElementById('connectors-error');
+      loadingEl.style.display = 'block';
+      errorEl.style.display = 'none';
+      try {
+        var res = await fetch('/api/connectors');
+        if (!res.ok) throw new Error('Failed to fetch');
+        var data = await res.json();
+        loadingEl.style.display = 'none';
+        var connectedTypes = new Set((data.connectors || []).filter(function(c) { return c.is_active; }).map(function(c) { return c.connector_type; }));
+        Object.keys(PROVIDERS).forEach(function(p) {
+          document.getElementById('connector-' + p).style.display = 'flex';
+          renderActions(p, connectedTypes);
+        });
+      } catch(e) {
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'block';
+        Object.keys(PROVIDERS).forEach(function(p) {
+          document.getElementById('connector-' + p).style.display = 'flex';
+          renderActions(p, new Set());
+        });
+      }
+    }
+
+    async function connectProvider(provider) {
+      var cfg = PROVIDERS[provider];
+      var btn = document.querySelector('#' + provider + '-actions .btn-connect');
+      if (btn) { btn.disabled = true; btn.textContent = 'Connecting...'; }
+      try {
+        var res = await fetch('/api/connectors/oauth/' + cfg.oauth + '/start');
+        var data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          alert(data.error || data.message || 'OAuth is not configured for this provider.');
+          if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+        }
+      } catch(e) {
+        alert('Failed to start connection. Please try again.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+      }
+    }
+
+    async function disconnectProvider(provider) {
+      var cfg = PROVIDERS[provider];
+      if (!confirm('Disconnect ' + provider.charAt(0).toUpperCase() + provider.slice(1) + '? This will remove all linked services.')) return;
+      var btn = document.querySelector('#' + provider + '-actions .btn-disconnect');
+      if (btn) { btn.disabled = true; btn.textContent = 'Removing...'; }
+      try {
+        await Promise.all(cfg.types.map(function(t) { return fetch('/api/connectors/' + t, { method: 'DELETE' }); }));
+        loadConnectors();
+      } catch(e) {
+        alert('Failed to disconnect. Please try again.');
+        loadConnectors();
+      }
+    }
+
+    function showToast(text) {
+      var toast = document.getElementById('connect-toast');
+      toast.textContent = text;
+      toast.classList.add('visible');
+      setTimeout(function() { toast.classList.remove('visible'); }, 4000);
+    }
+
+    // Check for OAuth redirect params
+    (function checkRedirect() {
+      var params = new URLSearchParams(window.location.search);
+      var connected = params.get('connected');
+      var error = params.get('error');
+      if (connected) {
+        showToast('Successfully connected: ' + connected.split(',').map(function(s) { return s.trim(); }).join(', '));
+        window.history.replaceState({}, '', '/settings');
+      }
+      if (error) {
+        var friendlyErrors = {
+          google_oauth_denied: 'Google authorization was denied.',
+          google_oauth_failed: 'Google connection failed. Please try again.',
+          microsoft_oauth_denied: 'Microsoft authorization was denied.',
+          microsoft_oauth_failed: 'Microsoft connection failed. Please try again.',
+          meta_oauth_denied: 'Meta authorization was denied.',
+          meta_oauth_failed: 'Meta connection failed. Please try again.',
+        };
+        alert(friendlyErrors[error] || 'Connection failed: ' + error);
+        window.history.replaceState({}, '', '/settings');
+      }
+    })();
+
+    // Load connectors on page load
+    loadConnectors();
   </script>
 </body>
 </html>`;

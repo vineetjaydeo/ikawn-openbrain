@@ -382,6 +382,16 @@ module.exports = {
         'Array of slide objects. Each slide has: title (string), content (string, lines starting with "- " become bullets), ' +
         'type (optional: "title", "content", "two-column", "section-break"; default "content"), ' +
         'notes (optional: speaker notes). For two-column slides, separate left/right content with "|||".',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Slide title' },
+          content: { type: 'string', description: 'Slide body. Lines starting with "- " become bullets. For two-column, separate with "|||".' },
+          type: { type: 'string', enum: ['title', 'content', 'two-column', 'section-break'], description: 'Slide layout type. Default: content' },
+          notes: { type: 'string', description: 'Speaker notes (optional)' },
+        },
+        required: ['title', 'content'],
+      },
     },
     theme: {
       type: 'string',

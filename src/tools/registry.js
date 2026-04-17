@@ -124,6 +124,7 @@ function getToolSchemas(toolNames) {
     for (const [key, def] of Object.entries(tool.parameters || {})) {
       properties[key] = { type: def.type, description: def.description };
       if (def.enum) properties[key].enum = def.enum;
+      if (def.items) properties[key].items = def.items;
       if (def.required) required.push(key);
     }
 

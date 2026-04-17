@@ -54,6 +54,16 @@ module.exports = {
       type: 'array',
       required: true,
       description: 'Array of sheet objects with name, headers, rows, and optional columnWidths',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Sheet tab name' },
+          headers: { type: 'array', description: 'Array of column header strings', items: { type: 'string' } },
+          rows: { type: 'array', description: 'Array of row arrays, each containing cell values', items: { type: 'array' } },
+          columnWidths: { type: 'array', description: 'Optional array of column widths (numbers)', items: { type: 'number' } },
+        },
+        required: ['headers', 'rows'],
+      },
     },
     style: {
       type: 'string',

@@ -1352,8 +1352,8 @@ function vaultPage(user) {
       if (filters.source) params.set('source', filters.source);
       if (filters.q) params.set('q', filters.q);
       if (filters.starred) params.set('starred', 'true');
-      if (filters.virtualFolder === '__uploaded__') params.set('source', 'upload');
-      if (filters.virtualFolder === '__generated__') params.set('source', 'generate_pdf,generate_pptx,generate_chart,generate_document,generate_spreadsheet,ikawn_generate');
+      if (filters.virtualFolder === '__uploaded__') params.set('source', 'upload,message');
+      if (filters.virtualFolder === '__generated__') params.set('source_not', 'upload,message');
       if (currentFolder) params.set('folder', currentFolder);
       params.set('sort', sortField);
       params.set('order', sortOrder);
@@ -1446,14 +1446,17 @@ function vaultPage(user) {
         currentFolder = null;
         filters.starred = true;
         filters.virtualFolder = null;
+        filters.source = '';
       } else if (key === '__uploaded__') {
         currentFolder = null;
         filters.starred = false;
         filters.virtualFolder = '__uploaded__';
+        filters.source = '';
       } else if (key === '__generated__') {
         currentFolder = null;
         filters.starred = false;
         filters.virtualFolder = '__generated__';
+        filters.source = '';
       } else {
         currentFolder = key;
         filters.starred = false;

@@ -38,6 +38,15 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Source exclusion filter (comma-separated)
+    if (req.query.source_not) {
+      const excludeSources = req.query.source_not.split(',').map(s => s.trim()).filter(Boolean);
+      if (excludeSources.length > 0) {
+        conditions.push(`(source IS NULL OR source != ALL($${paramIndex++}))`);
+        params.push(excludeSources);
+      }
+    }
+
     // Search by filename
     if (req.query.q) {
       conditions.push(`filename ILIKE $${paramIndex++}`);

@@ -573,37 +573,125 @@ function chatPage(user, isDirectChat = false) {
     .msg-bubble h3 { font-size: 1rem; font-weight: 600; margin: 0.8em 0 0.3em; font-family: 'Google Sans', sans-serif; color: var(--text); }
     .msg-bubble h4, .msg-bubble h5, .msg-bubble h6 { font-size: 0.94rem; font-weight: 600; margin: 0.7em 0 0.25em; font-family: 'Google Sans', sans-serif; color: var(--text-dim); }
 
-    /* ---------- Attachments in messages ---------- */
-    .msg-attachments {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
+    /* ── Message attachments: grid/list ── */
+    .msg-attachments { margin-bottom: 10px; }
     .msg-attachments:empty { display: none; }
-
-    .msg-attach-img {
-      width: 120px;
-      height: 90px;
-      object-fit: cover;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      transition: opacity 0.15s;
+    .msg-attach-toolbar {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
     }
-    .msg-attach-img:hover { opacity: 0.8; }
-
-    .msg-attach-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      font-size: 0.8rem;
-      color: var(--text-dim);
+    .msg-attach-toggle {
+      width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--text-dim); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1); padding: 0;
     }
-    .msg-attach-chip svg { flex-shrink: 0; }
+    .msg-attach-toggle.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+    .msg-attach-toggle:active { transform: scale(0.92); }
+    .msg-attach-toggle svg { width: 14px; height: 14px; }
+
+    /* Grid view (default for images) */
+    .msg-attach-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+    }
+    .msg-attach-grid .attach-card {
+      position: relative; border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border); cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      background: rgba(255,255,255,0.03);
+    }
+    @media (hover: hover) {
+      .msg-attach-grid .attach-card:hover {
+        border-color: var(--accent); transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      }
+      .msg-attach-grid .attach-card:hover .attach-actions { opacity: 1; }
+    }
+    .msg-attach-grid .attach-card:active { transform: scale(0.97); }
+    .msg-attach-grid .attach-thumb {
+      width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block;
+      background: var(--bg-alt);
+    }
+    .msg-attach-grid .attach-icon-area {
+      width: 100%; aspect-ratio: 4/3; display: flex; align-items: center;
+      justify-content: center; background: var(--bg-alt); flex-direction: column; gap: 4px;
+    }
+    .msg-attach-grid .attach-icon-badge {
+      padding: 4px 10px; border-radius: 6px; font-size: 0.7rem;
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .msg-attach-grid .attach-info {
+      padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;
+    }
+    .msg-attach-grid .attach-name {
+      font-size: 0.78rem; color: var(--text); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .msg-attach-grid .attach-meta {
+      font-size: 0.68rem; color: var(--text-dim);
+    }
+    .attach-actions {
+      position: absolute; top: 6px; right: 6px; display: flex; gap: 4px;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .attach-actions .attach-action-btn {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+      border: none; color: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; padding: 0;
+    }
+    @media (hover: hover) {
+      .attach-actions .attach-action-btn:hover { background: var(--accent); color: #0a0a0a; }
+    }
+
+    /* List view */
+    .msg-attach-list { display: flex; flex-direction: column; gap: 4px; }
+    .msg-attach-list .attach-row {
+      display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @media (hover: hover) {
+      .msg-attach-list .attach-row:hover {
+        border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05);
+      }
+    }
+    .msg-attach-list .attach-row:active { transform: scale(0.98); }
+    .msg-attach-list .attach-row-icon {
+      width: 32px; height: 32px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+    }
+    .msg-attach-list .attach-row-thumb {
+      width: 40px; height: 40px; object-fit: cover; border-radius: 6px; flex-shrink: 0;
+    }
+    .msg-attach-list .attach-row-name {
+      flex: 1; font-size: 0.8rem; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .msg-attach-list .attach-row-type {
+      font-size: 0.7rem; color: var(--text-dim); flex-shrink: 0;
+    }
+    .msg-attach-list .attach-row-dl {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-dim); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; flex-shrink: 0; padding: 0; text-decoration: none;
+    }
+    @media (hover: hover) {
+      .msg-attach-list .attach-row-dl:hover { border-color: var(--accent); color: var(--accent); }
+    }
+
+    /* Mobile tweaks */
+    @media (max-width: 768px) {
+      .msg-attach-grid { grid-template-columns: repeat(2, 1fr); }
+      .attach-actions { opacity: 1; }
+      .msg-attach-toggle { min-height: 44px; min-width: 44px; }
+    }
 
     /* ---------- Markdown in assistant messages ---------- */
     .msg-bubble p { margin-bottom: 0.65em; }
@@ -2715,19 +2803,95 @@ function chatPage(user, isDirectChat = false) {
 
     function renderAttachments(attachments, role) {
       if (!attachments || !attachments.length) return '';
-      let html = '<div class="msg-attachments">';
-      attachments.forEach(a => {
+      var hasImages = attachments.some(function(a) { return a.type === 'image'; });
+      var viewMode = hasImages ? 'grid' : 'list';
+      var toggleHtml = attachments.length > 1
+        ? '<div class="msg-attach-toolbar">'
+          + '<button class="msg-attach-toggle' + (viewMode === 'grid' ? ' active' : '') + '" onclick="toggleAttachView(this, \'grid\')" title="Grid view">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>'
+          + '<button class="msg-attach-toggle' + (viewMode === 'list' ? ' active' : '') + '" onclick="toggleAttachView(this, \'list\')" title="List view">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>'
+          + '</div>'
+        : '';
+
+      var gridHtml = '<div class="msg-attach-grid"' + (viewMode !== 'grid' ? ' style="display:none"' : '') + '>';
+      var listHtml = '<div class="msg-attach-list"' + (viewMode !== 'list' ? ' style="display:none"' : '') + '>';
+
+      attachments.forEach(function(a) {
+        var safeUrl = escapeHtml(a.url || '');
+        var safeName = escapeHtml(a.filename || a.name || 'file');
+        var ext = (a.filename || a.name || '').split('.').pop().toLowerCase();
+        var ftype = getAttachFileType(a.type, ext);
+        var ftypeColor = getFileTypeColor(ftype);
+
+        // Grid card
         if (a.type === 'image') {
-          const imgClass = (NEW_UI && role === 'assistant') ? 'vision-image' : 'msg-attach-img';
-          html += '<img class="' + imgClass + '" src="' + escapeHtml(a.url) + '" alt="attachment" onclick="openLightbox(\\'' + escapeHtml(a.url) + '\\')">';
+          gridHtml += '<div class="attach-card" onclick="openLightbox(\'' + safeUrl + '\')">'
+            + '<div class="attach-actions">'
+            + '<a class="attach-action-btn" href="' + safeUrl + '" download="' + safeName + '" onclick="event.stopPropagation()" title="Download">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>'
+            + '</div>'
+            + '<img class="attach-thumb" src="' + safeUrl + '" alt="' + safeName + '" loading="lazy">'
+            + '<div class="attach-info"><span class="attach-name">' + safeName + '</span></div></div>';
         } else {
-          html += '<span class="msg-attach-chip">'
-            + '<span class="file-icon">' + getFileIcon(a.filename || 'file') + '</span>'
-            + escapeHtml(a.filename || 'file') + '</span>';
+          gridHtml += '<div class="attach-card" onclick="window.open(\'' + safeUrl + '\', \'_blank\')">'
+            + '<div class="attach-actions">'
+            + '<a class="attach-action-btn" href="' + safeUrl + '" download="' + safeName + '" onclick="event.stopPropagation()" title="Download">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>'
+            + '</div>'
+            + '<div class="attach-icon-area"><span class="attach-icon-badge" style="background:' + ftypeColor + ';color:#fff">' + ftype + '</span></div>'
+            + '<div class="attach-info"><span class="attach-name">' + safeName + '</span><span class="attach-meta">' + ftype.toUpperCase() + '</span></div></div>';
+        }
+
+        // List row
+        if (a.type === 'image') {
+          listHtml += '<div class="attach-row" onclick="openLightbox(\'' + safeUrl + '\')">'
+            + '<img class="attach-row-thumb" src="' + safeUrl + '" alt="' + safeName + '" loading="lazy">'
+            + '<span class="attach-row-name">' + safeName + '</span>'
+            + '<span class="attach-row-type">Image</span>'
+            + '<a class="attach-row-dl" href="' + safeUrl + '" download="' + safeName + '" onclick="event.stopPropagation()" title="Download">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>';
+        } else {
+          listHtml += '<div class="attach-row" onclick="window.open(\'' + safeUrl + '\', \'_blank\')">'
+            + '<div class="attach-row-icon" style="background:' + ftypeColor + '20;color:' + ftypeColor + '">' + ftype + '</div>'
+            + '<span class="attach-row-name">' + safeName + '</span>'
+            + '<span class="attach-row-type">' + ftype.toUpperCase() + '</span>'
+            + '<a class="attach-row-dl" href="' + safeUrl + '" download="' + safeName + '" onclick="event.stopPropagation()" title="Download">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>';
         }
       });
-      html += '</div>';
-      return html;
+
+      gridHtml += '</div>';
+      listHtml += '</div>';
+      return '<div class="msg-attachments">' + toggleHtml + gridHtml + listHtml + '</div>';
+    }
+
+    function getAttachFileType(type, ext) {
+      if (type === 'image') return 'img';
+      var map = { pdf: 'pdf', pptx: 'pptx', ppt: 'pptx', docx: 'docx', doc: 'docx', xlsx: 'xlsx', xls: 'xlsx', csv: 'csv', txt: 'txt', md: 'md', json: 'json' };
+      return map[ext] || ext || 'file';
+    }
+
+    function getFileTypeColor(ftype) {
+      var colors = { pdf: '#ef4444', pptx: '#f97316', docx: '#3b82f6', xlsx: '#22c55e', csv: '#22c55e', img: '#06b6d4', txt: '#9ca3af', md: '#9ca3af', json: '#a855f7' };
+      return colors[ftype] || '#6b7280';
+    }
+
+    function toggleAttachView(btn, mode) {
+      var container = btn.closest('.msg-attachments');
+      if (!container) return;
+      var grid = container.querySelector('.msg-attach-grid');
+      var list = container.querySelector('.msg-attach-list');
+      var toggles = container.querySelectorAll('.msg-attach-toggle');
+      toggles.forEach(function(t) { t.classList.remove('active'); });
+      btn.classList.add('active');
+      if (mode === 'grid') {
+        if (grid) grid.style.display = '';
+        if (list) list.style.display = 'none';
+      } else {
+        if (grid) grid.style.display = 'none';
+        if (list) list.style.display = '';
+      }
     }
 
     /* ==================== SEND MESSAGE ==================== */

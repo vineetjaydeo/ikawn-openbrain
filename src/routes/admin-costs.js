@@ -120,10 +120,11 @@ router.get('/admin/costs', requireAdmin, async (req, res) => {
 
 // GET /admin/brain-health -- HTML dashboard page
 router.get('/admin/brain-health', requireAdmin, async (req, res) => {
-  res.send(brainHealthPage());
+  res.send(brainHealthPage(req.session.user));
 });
 
-function brainHealthPage() {
+function brainHealthPage(user) {
+  const isAdmin = user.role === 'admin';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -133,16 +134,69 @@ function brainHealthPage() {
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Parkinsans:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    html { font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
-    body { font-family: inherit; background: #0a0a0a; color: #fafafa; padding: 28px; max-width: 960px; margin: 0 auto; }
+    :root {
+      --bg: #0a0a0a;
+      --bg-sidebar: rgb(8,8,8);
+      --bg-card: rgba(255,255,255,0.03);
+      --bg-hover: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.08);
+      --border-solid: rgb(40,40,40);
+      --text: #e8e8e8;
+      --text-dim: rgba(255,255,255,0.45);
+      --text-muted: rgb(100,100,100);
+      --accent: #FFC01C;
+      --accent-soft: rgba(255,192,28,0.08);
+      --gold: #FFC01C;
+      --green: #22c55e;
+      --red: #ef4444;
+      --rail-w: 48px;
+    }
+    body { font-family: 'Google Sans', sans-serif; background: var(--bg); color: #fafafa; min-height: 100vh; }
     a { color: #e5a819; text-decoration: none; }
     a:hover { text-decoration: none; }
-    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 4px; }
+
+    /* Sidebar Rail */
+    .sidebar-rail {
+      position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail-w);
+      background: var(--bg-sidebar); border-right: 1px solid var(--border-solid);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 12px 0; z-index: 100; gap: 0;
+    }
+    .rail-logo {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: var(--accent); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; margin-bottom: 20px; flex-shrink: 0;
+      font-size: 1.1rem; color: rgb(5,5,5); font-weight: 700;
+    }
+    .rail-nav { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 1; }
+    .rail-btn {
+      width: 36px; height: 36px; border-radius: 10px; border: none;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; position: relative;
+    }
+    .rail-btn:hover { background: var(--bg-hover); color: var(--text); }
+    .rail-btn.active { color: var(--accent); background: var(--accent-soft); }
+    .rail-btn svg { width: 18px; height: 18px; }
+    .rail-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .rail-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--border-solid); color: var(--text-dim);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 600; cursor: pointer;
+    }
+
+    .page-wrapper {
+      margin-left: var(--rail-w);
+    }
+
+    .content-area { padding: 28px; max-width: 960px; margin: 0 auto; }
+    h1 { font-family: 'Parkinsans', sans-serif; font-size: 1.5rem; font-weight: 600; margin-bottom: 4px; }
     .subtitle { color: #a1a1aa; margin-bottom: 24px; font-size: 0.875rem; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 32px; border-bottom: 1px solid var(--border); }
     .header-right { display: flex; gap: 12px; align-items: center; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
     @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
@@ -177,23 +231,63 @@ function brainHealthPage() {
     .metric { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 16px; flex: 1; min-width: 140px; }
     .metric-label { font-size: 0.7rem; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 6px; }
     .metric-value { font-size: 1.5rem; font-weight: 700; }
+
+    @media (max-width: 768px) {
+      .sidebar-rail { display: none; }
+      .page-wrapper { margin-left: 0; }
+      .header, .content-area { padding-left: 16px; padding-right: 16px; }
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <a href="/" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:1.1rem;text-decoration:none;" title="Back to chat">&larr;</a>
-      <div>
-        <h1>Brain Health</h1>
-        <p class="subtitle">OpenAI cost monitoring &amp; system health</p>
+  <!-- Sidebar Rail -->
+  <nav class="sidebar-rail">
+    <div class="rail-logo" title="${INSTANCE_NAME}" onclick="window.location.href='/'" style="cursor:pointer">
+      \u2726
+    </div>
+    <div class="rail-nav">
+      <button class="rail-btn" onclick="window.location.href='/'" title="Chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/'" title="History">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/reports'" title="Reports" style="position:relative">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/vault'" title="Vault">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      ${isAdmin ? `<button class="rail-btn" onclick="window.location.href='/mission'" title="Mission Control">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </button>` : ''}
+    </div>
+
+    <div class="rail-bottom">
+      ${isAdmin ? `<button class="rail-btn active" onclick="window.location.href='/admin/brain-health'" title="Brain Health">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </button>` : ''}
+      <div class="rail-avatar" title="${user.name || user.email}">
+        ${(user.name || user.email || '?')[0].toUpperCase()}
       </div>
     </div>
+  </nav>
+
+  <div class="page-wrapper">
+  <div class="header">
+    <div>
+      <h1>Brain Health</h1>
+      <p class="subtitle">OpenAI cost monitoring &amp; system health</p>
+    </div>
     <div class="header-right">
-      <a href="/admin" class="btn-outline" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;display:inline-block;">Admin</a>
-      <a href="/admin/api-keys" class="btn-outline" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;display:inline-block;">API Keys</a>
+      <a href="/admin" class="btn btn-outline" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;display:inline-block;">Admin</a>
+      <a href="/admin/api-keys" class="btn btn-outline" style="padding:6px 14px;border:1px solid #27272a;border-radius:8px;color:#fafafa;font-size:0.8rem;text-decoration:none;display:inline-block;">API Keys</a>
     </div>
   </div>
 
+  <div class="content-area">
   <div class="warning-banner" id="warning-banner">
     <strong>Warning:</strong> Today's spend exceeds $5.00
   </div>
@@ -252,6 +346,9 @@ function brainHealthPage() {
       </div>
     </div>
   </div>
+
+  </div><!-- /content-area -->
+  </div><!-- /page-wrapper -->
 
   <script>
     // HTML-escape to prevent XSS from any external data

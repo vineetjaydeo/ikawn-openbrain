@@ -36,6 +36,7 @@ function chatPage(user, isDirectChat = false) {
       --bg-sidebar: rgb(8,8,8);
       --bg-input: rgb(32,32,32);
       --bg-hover: rgb(28,28,28);
+      --bg-alt: rgb(20,20,20);
       --bg-assistant: transparent;
       --bg-user: rgba(255,255,255,0.10);
       --border: rgb(40,40,40);

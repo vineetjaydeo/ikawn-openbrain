@@ -287,8 +287,7 @@ router.put('/api/mission/user-tasks/:uuid', requireAuth, async (req, res) => {
 // ─── HTML: Mission Control Page ────────────────────────────────────────────────
 
 router.get('/mission', requireAuth, (req, res) => {
-  const isAdmin = req.session.user.role === 'admin';
-  res.send(missionPage(isAdmin));
+  res.send(missionPage(req.session.user));
 });
 
 // Safe HTML escape helper (server-side, for static content only)
@@ -297,7 +296,8 @@ function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function missionPage(isAdmin) {
+function missionPage(user) {
+  const isAdmin = user.role === 'admin';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -313,20 +313,26 @@ function missionPage(isAdmin) {
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
       --bg: rgb(5,5,5);
+      --bg-sidebar: rgb(8,8,8);
       --bg-card: #111738;
       --bg-hover: #171E45;
       --border: #1E2550;
+      --border-solid: rgb(40,40,40);
       --border-light: #2A3268;
       --accent: #FFC01C;
       --accent-dim: rgba(255,192,28,0.15);
+      --accent-soft: rgba(255,192,28,0.08);
       --text: #E8EAF0;
       --text-dim: #9498B0;
       --text-muted: #6B6F87;
       --success: #34D399;
       --danger: #F87171;
       --warning: #FBBF24;
+      --gold: #FFC01C;
+      --red: #ef4444;
       --radius: 12px;
       --radius-sm: 8px;
+      --rail-w: 48px;
     }
     body {
       font-family: 'Google Sans', sans-serif;
@@ -334,6 +340,42 @@ function missionPage(isAdmin) {
       color: var(--text);
       min-height: 100vh;
     }
+
+    /* Sidebar Rail */
+    .sidebar-rail {
+      position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail-w);
+      background: var(--bg-sidebar); border-right: 1px solid var(--border-solid);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 12px 0; z-index: 100; gap: 0;
+    }
+    .rail-logo {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: var(--accent); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; margin-bottom: 20px; flex-shrink: 0;
+      font-size: 1.1rem; color: rgb(5,5,5); font-weight: 700;
+    }
+    .rail-nav { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 1; }
+    .rail-btn {
+      width: 36px; height: 36px; border-radius: 10px; border: none;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; position: relative;
+    }
+    .rail-btn:hover { background: var(--bg-hover); color: var(--text); }
+    .rail-btn.active { color: var(--accent); background: var(--accent-soft); }
+    .rail-btn svg { width: 18px; height: 18px; }
+    .rail-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .rail-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--border-solid); color: var(--text-dim);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 600; cursor: pointer;
+    }
+
+    .page-wrapper {
+      margin-left: var(--rail-w);
+    }
+
     .top-nav {
       display: flex;
       align-items: center;
@@ -367,15 +409,6 @@ function missionPage(isAdmin) {
     }
     .nav-link:hover { background: var(--bg-hover); color: var(--text); }
     .nav-link.active { background: var(--accent-dim); color: var(--accent); }
-    .back-link {
-      color: var(--text-dim);
-      text-decoration: none;
-      font-size: 0.85rem;
-      padding: 6px 12px;
-      border-radius: var(--radius-sm);
-      transition: all 0.15s;
-    }
-    .back-link:hover { color: var(--text); background: var(--bg-hover); }
     .container { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
     .card {
       background: var(--bg-card);
@@ -552,6 +585,8 @@ function missionPage(isAdmin) {
     .form-input:focus, .form-select:focus { border-color: var(--accent); }
     .form-select option { background: var(--bg-card); color: var(--text); }
     @media (max-width: 768px) {
+      .sidebar-rail { display: none; }
+      .page-wrapper { margin-left: 0; }
       .container { padding: 16px; }
       .top-nav { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
       .org-grid { grid-template-columns: 1fr; }
@@ -559,7 +594,42 @@ function missionPage(isAdmin) {
   </style>
 </head>
 <body>
+  <!-- Sidebar Rail -->
+  <nav class="sidebar-rail">
+    <div class="rail-logo" title="${INSTANCE_NAME}" onclick="window.location.href='/'" style="cursor:pointer">
+      \u2726
+    </div>
+    <div class="rail-nav">
+      <button class="rail-btn" onclick="window.location.href='/'" title="Chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/'" title="History">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/reports'" title="Reports" style="position:relative">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/vault'" title="Vault">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      ${isAdmin ? `<button class="rail-btn active" onclick="window.location.href='/mission'" title="Mission Control">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </button>` : ''}
+    </div>
 
+    <div class="rail-bottom">
+      ${isAdmin ? `<button class="rail-btn" onclick="window.location.href='/admin/brain-health'" title="Brain Health">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </button>` : ''}
+      <div class="rail-avatar" title="${user.name || user.email}">
+        ${(user.name || user.email || '?')[0].toUpperCase()}
+      </div>
+    </div>
+  </nav>
+
+  <div class="page-wrapper">
   <nav class="top-nav">
     <div class="top-nav-left">
       <h1>Mission Control</h1>
@@ -569,7 +639,6 @@ function missionPage(isAdmin) {
         <a class="nav-link" data-tab="org" onclick="switchTab('org', this)">Organization</a>
       </div>
     </div>
-    <a class="back-link" href="/">&larr; Back to ${INSTANCE_NAME}</a>
   </nav>
 
   <div class="container">
@@ -657,6 +726,7 @@ function missionPage(isAdmin) {
       </div>
     </div>
   </div>
+  </div><!-- /.page-wrapper -->
 
   <div class="modal-overlay" id="create-modal" onclick="if(event.target===this)closeCreateModal()">
     <div class="modal">

@@ -2808,9 +2808,9 @@ function chatPage(user, isDirectChat = false) {
       var viewMode = hasImages ? 'grid' : 'list';
       var toggleHtml = attachments.length > 1
         ? '<div class="msg-attach-toolbar">'
-          + '<button class="msg-attach-toggle' + (viewMode === 'grid' ? ' active' : '') + '" onclick="toggleAttachView(this, \'grid\')" title="Grid view">'
+          + '<button class="msg-attach-toggle' + (viewMode === 'grid' ? ' active' : '') + '" onclick="toggleAttachView(this, &quot;grid&quot;)" title="Grid view">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>'
-          + '<button class="msg-attach-toggle' + (viewMode === 'list' ? ' active' : '') + '" onclick="toggleAttachView(this, \'list\')" title="List view">'
+          + '<button class="msg-attach-toggle' + (viewMode === 'list' ? ' active' : '') + '" onclick="toggleAttachView(this, &quot;list&quot;)" title="List view">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>'
           + '</div>'
         : '';

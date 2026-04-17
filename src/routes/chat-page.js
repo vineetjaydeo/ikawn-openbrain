@@ -124,7 +124,7 @@ function chatPage(user, isDirectChat = false) {
       transition: all 0.15s;
       position: relative;
     }
-    .rail-btn:hover { background: var(--bg-hover); color: var(--text); }
+    @media (hover: hover) { .rail-btn:hover { background: var(--bg-hover); color: var(--text); } }
     .rail-btn.active { background: var(--bg-hover); color: var(--text); }
     .rail-btn svg { width: 18px; height: 18px; }
     .report-badge, .report-badge-panel {
@@ -325,7 +325,7 @@ function chatPage(user, isDirectChat = false) {
       margin-left: 4px;
       flex-shrink: 0;
     }
-    .conv-item:hover .conv-item-actions { display: flex; }
+    @media (hover: hover) { .conv-item:hover .conv-item-actions { display: flex; } }
 
     .conv-action-btn {
       width: 22px;
@@ -437,7 +437,17 @@ function chatPage(user, isDirectChat = false) {
       border-radius: 8px;
       transition: all 0.15s;
     }
-    .header-btn:hover { background: var(--bg-hover); color: var(--text); }
+    @media (hover: hover) { .header-btn:hover { background: var(--bg-hover); color: var(--text); } }
+
+    .rail-btn:active,
+    .header-btn:active,
+    .compose-btn:active,
+    .send-btn:active,
+    .panel-nav-item:active,
+    .conv-item:active {
+      transform: scale(0.96);
+      transition: transform 0.1s;
+    }
 
     /* ==================== MESSAGES ==================== */
     .messages {
@@ -497,6 +507,12 @@ function chatPage(user, isDirectChat = false) {
       font-style: italic;
       font-weight: 400;
     }
+    .capabilities-hint { display: flex; flex-direction: column; gap: 8px; margin-top: 24px; max-width: 480px; width: 100%; animation: fadeInUp 0.5s cubic-bezier(0.16,1,0.3,1) 0.3s both; z-index: 1; }
+    .cap-row { display: flex; gap: 8px; }
+    .cap-card { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(255,255,255,0.03); cursor: pointer; transition: all 0.2s cubic-bezier(0.16,1,0.3,1); font-size: 0.82rem; color: var(--text-dim); font-family: 'Google Sans', sans-serif; }
+    .cap-card svg { color: var(--accent); flex-shrink: 0; }
+    @media (hover: hover) { .cap-card:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--text); } }
+    .cap-card:active { transform: scale(0.97); }
 
     /* ---------- Message rows ---------- */
     .msg-row {
@@ -504,6 +520,7 @@ function chatPage(user, isDirectChat = false) {
       gap: 14px;
       line-height: 1.75;
       position: relative;
+      animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 
     .msg-avatar {
@@ -857,6 +874,139 @@ function chatPage(user, isDirectChat = false) {
     }
     .gen-card-link:hover { opacity: 0.8; }
 
+    /* ==================== NEW UI: TOOL USE STACK ==================== */
+    .tool-use-stack { margin: 8px 0 8px 40px; display: flex; flex-direction: column; gap: 4px; }
+    .tool-use-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+      background: rgba(255,255,255,0.03); border-radius: 8px;
+      font-size: 0.78rem; color: var(--text-muted); cursor: pointer;
+      transition: background 0.15s;
+      animation: slideInLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @media (hover: hover) { .tool-use-item:hover { background: rgba(255,255,255,0.06); } }
+    .tool-use-item.running { color: var(--accent); }
+    .tool-use-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+    .tool-use-dot.running { background: var(--accent); animation: pulse 1s infinite; }
+    .tool-use-dot.done { background: var(--success, #22c55e); }
+    .tool-use-dot.failed { background: var(--danger, #ef4444); }
+    .tool-use-label { flex: 1; }
+    .tool-use-chevron {
+      margin-left: auto; transition: transform 0.2s; font-size: 0.65rem; color: var(--text-muted);
+    }
+    .tool-use-item.expanded .tool-use-chevron { transform: rotate(90deg); }
+    .tool-use-detail {
+      display: none; padding: 4px 12px 8px 26px;
+      font-size: 0.72rem; color: var(--text-muted); line-height: 1.4;
+    }
+    .tool-use-item.expanded + .tool-use-detail { display: block; }
+
+    /* ==================== NEW UI: ARTIFACT CARDS ==================== */
+    .artifact-card {
+      display: flex; align-items: center; gap: 14px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 18px;
+      margin: 12px 0; max-width: 420px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    @media (hover: hover) {
+      .artifact-card:hover {
+        border-color: var(--accent);
+        box-shadow: 0 4px 16px rgba(255,192,28,0.12);
+        transform: translateY(-1px);
+      }
+    }
+    .artifact-card-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
+      font-family: 'Google Sans', sans-serif;
+    }
+    .artifact-card-icon.pdf { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .artifact-card-icon.pptx { background: rgba(249,115,22,0.15); color: #f97316; }
+    .artifact-card-icon.docx { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .artifact-card-icon.xlsx { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .artifact-card-icon.csv { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .artifact-card-icon.chart { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+    .artifact-card-info { flex: 1; min-width: 0; }
+    .artifact-card-name {
+      font-size: 0.88rem; font-weight: 500; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: 'Google Sans', sans-serif;
+    }
+    .artifact-card-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+    .artifact-card-download {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: var(--accent); color: #0a0a0a;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none;
+      box-shadow: 0 2px 6px rgba(255,192,28,0.25);
+    }
+    @media (hover: hover) { .artifact-card-download:hover { filter: brightness(1.1); } }
+
+    /* Inline chart image */
+    .artifact-chart-img {
+      max-width: 100%; border-radius: 12px;
+      border: 1px solid var(--border); cursor: pointer;
+      margin: 12px 0; transition: opacity 0.2s;
+    }
+    .artifact-chart-img:hover { opacity: 0.9; }
+
+    /* ==================== NEW UI: BACKGROUND TASK CARD ==================== */
+    .task-card {
+      background: rgba(255,192,28,0.06); border: 1px solid rgba(255,192,28,0.2);
+      border-radius: 12px; padding: 16px 20px; margin: 12px 0;
+      max-width: 480px;
+      animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .task-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .task-card-title { font-size: 0.88rem; font-weight: 500; color: var(--text); flex: 1; font-family: 'Google Sans', sans-serif; }
+    .task-card-status { font-size: 0.72rem; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .task-card-progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+    .task-card-progress-bar {
+      height: 100%; background: var(--accent); border-radius: 2px;
+      transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); width: 0%;
+    }
+    .task-card-step { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; }
+    .task-card-artifacts { margin-top: 12px; }
+    .task-card-dismiss {
+      font-size: 0.72rem; color: var(--text-muted); cursor: pointer;
+      background: none; border: none; margin-top: 8px; padding: 4px 0;
+    }
+    .task-card-dismiss:hover { color: var(--text-dim); }
+
+    /* ==================== NEW UI: CONNECTED SERVICES ==================== */
+    .header-connectors { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-right: 8px; }
+    .header-connector {
+      width: 26px; height: 26px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.06); cursor: pointer;
+      position: relative; transition: background 0.15s;
+    }
+    .header-connector:hover { background: rgba(255,255,255,0.1); }
+    .header-connector.connected { border: 1px solid rgba(34,197,94,0.5); }
+    .header-connector svg { width: 14px; height: 14px; }
+    .header-connector-tooltip {
+      display: none; position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%);
+      background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px;
+      padding: 3px 8px; font-size: 0.65rem; color: var(--text-dim); white-space: nowrap;
+      z-index: 10;
+    }
+    .header-connector:hover .header-connector-tooltip { display: block; }
+
+    /* ==================== NEW UI: VISION IMAGE ==================== */
+    .vision-image {
+      max-width: 320px; max-height: 320px;
+      border-radius: 12px; border: 1px solid var(--border);
+      cursor: pointer; margin: 8px 0; object-fit: contain;
+    }
+    .vision-image:hover { opacity: 0.9; }
+
     /* ==================== INPUT AREA ==================== */
     .input-area {
       position: sticky;
@@ -924,7 +1074,29 @@ function chatPage(user, isDirectChat = false) {
       display: flex; align-items: center; justify-content: center;
       pointer-events: none; opacity: 0; transition: opacity 0.15s;
     }
-    .drag-overlay.visible { opacity: 1; }
+    .drag-overlay.visible { opacity: 1; border: 3px dashed var(--accent); animation: dragPulse 1.5s ease-in-out infinite; }
+    @keyframes dragPulse { 0%,100% { border-color: var(--accent); } 50% { border-color: rgba(255,192,28,0.3); } }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-12px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes pressDown {
+      0% { transform: scale(1); }
+      50% { transform: scale(0.96); }
+      100% { transform: scale(1); }
+    }
     .drag-overlay-label {
       font-size: 1.1rem; font-weight: 600; color: var(--accent);
       background: var(--bg-main); padding: 12px 24px; border-radius: 12px;
@@ -983,7 +1155,7 @@ function chatPage(user, isDirectChat = false) {
       flex-shrink: 0;
       transition: background 0.12s, color 0.12s;
     }
-    .compose-btn:hover { background: var(--bg-hover); color: var(--text); }
+    @media (hover: hover) { .compose-btn:hover { background: var(--bg-hover); color: var(--text); } }
 
     .compose-btn.model-toggle {
       font-size: 0.7rem;
@@ -1125,7 +1297,7 @@ function chatPage(user, isDirectChat = false) {
       color: var(--text-muted);
       border-radius: 10px;
     }
-    .compose-btn.send-btn:hover { color: var(--text); background: var(--bg-hover); }
+    @media (hover: hover) { .compose-btn.send-btn:hover { color: var(--text); background: var(--bg-hover); } }
     .compose-btn.send-btn:disabled { opacity: 0.25; cursor: not-allowed; }
     .compose-btn.send-btn.has-content {
       background: var(--accent);
@@ -1487,6 +1659,32 @@ function chatPage(user, isDirectChat = false) {
       }
       .conv-group-label { font-size: 0.72rem; }
       .conv-item-actions { display: none; }
+
+      /* Touch optimization */
+      * { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+      /* Prevent iOS zoom on input focus */
+      textarea, input, select { font-size: 16px !important; }
+
+      /* Smooth touch scrolling */
+      .messages { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
+
+      /* Minimum tap targets */
+      .rail-btn, .header-btn, .compose-btn, .conv-item, .panel-nav-item,
+      .send-btn, .artifact-card-download, .tool-use-item {
+        min-height: 44px; min-width: 44px;
+      }
+
+      /* Active touch feedback (no hover on mobile) */
+      .rail-btn:active { background: var(--bg-hover); }
+      .conv-item:active { background: var(--bg-hover); transform: scale(0.98); }
+      .panel-nav-item:active { background: var(--bg-hover); }
+      .artifact-card:active { border-color: var(--accent); }
+      .send-btn:active { transform: scale(0.93); }
+
+      /* Capability cards stack on mobile */
+      .cap-row { flex-direction: column; }
+      .cap-card { padding: 14px 16px; min-height: 44px; }
     }
     @media (min-width: 769px) {
       .mobile-hamburger { display: none !important; }
@@ -1514,6 +1712,11 @@ function chatPage(user, isDirectChat = false) {
         <button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/reports'" title="Reports" style="position:relative">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           <span class="report-badge" id="report-badge" style="display:none"></span>
+        </button>
+        <button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/vault'" title="Vault">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
         </button>
         ${isAdmin ? `<button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/mission'" title="Mission Control">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -1546,6 +1749,12 @@ function chatPage(user, isDirectChat = false) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           Reports
           <span class="report-badge-panel" id="report-badge-panel" style="display:none"></span>
+        </button>
+        <button class="panel-nav-item" onclick="window.location.href='/vault'">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          Vault
         </button>
         ${isAdmin ? `<button class="panel-nav-item" onclick="window.location.href='/mission'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -1580,6 +1789,7 @@ function chatPage(user, isDirectChat = false) {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <span class="main-header-title" id="header-title"></span>
+        <div class="header-connectors" id="header-connectors"></div>
         <div id="share-wrapper" class="share-wrapper" style="display:none">
           <button class="share-btn" onclick="toggleShareMenu(event)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -1612,6 +1822,28 @@ function chatPage(user, isDirectChat = false) {
             ${SPACETIME_HTML}
             <div class="welcome-logo"><span class="sparkle">\u2726</span> Lucy</div>
             <div class="welcome-tagline" id="welcome-tagline"></div>
+            <div class="capabilities-hint" id="capabilities-hint">
+              <div class="cap-row">
+                <div class="cap-card" onclick="insertCapability('Generate a detailed report')">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>Generate documents</span>
+                </div>
+                <div class="cap-card" onclick="insertCapability('Analyze this data and create a chart')">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+                  <span>Analyze data</span>
+                </div>
+              </div>
+              <div class="cap-row">
+                <div class="cap-card" onclick="insertCapability('Search my files in the vault')">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <span>Search your files</span>
+                </div>
+                <div class="cap-card" onclick="insertCapability('Help me brainstorm ideas')">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/><line x1="10" y1="21" x2="14" y2="21"/></svg>
+                  <span>Brainstorm ideas</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1644,7 +1876,7 @@ function chatPage(user, isDirectChat = false) {
   <div class="drag-overlay" id="drag-overlay"><div class="drag-overlay-label">Drop files here</div></div>
 
   <!-- File input (hidden) -->
-  <input type="file" id="file-input" accept="image/*,application/pdf,text/plain,text/markdown,text/csv,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="display:none" onchange="handleFileSelect(event)">
+  <input type="file" id="file-input" accept="image/*,application/pdf,text/plain,text/markdown,text/csv,.docx,.xlsx,.xls,.pptx,.ppt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation" multiple style="display:none" onchange="handleFileSelect(event)">
 
   <!-- Gallery Picker -->
   <div class="gallery-overlay" id="gallery-overlay" onclick="if(event.target===this)closeGalleryPicker()">
@@ -1692,6 +1924,7 @@ function chatPage(user, isDirectChat = false) {
     let abortController = null;
     let sidebarOpen = false;
     let activeHashtagFilter = null;
+    const NEW_UI = !new URLSearchParams(window.location.search).has('oldui');
 
     /* ==================== INIT ==================== */
     document.addEventListener('DOMContentLoaded', () => {
@@ -1712,6 +1945,9 @@ function chatPage(user, isDirectChat = false) {
       loadConversations().then(() => {
         if (directChatMatch) loadConversation(directChatMatch[1]);
       });
+
+      // Load connected services indicator (new UI)
+      if (NEW_UI) loadConnectorIndicators();
 
       window.addEventListener('popstate', () => {
         const match = window.location.pathname.match(/^\\/chat\\/([a-f0-9-]+)$/);
@@ -1806,6 +2042,16 @@ function chatPage(user, isDirectChat = false) {
           btn.innerHTML = copyIcon; // safe: hardcoded SVG
         }, 2000);
       });
+    }
+
+    /* ==================== CAPABILITY HINT ==================== */
+    function insertCapability(text) {
+      var input = document.getElementById('msg-input');
+      if (input) { input.value = text; input.focus(); if (typeof autoGrow === 'function') autoGrow(input); if (typeof updateSendBtn === 'function') updateSendBtn(); }
+      var welcome = document.getElementById('welcome');
+      if (welcome) welcome.style.display = 'none';
+      var messagesEl = document.getElementById('messages');
+      if (messagesEl) messagesEl.style.display = '';
     }
 
     /* ==================== GREETING ==================== */
@@ -2191,6 +2437,11 @@ function chatPage(user, isDirectChat = false) {
       welcome.appendChild(bg);
       welcome.appendChild(logo);
       welcome.appendChild(tagline);
+      var capHint = document.createElement('div');
+      capHint.className = 'capabilities-hint';
+      capHint.id = 'capabilities-hint';
+      capHint.innerHTML = '<div class="cap-row"><div class="cap-card" onclick="insertCapability(\\\'Generate a detailed report\\\')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>Generate documents</span></div><div class="cap-card" onclick="insertCapability(\\\'Analyze this data and create a chart\\\')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg><span>Analyze data</span></div></div><div class="cap-row"><div class="cap-card" onclick="insertCapability(\\\'Search my files in the vault\\\')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Search your files</span></div><div class="cap-card" onclick="insertCapability(\\\'Help me brainstorm ideas\\\')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/><line x1="10" y1="21" x2="14" y2="21"/></svg><span>Brainstorm ideas</span></div></div>';
+      welcome.appendChild(capHint);
       container.appendChild(welcome);
       setGreeting();
       currentShareToken = null;
@@ -2367,7 +2618,7 @@ function chatPage(user, isDirectChat = false) {
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
-      bubble.innerHTML = renderAttachments(attachments) + renderContent(role, content);
+      bubble.innerHTML = renderAttachments(attachments, role) + renderContent(role, content);
       addCopyToBlockquotes(bubble);
 
       const replyBtn = document.createElement('button');
@@ -2407,12 +2658,13 @@ function chatPage(user, isDirectChat = false) {
       return escapeHtml(content).replace(/\\n/g, '<br>');
     }
 
-    function renderAttachments(attachments) {
+    function renderAttachments(attachments, role) {
       if (!attachments || !attachments.length) return '';
       let html = '<div class="msg-attachments">';
       attachments.forEach(a => {
         if (a.type === 'image') {
-          html += '<img class="msg-attach-img" src="' + escapeHtml(a.url) + '" alt="attachment" onclick="openLightbox(\\'' + escapeHtml(a.url) + '\\')">';
+          const imgClass = (NEW_UI && role === 'assistant') ? 'vision-image' : 'msg-attach-img';
+          html += '<img class="' + imgClass + '" src="' + escapeHtml(a.url) + '" alt="attachment" onclick="openLightbox(\\'' + escapeHtml(a.url) + '\\')">';
         } else {
           html += '<span class="msg-attach-chip">'
             + '<span class="file-icon">' + getFileIcon(a.filename || 'file') + '</span>'
@@ -2580,44 +2832,50 @@ function chatPage(user, isDirectChat = false) {
                 }
                 window._currentAgentIdentity = evt;
               } else if (evt.type === 'tool_start') {
-                // Show tool activity — either in typing indicator or inline below bubble
-                const toolLabels = {
-                  web_search: 'Searching',
-                  ikawn_generate: 'Generating',
-                  manage_task: 'Managing task',
-                  create_user_task: 'Creating task',
-                  brand_analysis: 'Analyzing brand',
-                };
-                const toolLabel = toolLabels[evt.tool] || ('Using ' + (evt.tool || 'tool').replace(/_/g, ' '));
-                const toolText = evt.detail ? toolLabel + ': "' + evt.detail.slice(0, 80) + '"' : toolLabel + '...';
-
-                const typing = document.getElementById('typing');
-                if (typing) {
-                  const label = typing.querySelector('.typing-label');
-                  if (label) label.textContent = toolText;
-                } else {
-                  // Typing removed — show tool indicator as its own row
-                  let indicator = document.getElementById('tool-indicator');
-                  if (!indicator) {
-                    indicator = document.createElement('div');
-                    indicator.id = 'tool-indicator';
-                    indicator.className = 'msg-row assistant';
-                    indicator.style.cssText = 'padding:6px 16px;font-size:12px;color:var(--text-muted,#888);display:flex;align-items:center;gap:8px;margin-left:40px;';
-                    const dot = document.createElement('span');
-                    dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#FFC01C;display:inline-block;animation:pulse 1s infinite;flex-shrink:0;';
-                    indicator.appendChild(dot);
-                    const txt = document.createElement('span');
-                    txt.className = 'tool-indicator-text';
-                    indicator.appendChild(txt);
-                    container.appendChild(indicator);
-                    scrollToBottom(false);
+                if (NEW_UI) {
+                  // New UI: collapsible tool stack
+                  addToolToStack(evt.tool, evt.detail);
+                  const typing = document.getElementById('typing');
+                  if (typing) {
+                    const label = typing.querySelector('.typing-label');
+                    var displayLabel = TOOL_LABELS[evt.tool] || ('Using ' + (evt.tool || 'tool').replace(/_/g, ' '));
+                    if (label) label.textContent = displayLabel + '...';
                   }
-                  const txt = indicator.querySelector('.tool-indicator-text');
-                  if (txt) txt.textContent = toolText;
-                  indicator.style.display = 'flex';
+                } else {
+                  // Legacy UI: single tool indicator
+                  const toolLabels = {
+                    web_search: 'Searching', ikawn_generate: 'Generating',
+                    manage_task: 'Managing task', create_user_task: 'Creating task',
+                    brand_analysis: 'Analyzing brand',
+                  };
+                  const toolLabel = toolLabels[evt.tool] || ('Using ' + (evt.tool || 'tool').replace(/_/g, ' '));
+                  const toolText = evt.detail ? toolLabel + ': "' + evt.detail.slice(0, 80) + '"' : toolLabel + '...';
+                  const typing = document.getElementById('typing');
+                  if (typing) {
+                    const label = typing.querySelector('.typing-label');
+                    if (label) label.textContent = toolText;
+                  } else {
+                    let indicator = document.getElementById('tool-indicator');
+                    if (!indicator) {
+                      indicator = document.createElement('div');
+                      indicator.id = 'tool-indicator';
+                      indicator.className = 'msg-row assistant';
+                      indicator.style.cssText = 'padding:6px 16px;font-size:12px;color:var(--text-muted,#888);display:flex;align-items:center;gap:8px;margin-left:40px;';
+                      const dot = document.createElement('span');
+                      dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#FFC01C;display:inline-block;animation:pulse 1s infinite;flex-shrink:0;';
+                      indicator.appendChild(dot);
+                      const txt = document.createElement('span');
+                      txt.className = 'tool-indicator-text';
+                      indicator.appendChild(txt);
+                      container.appendChild(indicator);
+                      scrollToBottom(false);
+                    }
+                    const txt = indicator.querySelector('.tool-indicator-text');
+                    if (txt) txt.textContent = toolText;
+                    indicator.style.display = 'flex';
+                  }
                 }
               } else if (evt.type === 'tool_done') {
-                // Tool finished — show sources or result summary
                 let doneText = 'Processing results...';
                 if (evt.sources && evt.sources.length > 0) {
                   const domains = evt.sources.map(function(s) {
@@ -2625,20 +2883,28 @@ function chatPage(user, isDirectChat = false) {
                   });
                   doneText = 'Found ' + evt.count + ' results from ' + domains.slice(0, 3).join(', ') + (domains.length > 3 ? '...' : '');
                 } else if (evt.error) {
-                  doneText = (evt.tool || 'Tool') + ' failed — continuing...';
+                  doneText = (evt.tool || 'Tool') + ' failed';
                 }
 
-                const typing2 = document.getElementById('typing');
-                if (typing2) {
-                  const label = typing2.querySelector('.typing-label');
-                  if (label) label.textContent = doneText;
+                if (NEW_UI) {
+                  completeToolInStack(evt.tool, !evt.error, doneText);
                 } else {
-                  const indicator = document.getElementById('tool-indicator');
-                  if (indicator) {
-                    const txt = indicator.querySelector('.tool-indicator-text');
-                    if (txt) txt.textContent = doneText;
+                  const typing2 = document.getElementById('typing');
+                  if (typing2) {
+                    const label = typing2.querySelector('.typing-label');
+                    if (label) label.textContent = doneText;
+                  } else {
+                    const indicator = document.getElementById('tool-indicator');
+                    if (indicator) {
+                      const txt = indicator.querySelector('.tool-indicator-text');
+                      if (txt) txt.textContent = doneText;
+                    }
                   }
                 }
+              } else if (evt.type === 'artifact_ready') {
+                renderArtifactCard(evt);
+              } else if (evt.type === 'task_started') {
+                showBackgroundTaskCard(evt.taskId, evt.taskType, evt.description);
               } else if (evt.type === 'chunk' && evt.text) {
                 if (firstChunk) {
                   firstChunk = false;
@@ -2661,9 +2927,11 @@ function chatPage(user, isDirectChat = false) {
                   bubble = document.getElementById('streaming-bubble');
                   window._currentAgentIdentity = null;
                 }
-                // Remove inline tool indicator when new text arrives
-                const toolInd = document.getElementById('tool-indicator');
-                if (toolInd) toolInd.remove();
+                // Remove inline tool indicator when new text arrives (legacy UI only)
+                if (!NEW_UI) {
+                  const toolInd = document.getElementById('tool-indicator');
+                  if (toolInd) toolInd.remove();
+                }
                 fullText += evt.text;
                 try { bubble.innerHTML = marked.parse(fullText); } catch { bubble.textContent = fullText; }
                 scrollToBottom(false);
@@ -2709,6 +2977,8 @@ function chatPage(user, isDirectChat = false) {
         // Clean up tool indicator if still present
         const finalToolInd = document.getElementById('tool-indicator');
         if (finalToolInd) finalToolInd.remove();
+        // Reset tool stack for next message
+        if (NEW_UI) resetToolStack();
 
         if (bubble) {
           if (typeof renderMentionPills === 'function') bubble.innerHTML = renderMentionPills(bubble.innerHTML);
@@ -2973,6 +3243,7 @@ function chatPage(user, isDirectChat = false) {
           filename: file.name,
           preview: isImage ? URL.createObjectURL(file) : null,
           extracted_text: result.extracted_text || null,
+          structured_metadata: result.structured_metadata || null,
           uploading: false,
         };
         renderPendingAttachments();
@@ -2999,9 +3270,16 @@ function chatPage(user, isDirectChat = false) {
       var ext = (filename || '').split('.').pop().toLowerCase();
       var svgBase = 'width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"';
       var filePath = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>';
+      var tableLines = '<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>';
       var icons = {
         pdf:  '<svg ' + svgBase + ' stroke="#ef4444">' + filePath + '<path d="M9 15h2m-2-3h4"/></svg>',
-        csv:  '<svg ' + svgBase + ' stroke="#22c55e">' + filePath + '<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>',
+        csv:  '<svg ' + svgBase + ' stroke="#22c55e">' + filePath + tableLines + '</svg>',
+        xlsx: '<svg ' + svgBase + ' stroke="#22c55e">' + filePath + tableLines + '</svg>',
+        xls:  '<svg ' + svgBase + ' stroke="#22c55e">' + filePath + tableLines + '</svg>',
+        docx: '<svg ' + svgBase + ' stroke="#3b82f6">' + filePath + '<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>',
+        doc:  '<svg ' + svgBase + ' stroke="#3b82f6">' + filePath + '<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>',
+        pptx: '<svg ' + svgBase + ' stroke="#f97316">' + filePath + '<rect x="8" y="12" width="8" height="6" rx="1"/></svg>',
+        ppt:  '<svg ' + svgBase + ' stroke="#f97316">' + filePath + '<rect x="8" y="12" width="8" height="6" rx="1"/></svg>',
         md:   '<svg ' + svgBase + ' stroke="#a78bfa">' + filePath + '</svg>',
         txt:  '<svg ' + svgBase + ' stroke="#94a3b8">' + filePath + '<line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>',
         json: '<svg ' + svgBase + ' stroke="#f59e0b">' + filePath + '</svg>',
@@ -3048,6 +3326,15 @@ function chatPage(user, isDirectChat = false) {
           iconSpan.innerHTML = getFileIcon(a.filename); // safe: hardcoded SVGs only
           doc.appendChild(iconSpan);
           doc.appendChild(document.createTextNode(a.filename));
+          if (NEW_UI && !a.uploading && a.structured_metadata) {
+            var metaEl = document.createElement('span');
+            metaEl.style.cssText = 'font-size:0.65rem;color:var(--text-muted);margin-left:4px;';
+            var parts = [];
+            if (a.structured_metadata.rowCount) parts.push(a.structured_metadata.rowCount + ' rows');
+            if (a.structured_metadata.columns) parts.push(a.structured_metadata.columns.length + ' cols');
+            if (parts.length) metaEl.textContent = '(' + parts.join(', ') + ')';
+            doc.appendChild(metaEl);
+          }
           wrap.appendChild(doc);
         }
 
@@ -3074,6 +3361,314 @@ function chatPage(user, isDirectChat = false) {
       pendingAttachments.forEach(a => { if (a.preview) URL.revokeObjectURL(a.preview); });
       pendingAttachments = [];
       renderPendingAttachments();
+    }
+
+    /* ==================== NEW UI FUNCTIONS ==================== */
+
+    // ── Artifact Download Cards (Phase 3) ──
+    function renderArtifactCard(evt) {
+      if (!NEW_UI) return;
+      var container = document.getElementById('messages-inner');
+      if (!container) return;
+
+      var toolTypeMap = {
+        generate_pdf: 'pdf', generate_pptx: 'pptx', generate_document: 'docx',
+        generate_spreadsheet: 'xlsx', generate_chart: 'chart',
+      };
+      var fileType = toolTypeMap[evt.tool] || (evt.filename || '').split('.').pop().toLowerCase() || 'file';
+      var isChart = evt.tool === 'generate_chart';
+
+      var wrapper = document.createElement('div');
+      wrapper.style.cssText = 'margin-left:40px;';
+
+      if (isChart && evt.url) {
+        var img = document.createElement('img');
+        img.className = 'artifact-chart-img';
+        img.src = evt.url;
+        img.alt = evt.filename || 'Chart';
+        img.onclick = function() { openLightbox(evt.url); };
+        wrapper.appendChild(img);
+      }
+
+      var ac = document.createElement('div');
+      ac.className = 'artifact-card';
+
+      var icon = document.createElement('div');
+      icon.className = 'artifact-card-icon ' + fileType;
+      icon.textContent = fileType.toUpperCase();
+
+      var info = document.createElement('div');
+      info.className = 'artifact-card-info';
+      var nameEl = document.createElement('div');
+      nameEl.className = 'artifact-card-name';
+      nameEl.textContent = evt.filename || 'Download';
+      var meta = document.createElement('div');
+      meta.className = 'artifact-card-meta';
+      var metaParts = [];
+      if (evt.size) metaParts.push(evt.size);
+      if (evt.slideCount) metaParts.push(evt.slideCount + ' slides');
+      if (evt.sheetCount) metaParts.push(evt.sheetCount + ' sheets');
+      if (evt.totalRows) metaParts.push(evt.totalRows + ' rows');
+      if (evt.chartType) metaParts.push(evt.chartType + ' chart');
+      meta.textContent = metaParts.join(' / ') || fileType.toUpperCase() + ' document';
+      info.appendChild(nameEl);
+      info.appendChild(meta);
+
+      var dl = document.createElement('a');
+      dl.className = 'artifact-card-download';
+      dl.href = evt.url;
+      dl.download = evt.filename || '';
+      dl.target = '_blank';
+      dl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+
+      ac.appendChild(icon);
+      ac.appendChild(info);
+      ac.appendChild(dl);
+      wrapper.appendChild(ac);
+      container.appendChild(wrapper);
+      scrollToBottom(false);
+    }
+
+    // ── Collapsible Tool Use Stack (Phase 2) ──
+    var activeToolStackEl = null;
+    var toolStackItems = {};
+
+    var TOOL_LABELS = {
+      web_search: 'Searching the web',
+      ikawn_generate: 'Generating image',
+      manage_task: 'Managing task',
+      create_user_task: 'Creating task',
+      brand_analysis: 'Analyzing brand',
+      generate_pdf: 'Generating PDF',
+      generate_pptx: 'Building presentation',
+      generate_chart: 'Creating chart',
+      generate_document: 'Writing document',
+      generate_spreadsheet: 'Building spreadsheet',
+      query_data: 'Querying data',
+      email_access: 'Checking email',
+      calendar_manage: 'Managing calendar',
+      analytics_report: 'Running analytics',
+      campaign_report: 'Building campaign report',
+      start_background_task: 'Starting background task',
+      check_task_status: 'Checking task status',
+      search_memory: 'Searching memory',
+      capture_memory: 'Saving to memory',
+    };
+
+    function getOrCreateToolStack() {
+      if (!activeToolStackEl || !activeToolStackEl.parentNode) {
+        activeToolStackEl = document.createElement('div');
+        activeToolStackEl.className = 'tool-use-stack';
+        activeToolStackEl.id = 'tool-use-stack';
+        var container = document.getElementById('messages-inner');
+        if (container) container.appendChild(activeToolStackEl);
+      }
+      return activeToolStackEl;
+    }
+
+    function addToolToStack(toolName, detail) {
+      var stack = getOrCreateToolStack();
+      var itemId = toolName + '-' + Date.now();
+
+      var item = document.createElement('div');
+      item.className = 'tool-use-item running';
+      item.dataset.tool = toolName;
+      item.dataset.itemId = itemId;
+
+      var dot = document.createElement('span');
+      dot.className = 'tool-use-dot running';
+      var label = document.createElement('span');
+      label.className = 'tool-use-label';
+      var displayLabel = TOOL_LABELS[toolName] || ('Using ' + toolName.replace(/_/g, ' '));
+      label.textContent = detail ? displayLabel + ': ' + detail.slice(0, 80) : displayLabel + '...';
+
+      item.appendChild(dot);
+      item.appendChild(label);
+      stack.appendChild(item);
+      toolStackItems[toolName] = { item: item, detail: detail };
+      scrollToBottom(false);
+      return itemId;
+    }
+
+    function completeToolInStack(toolName, success, resultText) {
+      var entry = toolStackItems[toolName];
+      if (!entry) return;
+      var item = entry.item;
+      item.classList.remove('running');
+
+      var dot = item.querySelector('.tool-use-dot');
+      if (dot) { dot.classList.remove('running'); dot.classList.add(success ? 'done' : 'failed'); }
+
+      var label = item.querySelector('.tool-use-label');
+      var displayLabel = TOOL_LABELS[toolName] || toolName.replace(/_/g, ' ');
+      if (label) label.textContent = 'Used ' + displayLabel.toLowerCase();
+
+      // Add chevron for expand
+      var chevron = document.createElement('span');
+      chevron.className = 'tool-use-chevron';
+      chevron.textContent = '\\u25B6';
+      item.appendChild(chevron);
+
+      // Add hidden detail div
+      if (resultText) {
+        var detailDiv = document.createElement('div');
+        detailDiv.className = 'tool-use-detail';
+        detailDiv.textContent = resultText;
+        item.parentNode.insertBefore(detailDiv, item.nextSibling);
+      }
+
+      item.onclick = function() { item.classList.toggle('expanded'); };
+      delete toolStackItems[toolName];
+    }
+
+    function resetToolStack() {
+      activeToolStackEl = null;
+      toolStackItems = {};
+    }
+
+    // ── Background Task Card (Phase 7) ──
+    var activeTaskPollers = {};
+
+    function showBackgroundTaskCard(taskId, taskType, description) {
+      if (!NEW_UI) return;
+      var container = document.getElementById('messages-inner');
+      if (!container) return;
+
+      var card = document.createElement('div');
+      card.className = 'task-card';
+      card.id = 'task-card-' + taskId;
+
+      var header = document.createElement('div');
+      header.className = 'task-card-header';
+      var title = document.createElement('div');
+      title.className = 'task-card-title';
+      title.textContent = description || ('Background ' + (taskType || 'task').replace(/_/g, ' '));
+      var status = document.createElement('div');
+      status.className = 'task-card-status';
+      status.id = 'task-status-' + taskId;
+      status.textContent = 'In progress';
+      header.appendChild(title);
+      header.appendChild(status);
+
+      var progress = document.createElement('div');
+      progress.className = 'task-card-progress';
+      var bar = document.createElement('div');
+      bar.className = 'task-card-progress-bar';
+      bar.id = 'task-bar-' + taskId;
+      progress.appendChild(bar);
+
+      var step = document.createElement('div');
+      step.className = 'task-card-step';
+      step.id = 'task-step-' + taskId;
+      step.textContent = 'Starting...';
+
+      var artifacts = document.createElement('div');
+      artifacts.className = 'task-card-artifacts';
+      artifacts.id = 'task-artifacts-' + taskId;
+
+      card.appendChild(header);
+      card.appendChild(progress);
+      card.appendChild(step);
+      card.appendChild(artifacts);
+
+      var wrapper = document.createElement('div');
+      wrapper.style.cssText = 'margin-left:40px;';
+      wrapper.appendChild(card);
+      container.appendChild(wrapper);
+      scrollToBottom(false);
+
+      pollTaskStatus(taskId);
+    }
+
+    function pollTaskStatus(taskId) {
+      if (activeTaskPollers[taskId]) return;
+      var attempts = 0;
+      var maxAttempts = 120;
+      activeTaskPollers[taskId] = setInterval(async function() {
+        attempts++;
+        if (attempts > maxAttempts) {
+          clearInterval(activeTaskPollers[taskId]);
+          delete activeTaskPollers[taskId];
+          var statusEl = document.getElementById('task-status-' + taskId);
+          if (statusEl) statusEl.textContent = 'Timed out';
+          return;
+        }
+        try {
+          var res = await fetch('/api/tasks/' + taskId + '/status');
+          if (!res.ok) return;
+          var data = await res.json();
+
+          var statusEl = document.getElementById('task-status-' + taskId);
+          var barEl = document.getElementById('task-bar-' + taskId);
+          var stepEl = document.getElementById('task-step-' + taskId);
+
+          if (data.progress) {
+            if (barEl && data.progress.pct) barEl.style.width = data.progress.pct + '%';
+            if (stepEl && data.progress.step) stepEl.textContent = data.progress.step;
+          }
+
+          if (data.status === 'completed') {
+            clearInterval(activeTaskPollers[taskId]);
+            delete activeTaskPollers[taskId];
+            if (statusEl) { statusEl.textContent = 'Complete'; statusEl.style.color = 'var(--success, #22c55e)'; }
+            if (barEl) barEl.style.width = '100%';
+            if (stepEl) stepEl.textContent = data.result?.summary || 'Task completed';
+            if (data.result?.artifacts) {
+              data.result.artifacts.forEach(function(a) {
+                renderArtifactCard({ tool: 'generate_' + (a.type || 'document'), url: a.url, filename: a.filename, size: a.size });
+              });
+            }
+            var card = document.getElementById('task-card-' + taskId);
+            if (card) {
+              var dismiss = document.createElement('button');
+              dismiss.className = 'task-card-dismiss';
+              dismiss.textContent = 'Dismiss';
+              dismiss.onclick = function() { card.parentNode.remove(); };
+              card.appendChild(dismiss);
+            }
+          } else if (data.status === 'failed') {
+            clearInterval(activeTaskPollers[taskId]);
+            delete activeTaskPollers[taskId];
+            if (statusEl) { statusEl.textContent = 'Failed'; statusEl.style.color = 'var(--danger, #ef4444)'; }
+            if (stepEl) stepEl.textContent = data.error_message || 'Task failed';
+          }
+        } catch(e) {}
+      }, 10000);
+    }
+
+    // ── Connected Services Indicator (Phase 6) ──
+    async function loadConnectorIndicators() {
+      try {
+        var res = await fetch('/api/connectors');
+        if (!res.ok) return;
+        var data = await res.json();
+        var container = document.getElementById('header-connectors');
+        if (!container || !data.connectors || !data.connectors.length) return;
+
+        var connectorIcons = {
+          gmail: '<svg viewBox="0 0 24 24" fill="none" stroke="#ea4335" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="22,4 12,13 2,4"/></svg>',
+          google_calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="#4285f4" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+          google_analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="#f9ab00" stroke-width="2"><rect x="4" y="14" width="4" height="6" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg>',
+          outlook: '<svg viewBox="0 0 24 24" fill="none" stroke="#0078d4" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="22,4 12,13 2,4"/></svg>',
+          outlook_calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="#0078d4" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+          meta_campaigns: '<svg viewBox="0 0 24 24" fill="none" stroke="#1877f2" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10"/></svg>',
+        };
+        var connectorNames = {
+          gmail: 'Gmail', google_calendar: 'Calendar', google_analytics: 'Analytics',
+          outlook: 'Outlook', outlook_calendar: 'Calendar', meta_campaigns: 'Meta',
+        };
+
+        data.connectors.filter(function(c) { return c.status === 'active'; }).forEach(function(c) {
+          var el = document.createElement('div');
+          el.className = 'header-connector connected';
+          el.title = (connectorNames[c.type] || c.type) + ' connected';
+          var iconSvg = connectorIcons[c.type] || '';
+          var tooltip = '<div class="header-connector-tooltip">' + escapeHtml(connectorNames[c.type] || c.type) + '</div>';
+          el.innerHTML = iconSvg + tooltip;
+          el.onclick = function() { window.location.href = '/settings'; };
+          container.appendChild(el);
+        });
+      } catch(e) {}
     }
 
     /* ==================== GALLERY PICKER ==================== */

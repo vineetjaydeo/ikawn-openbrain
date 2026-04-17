@@ -335,6 +335,14 @@ async function executeReasoningLoop({
           } else {
             // Success
             resultContent = typeof envelope.data === 'string' ? envelope.data : JSON.stringify(envelope.data);
+            // Capture structured data for artifact/task SSE events
+            const ARTIFACT_TOOLS = ['generate_pdf','generate_pptx','generate_chart','generate_document','generate_spreadsheet'];
+            if (ARTIFACT_TOOLS.includes(block.name) && typeof envelope.data !== 'string') {
+              block._artifactData = envelope.data;
+            }
+            if (block.name === 'start_background_task' && typeof envelope.data !== 'string') {
+              block._taskData = envelope.data;
+            }
             toolCallCount++;
           }
         } else {
@@ -348,7 +356,7 @@ async function executeReasoningLoop({
       }
 
       if (onEvent) {
-        onEvent({ type: 'tool_result', name: block.name, success });
+        onEvent({ type: 'tool_result', name: block.name, success, artifactData: block._artifactData || null, taskData: block._taskData || null });
       }
 
       const resultStr = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);

@@ -38,6 +38,8 @@ const missionControlRoute = require('./routes/mission-control');
 const reportsRoute = require('./routes/reports');
 const flowConfigRoute = require('./routes/flow-config');
 const connectorRoutes = require('./routes/connector-routes');
+const vaultApiRoute = require('./routes/vault-api');
+const vaultPage = require('./routes/vault-page');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
 const { loadTools } = require('./tools/registry');
@@ -161,6 +163,10 @@ app.use(requireAuthOrApiKey, brandsApiRoute);
 app.use(skillsRoute);
 app.use(flowConfigRoute);
 app.use(connectorRoutes);
+app.use('/api/vault', requireAuth, vaultApiRoute);
+
+// Vault page — requires auth (handled inside router)
+app.use(vaultPage);
 
 // Chat UI at / — requires auth
 app.use(chatPage);

@@ -726,6 +726,25 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           pendingGenerations.push({ generationId: execResult.data.generationId, agent, prompt: toolInput?.prompt, batchSize });
         }
 
+        // Emit artifact_ready for generation tools (legacy path)
+        const ARTIFACT_TOOLS = ['generate_pdf','generate_pptx','generate_chart','generate_document','generate_spreadsheet'];
+        if (ARTIFACT_TOOLS.includes(toolName) && execResult?.success && execResult?.data?.url) {
+          res.write(`data: ${JSON.stringify({ type: 'artifact_ready', tool: toolName, ...execResult.data })}\n\n`);
+          // Auto-capture artifact to vault
+          pool.query(
+            `INSERT INTO vault_items (brand_id, user_id, filename, file_url, file_type, source, source_ref, metadata)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (file_url) WHERE deleted_at IS NULL DO NOTHING`,
+            [req.brand_id, req.session?.user?.id, execResult.data.filename || 'Untitled', execResult.data.url,
+             toolName.replace('generate_', ''), toolName, 'conv-' + conversation_id,
+             JSON.stringify(execResult.data)]
+          ).catch(err => console.warn('[Vault] Artifact capture failed:', err.message));
+        }
+        // Emit task_started for background tasks (legacy path)
+        if (toolName === 'start_background_task' && execResult?.success && execResult?.data?.taskId) {
+          res.write(`data: ${JSON.stringify({ type: 'task_started', ...execResult.data })}\n\n`);
+        }
+
         return execResult?.summary || JSON.stringify(execResult?.data || execResult);
       } catch (err) {
         toolFailureCounts[toolName] = (toolFailureCounts[toolName] || 0) + 1;
@@ -750,6 +769,22 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           break;
         case 'tool_result':
           res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: event.name, success: event.success, error: event.success ? undefined : 'Tool execution failed' })}\n\n`);
+          // Emit artifact_ready for generation tools (PDF, PPTX, charts, etc.)
+          if (event.artifactData?.url) {
+            res.write(`data: ${JSON.stringify({ type: 'artifact_ready', tool: event.name, ...event.artifactData })}\n\n`);
+            pool.query(
+              `INSERT INTO vault_items (brand_id, user_id, filename, file_url, file_type, source, source_ref, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+               ON CONFLICT (file_url) WHERE deleted_at IS NULL DO NOTHING`,
+              [req.brand_id, req.session?.user?.id, event.artifactData.filename || 'Untitled', event.artifactData.url,
+               (event.name || '').replace('generate_', '') || 'other', event.name || 'unknown', 'conv-' + conversation_id,
+               JSON.stringify(event.artifactData)]
+            ).catch(err => console.warn('[Vault] Artifact capture failed:', err.message));
+          }
+          // Emit task_started for background tasks
+          if (event.taskData?.taskId) {
+            res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: event.taskData.taskId, taskType: event.taskData.taskType, status: event.taskData.status })}\n\n`);
+          }
           // Send generation_started events after tool results
           for (const gen of pendingGenerations) {
             res.write(`data: ${JSON.stringify({ type: 'generation_started', generationId: gen.generationId, agent: gen.agent, prompt: gen.prompt, batchSize: gen.batchSize })}\n\n`);
@@ -1035,6 +1070,23 @@ router.get('/api/conversations/:id/markdown', async (req, res) => {
     res.json({ markdown: md, title });
   } catch (err) {
     console.error('GET /api/conversations/:id/markdown error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 6b. Background task status polling ──
+
+router.get('/api/tasks/:taskId/status', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, task_type, status, progress, result, error_message, created_at, started_at, completed_at FROM ob_background_tasks WHERE id = $1 AND brand_id = $2',
+      [req.params.taskId, req.brand_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Task not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('GET /api/tasks/:taskId/status error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

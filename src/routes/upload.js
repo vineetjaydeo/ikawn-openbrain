@@ -3,6 +3,22 @@ const router = express.Router();
 const { uploadToR2, getPresignedUploadUrl } = require('../utils/storage');
 const { extractText, extractStructured, isTabularMime } = require('../utils/doc-parser');
 const { captureMessage } = require('../utils/capture');
+const { pool } = require('../db');
+
+function normalizeFileType(mime, filename) {
+  if (!mime && !filename) return 'other';
+  const m = (mime || '').toLowerCase();
+  if (m === 'application/pdf') return 'pdf';
+  if (m.includes('presentationml') || m.includes('powerpoint')) return 'pptx';
+  if (m.includes('wordprocessingml') || m.includes('msword')) return 'docx';
+  if (m.includes('spreadsheetml') || m.includes('excel')) return 'xlsx';
+  if (m === 'text/csv') return 'csv';
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('text/')) return 'text';
+  const ext = (filename || '').split('.').pop().toLowerCase();
+  const extMap = { pdf: 'pdf', pptx: 'pptx', ppt: 'pptx', docx: 'docx', doc: 'docx', xlsx: 'xlsx', xls: 'xlsx', csv: 'csv', png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', svg: 'image', txt: 'text', md: 'text' };
+  return extMap[ext] || 'other';
+}
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -69,6 +85,14 @@ router.post('/api/upload/direct', async (req, res, next) => {
     const key = buildKey(req.session.user.id, filename);
 
     const url = await uploadToR2(key, buffer, contentType, req.brand_id);
+
+    // Auto-capture to vault
+    pool.query(
+      `INSERT INTO vault_items (brand_id, user_id, filename, file_url, file_key, file_type, mime_type, file_size, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'upload')
+       ON CONFLICT (file_url) WHERE deleted_at IS NULL DO NOTHING`,
+      [req.brand_id, req.session.user.id, filename, url, key, normalizeFileType(contentType, filename), contentType, buffer.length]
+    ).catch(err => console.warn('[Vault] Upload capture failed:', err.message));
 
     const result = { url, key };
 

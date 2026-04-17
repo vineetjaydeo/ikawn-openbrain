@@ -1423,7 +1423,53 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_bg_tasks_brand_user ON ob_background_tasks(brand_id, user_id);
     `);
 
-    console.log('Database schema initialized (v21 — background tasks)');
+    // ── Vault ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vault_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        user_id INTEGER REFERENCES users(id),
+        filename TEXT NOT NULL,
+        file_url TEXT NOT NULL,
+        file_key TEXT,
+        file_type VARCHAR(50) NOT NULL DEFAULT 'other',
+        mime_type VARCHAR(255),
+        file_size BIGINT,
+        source VARCHAR(50) NOT NULL DEFAULT 'upload',
+        source_ref TEXT,
+        folder TEXT DEFAULT 'All Files',
+        tags TEXT[] DEFAULT '{}',
+        metadata JSONB DEFAULT '{}',
+        starred BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vault_folders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brand_id VARCHAR(100) NOT NULL DEFAULT 'ikawn',
+        user_id INTEGER REFERENCES users(id),
+        name TEXT NOT NULL,
+        parent_folder TEXT,
+        color VARCHAR(7),
+        icon VARCHAR(50),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brand_id, user_id, name)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_vault_brand_user ON vault_items(brand_id, user_id) WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_vault_folder ON vault_items(brand_id, user_id, folder) WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_vault_source ON vault_items(source);
+      CREATE INDEX IF NOT EXISTS idx_vault_file_type ON vault_items(file_type);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_file_url_unique ON vault_items(file_url) WHERE deleted_at IS NULL;
+    `);
+
+    console.log('Database schema initialized (v22 — vault)');
   } finally {
     client.release();
   }

@@ -2808,9 +2808,9 @@ function chatPage(user, isDirectChat = false) {
       var viewMode = hasImages ? 'grid' : 'list';
       var toggleHtml = attachments.length > 1
         ? '<div class="msg-attach-toolbar">'
-          + '<button class="msg-attach-toggle' + (viewMode === 'grid' ? ' active' : '') + '" onclick="toggleAttachView(this,\'grid\')" title="Grid view">'
+          + '<button class="msg-attach-toggle' + (viewMode === 'grid' ? ' active' : '') + '" onclick="toggleAttachView(this,\\'grid\\')" title="Grid view">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>'
-          + '<button class="msg-attach-toggle' + (viewMode === 'list' ? ' active' : '') + '" onclick="toggleAttachView(this,\'list\')" title="List view">'
+          + '<button class="msg-attach-toggle' + (viewMode === 'list' ? ' active' : '') + '" onclick="toggleAttachView(this,\\'list\\')" title="List view">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>'
           + '</div>'
         : '';
@@ -2827,7 +2827,7 @@ function chatPage(user, isDirectChat = false) {
 
         // Grid card
         if (a.type === 'image') {
-          gridHtml += '<div class="attach-card" onclick="openLightbox(\'' + safeUrl + '\')">'
+          gridHtml += '<div class="attach-card" onclick="openLightbox(\\'' + safeUrl + '\\')">'
             + '<div class="attach-actions">'
             + '<a class="attach-action-btn" href="' + safeUrl + '" download="' + safeName + '" onclick="event.stopPropagation()" title="Download">'
             + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>'
@@ -2835,7 +2835,7 @@ function chatPage(user, isDirectChat = false) {
             + '<img class="attach-thumb" src="' + safeUrl + '" alt="' + safeName + '" loading="lazy">'
             + '<div class="attach-info"><span class="attach-name">' + safeName + '</span></div></div>';
         } else {
-          gridHtml += '<div class="attach-card" onclick="window.open(\'' + safeUrl + '\', \'_blank\')">'
+          gridHtml += '<div class="attach-card" onclick="window.open(\\'' + safeUrl + '\\', \\'_blank\\')">'
             + '<div class="attach-actions">'
             + '<a class="attach-action-btn" href="' + safeUrl + '" download="' + safeName + '" onclick="event.stopPropagation()" title="Download">'
             + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>'
@@ -2846,14 +2846,14 @@ function chatPage(user, isDirectChat = false) {
 
         // List row
         if (a.type === 'image') {
-          listHtml += '<div class="attach-row" onclick="openLightbox(\'' + safeUrl + '\')">'
+          listHtml += '<div class="attach-row" onclick="openLightbox(\\'' + safeUrl + '\\')">'
             + '<img class="attach-row-thumb" src="' + safeUrl + '" alt="' + safeName + '" loading="lazy">'
             + '<span class="attach-row-name">' + safeName + '</span>'
             + '<span class="attach-row-type">Image</span>'
             + '<a class="attach-row-dl" href="' + safeUrl + '" download="' + safeName + '" onclick="event.stopPropagation()" title="Download">'
             + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a></div>';
         } else {
-          listHtml += '<div class="attach-row" onclick="window.open(\'' + safeUrl + '\', \'_blank\')">'
+          listHtml += '<div class="attach-row" onclick="window.open(\\'' + safeUrl + '\\', \\'_blank\\')">'
             + '<div class="attach-row-icon" style="background:' + ftypeColor + '20;color:' + ftypeColor + '">' + ftype + '</div>'
             + '<span class="attach-row-name">' + safeName + '</span>'
             + '<span class="attach-row-type">' + ftype.toUpperCase() + '</span>'

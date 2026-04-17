@@ -874,33 +874,88 @@ function chatPage(user, isDirectChat = false) {
     }
     .gen-card-link:hover { opacity: 0.8; }
 
-    /* ==================== NEW UI: TOOL USE STACK ==================== */
-    .tool-use-stack { margin: 8px 0 8px 40px; display: flex; flex-direction: column; gap: 4px; }
-    .tool-use-item {
-      display: flex; align-items: center; gap: 8px; padding: 6px 12px;
-      background: rgba(255,255,255,0.03); border-radius: 8px;
-      font-size: 0.78rem; color: var(--text-muted); cursor: pointer;
-      transition: background 0.15s;
-      animation: slideInLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+    /* ==================== NEW UI: TOOL INDICATOR (Claude-style) ==================== */
+    .tool-indicator {
+      margin: 8px 0 8px 40px; max-width: 420px;
     }
-    @media (hover: hover) { .tool-use-item:hover { background: rgba(255,255,255,0.06); } }
-    .tool-use-item.running { color: var(--accent); }
-    .tool-use-dot {
+    .tool-indicator-current {
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      background: rgba(255,255,255,0.03); border-radius: 10px;
+      font-size: 0.8rem; color: var(--text-dim);
+      border: 1px solid var(--border);
+      cursor: pointer; position: relative; overflow: hidden;
+      transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      min-height: 38px;
+    }
+    @media (hover: hover) {
+      .tool-indicator-current:hover { border-color: rgba(255,255,255,0.15); }
+    }
+    .tool-indicator-current:active { transform: scale(0.98); }
+    .tool-indicator-spinner {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid rgba(255,192,28,0.2);
+      border-top-color: var(--accent);
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    .tool-indicator-spinner.done {
+      border: none; background: var(--success, #22c55e); width: 8px; height: 8px;
+      animation: none;
+    }
+    .tool-indicator-spinner.failed {
+      border: none; background: var(--danger, #ef4444); width: 8px; height: 8px;
+      animation: none;
+    }
+    .tool-indicator-label {
+      flex: 1; overflow: hidden; height: 1.3em; position: relative;
+    }
+    .tool-indicator-text {
+      display: block; animation: flipIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes flipIn {
+      from { opacity: 0; transform: translateY(100%) rotateX(-90deg); }
+      to { opacity: 1; transform: translateY(0) rotateX(0deg); }
+    }
+    @keyframes flipOut {
+      from { opacity: 1; transform: translateY(0) rotateX(0deg); }
+      to { opacity: 0; transform: translateY(-100%) rotateX(90deg); }
+    }
+    .tool-indicator-count {
+      font-size: 0.7rem; color: var(--text-dim); background: rgba(255,255,255,0.06);
+      padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .tool-indicator-chevron {
+      font-size: 0.6rem; color: var(--text-dim); flex-shrink: 0;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      margin-left: 2px;
+    }
+    .tool-indicator.expanded .tool-indicator-chevron { transform: rotate(180deg); }
+
+    /* Activity log dropdown */
+    .tool-indicator-log {
+      max-height: 0; overflow: hidden;
+      transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s;
+      opacity: 0;
+    }
+    .tool-indicator.expanded .tool-indicator-log {
+      max-height: 400px; opacity: 1;
+      overflow-y: auto;
+    }
+    .tool-log-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 12px; font-size: 0.75rem; color: var(--text-dim);
+    }
+    .tool-log-item:first-child { padding-top: 8px; }
+    .tool-log-item:last-child { padding-bottom: 6px; }
+    .tool-log-dot {
       width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
     }
-    .tool-use-dot.running { background: var(--accent); animation: pulse 1s infinite; }
-    .tool-use-dot.done { background: var(--success, #22c55e); }
-    .tool-use-dot.failed { background: var(--danger, #ef4444); }
-    .tool-use-label { flex: 1; }
-    .tool-use-chevron {
-      margin-left: auto; transition: transform 0.2s; font-size: 0.65rem; color: var(--text-muted);
-    }
-    .tool-use-item.expanded .tool-use-chevron { transform: rotate(90deg); }
-    .tool-use-detail {
-      display: none; padding: 4px 12px 8px 26px;
-      font-size: 0.72rem; color: var(--text-muted); line-height: 1.4;
-    }
-    .tool-use-item.expanded + .tool-use-detail { display: block; }
+    .tool-log-dot.done { background: var(--success, #22c55e); }
+    .tool-log-dot.failed { background: var(--danger, #ef4444); }
+    .tool-log-dot.running { background: var(--accent); animation: pulse 1s infinite; }
+    .tool-log-label { flex: 1; }
+    .tool-log-time { font-size: 0.65rem; color: rgba(255,255,255,0.25); font-variant-numeric: tabular-nums; }
 
     /* ==================== NEW UI: ARTIFACT CARDS ==================== */
     .artifact-card {
@@ -1671,7 +1726,7 @@ function chatPage(user, isDirectChat = false) {
 
       /* Minimum tap targets */
       .rail-btn, .header-btn, .compose-btn, .conv-item, .panel-nav-item,
-      .send-btn, .artifact-card-download, .tool-use-item {
+      .send-btn, .artifact-card-download, .tool-indicator-current {
         min-height: 44px; min-width: 44px;
       }
 
@@ -3429,9 +3484,11 @@ function chatPage(user, isDirectChat = false) {
       scrollToBottom(false);
     }
 
-    // ── Collapsible Tool Use Stack (Phase 2) ──
-    var activeToolStackEl = null;
-    var toolStackItems = {};
+    // ── Tool Indicator (Claude-style, Phase 2) ──
+    var toolIndicatorEl = null;
+    var toolLogEntries = [];
+    var toolActiveCount = 0;
+    var toolStartTime = null;
 
     var TOOL_LABELS = {
       web_search: 'Searching the web',
@@ -3455,75 +3512,150 @@ function chatPage(user, isDirectChat = false) {
       capture_memory: 'Saving to memory',
     };
 
-    function getOrCreateToolStack() {
-      if (!activeToolStackEl || !activeToolStackEl.parentNode) {
-        activeToolStackEl = document.createElement('div');
-        activeToolStackEl.className = 'tool-use-stack';
-        activeToolStackEl.id = 'tool-use-stack';
+    function getOrCreateToolIndicator() {
+      if (!toolIndicatorEl || !toolIndicatorEl.parentNode) {
+        toolIndicatorEl = document.createElement('div');
+        toolIndicatorEl.className = 'tool-indicator';
+        toolIndicatorEl.innerHTML = '<div class="tool-indicator-current" onclick="toggleToolLog()">'
+          + '<div class="tool-indicator-spinner"></div>'
+          + '<div class="tool-indicator-label"><span class="tool-indicator-text"></span></div>'
+          + '<span class="tool-indicator-count" style="display:none"></span>'
+          + '<span class="tool-indicator-chevron">\u25BC</span>'
+          + '</div>'
+          + '<div class="tool-indicator-log"></div>';
         var container = document.getElementById('messages-inner');
-        if (container) container.appendChild(activeToolStackEl);
+        if (container) container.appendChild(toolIndicatorEl);
       }
-      return activeToolStackEl;
+      return toolIndicatorEl;
     }
 
     function addToolToStack(toolName, detail) {
-      var stack = getOrCreateToolStack();
-      var itemId = toolName + '-' + Date.now();
+      var indicator = getOrCreateToolIndicator();
+      if (!toolStartTime) toolStartTime = Date.now();
+      toolActiveCount++;
 
-      var item = document.createElement('div');
-      item.className = 'tool-use-item running';
-      item.dataset.tool = toolName;
-      item.dataset.itemId = itemId;
-
-      var dot = document.createElement('span');
-      dot.className = 'tool-use-dot running';
-      var label = document.createElement('span');
-      label.className = 'tool-use-label';
       var displayLabel = TOOL_LABELS[toolName] || ('Using ' + toolName.replace(/_/g, ' '));
-      label.textContent = detail ? displayLabel + ': ' + detail.slice(0, 80) : displayLabel + '...';
+      var labelText = detail ? displayLabel + ': ' + detail.slice(0, 60) : displayLabel + '...';
 
-      item.appendChild(dot);
-      item.appendChild(label);
-      stack.appendChild(item);
-      toolStackItems[toolName] = { item: item, detail: detail };
+      // Flip animation on current label
+      var labelEl = indicator.querySelector('.tool-indicator-label');
+      var oldText = labelEl.querySelector('.tool-indicator-text');
+      if (oldText) {
+        oldText.style.animation = 'flipOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+        setTimeout(function() {
+          if (oldText.parentNode) oldText.remove();
+        }, 200);
+      }
+      var newText = document.createElement('span');
+      newText.className = 'tool-indicator-text';
+      newText.textContent = labelText;
+      newText.style.animationDelay = '0.15s';
+      labelEl.appendChild(newText);
+
+      // Add to log
+      var logEntry = { toolName: toolName, label: displayLabel, detail: detail, status: 'running', time: new Date() };
+      toolLogEntries.push(logEntry);
+      renderToolLog(indicator);
+
+      // Update count badge
+      updateToolCount(indicator);
       scrollToBottom(false);
-      return itemId;
     }
 
     function completeToolInStack(toolName, success, resultText) {
-      var entry = toolStackItems[toolName];
-      if (!entry) return;
-      var item = entry.item;
-      item.classList.remove('running');
+      var indicator = getOrCreateToolIndicator();
+      toolActiveCount = Math.max(0, toolActiveCount - 1);
 
-      var dot = item.querySelector('.tool-use-dot');
-      if (dot) { dot.classList.remove('running'); dot.classList.add(success ? 'done' : 'failed'); }
-
-      var label = item.querySelector('.tool-use-label');
-      var displayLabel = TOOL_LABELS[toolName] || toolName.replace(/_/g, ' ');
-      if (label) label.textContent = 'Used ' + displayLabel.toLowerCase();
-
-      // Add chevron for expand
-      var chevron = document.createElement('span');
-      chevron.className = 'tool-use-chevron';
-      chevron.textContent = '\\u25B6';
-      item.appendChild(chevron);
-
-      // Add hidden detail div
-      if (resultText) {
-        var detailDiv = document.createElement('div');
-        detailDiv.className = 'tool-use-detail';
-        detailDiv.textContent = resultText;
-        item.parentNode.insertBefore(detailDiv, item.nextSibling);
+      // Update log entry
+      for (var i = toolLogEntries.length - 1; i >= 0; i--) {
+        if (toolLogEntries[i].toolName === toolName && toolLogEntries[i].status === 'running') {
+          toolLogEntries[i].status = success ? 'done' : 'failed';
+          toolLogEntries[i].result = resultText;
+          break;
+        }
       }
+      renderToolLog(indicator);
 
-      item.onclick = function() { item.classList.toggle('expanded'); };
-      delete toolStackItems[toolName];
+      // If no more active tools, show completion state
+      if (toolActiveCount <= 0) {
+        var spinner = indicator.querySelector('.tool-indicator-spinner');
+        if (spinner) { spinner.classList.add('done'); spinner.classList.remove('failed'); }
+        var elapsed = toolStartTime ? Math.round((Date.now() - toolStartTime) / 1000) : 0;
+        var labelEl = indicator.querySelector('.tool-indicator-label');
+        var oldText = labelEl.querySelector('.tool-indicator-text');
+        if (oldText) {
+          oldText.style.animation = 'flipOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+          setTimeout(function() { if (oldText.parentNode) oldText.remove(); }, 200);
+        }
+        var doneText = document.createElement('span');
+        doneText.className = 'tool-indicator-text';
+        doneText.textContent = toolLogEntries.length + ' action' + (toolLogEntries.length !== 1 ? 's' : '') + ' completed' + (elapsed > 0 ? ' in ' + elapsed + 's' : '');
+        doneText.style.animationDelay = '0.15s';
+        labelEl.appendChild(doneText);
+      } else {
+        // Show the next running tool
+        for (var j = toolLogEntries.length - 1; j >= 0; j--) {
+          if (toolLogEntries[j].status === 'running') {
+            var labelEl2 = indicator.querySelector('.tool-indicator-label');
+            var oldText2 = labelEl2.querySelector('.tool-indicator-text');
+            if (oldText2) {
+              oldText2.style.animation = 'flipOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+              setTimeout(function() { if (oldText2.parentNode) oldText2.remove(); }, 200);
+            }
+            var nextText = document.createElement('span');
+            nextText.className = 'tool-indicator-text';
+            var nextLabel = toolLogEntries[j].detail ? toolLogEntries[j].label + ': ' + toolLogEntries[j].detail.slice(0, 60) : toolLogEntries[j].label + '...';
+            nextText.textContent = nextLabel;
+            nextText.style.animationDelay = '0.15s';
+            labelEl2.appendChild(nextText);
+            break;
+          }
+        }
+      }
+      updateToolCount(indicator);
+    }
+
+    function renderToolLog(indicator) {
+      var logEl = indicator.querySelector('.tool-indicator-log');
+      if (!logEl) return;
+      logEl.innerHTML = '';
+      for (var i = 0; i < toolLogEntries.length; i++) {
+        var e = toolLogEntries[i];
+        var row = document.createElement('div');
+        row.className = 'tool-log-item';
+        var dot = document.createElement('span');
+        dot.className = 'tool-log-dot ' + e.status;
+        var lbl = document.createElement('span');
+        lbl.className = 'tool-log-label';
+        lbl.textContent = e.label + (e.result ? ': ' + e.result.slice(0, 60) : e.status === 'running' ? '...' : '');
+        var timeEl = document.createElement('span');
+        timeEl.className = 'tool-log-time';
+        timeEl.textContent = e.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        row.appendChild(dot);
+        row.appendChild(lbl);
+        row.appendChild(timeEl);
+        logEl.appendChild(row);
+      }
+    }
+
+    function updateToolCount(indicator) {
+      var badge = indicator.querySelector('.tool-indicator-count');
+      if (badge) {
+        badge.textContent = toolLogEntries.length;
+        badge.style.display = toolLogEntries.length > 1 ? '' : 'none';
+      }
+    }
+
+    function toggleToolLog() {
+      var indicator = document.querySelector('.tool-indicator');
+      if (indicator) indicator.classList.toggle('expanded');
     }
 
     function resetToolStack() {
-      activeToolStackEl = null;
-      toolStackItems = {};
+      toolIndicatorEl = null;
+      toolLogEntries = [];
+      toolActiveCount = 0;
+      toolStartTime = null;
     }
 
     // ── Background Task Card (Phase 7) ──

@@ -145,6 +145,12 @@ function vaultPage(user) {
     .rail-btn.active { background: var(--accent-soft); color: var(--accent); }
     .rail-btn svg { width: 18px; height: 18px; }
 
+    .report-badge {
+      position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; border-radius: 8px;
+      background: #e5a819; color: #000; font-size: 10px; font-weight: 700; display: flex;
+      align-items: center; justify-content: center; padding: 0 4px; line-height: 1;
+    }
+
     .rail-bottom {
       margin-top: auto;
       display: flex;
@@ -328,6 +334,14 @@ function vaultPage(user) {
     }
     .toolbar-select:focus { border-color: var(--accent); outline: none; }
 
+    .vault-back-btn {
+      width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--text-dim); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); flex-shrink: 0;
+    }
+    .vault-back-btn:active { transform: scale(0.96); }
+
     .toolbar-right {
       display: flex;
       align-items: center;
@@ -358,6 +372,7 @@ function vaultPage(user) {
     .view-toggle-btn.active { background: var(--bg-hover); color: var(--text); }
     @media (hover: hover) {
       .view-toggle-btn:hover { color: var(--text); }
+      .vault-back-btn:hover { border-color: var(--accent); color: var(--text); background: var(--bg-hover); }
     }
     .view-toggle-btn svg { width: 16px; height: 16px; }
 
@@ -1083,25 +1098,36 @@ function vaultPage(user) {
     <div class="folder-overlay" id="folder-overlay" onclick="closeFolderSidebar()"></div>
 
     <!-- Sidebar Rail -->
-    <nav class="sidebar-rail">
-      <div class="rail-logo" title="${INSTANCE_NAME}" onclick="window.location.href='/'">
+    <nav class="sidebar-rail" id="sidebar-rail">
+      <div class="rail-logo" title="${INSTANCE_NAME}" onclick="event.stopPropagation(); window.location.href='/'" style="cursor:pointer">
         \u2726
       </div>
       <div class="rail-nav">
-        <button class="rail-btn" onclick="window.location.href='/'" title="Chat">
+        <button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/'" title="Chat">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </button>
-        <button class="rail-btn active" title="Vault">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M10 6V2h4v4"/></svg>
+        <button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/'" title="History">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </button>
-        <button class="rail-btn" onclick="window.location.href='/reports'" title="Reports">
+        <button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/reports'" title="Reports" style="position:relative">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span class="report-badge" id="report-badge" style="display:none"></span>
         </button>
-        ${isAdmin ? `<button class="rail-btn" onclick="window.location.href='/mission'" title="Mission Control"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></button>` : ''}
+        <button class="rail-btn active" onclick="event.stopPropagation(); window.location.href='/vault'" title="Vault">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
+        ${isAdmin ? `<button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/mission'" title="Mission Control">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        </button>` : ''}
       </div>
+
       <div class="rail-bottom">
-        ${isAdmin ? `<button class="rail-btn" onclick="window.location.href='/admin/brain-health'" title="Brain Health"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></button>` : ''}
-        <div class="rail-avatar" title="${user.name || user.email}">
+        ${isAdmin ? `<button class="rail-btn" onclick="event.stopPropagation(); window.location.href='/admin/brain-health'" title="Brain Health">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </button>` : ''}
+        <div class="rail-avatar" onclick="event.stopPropagation()" title="${user.name || user.email}">
           ${(user.name || user.email || '?')[0].toUpperCase()}
         </div>
       </div>
@@ -1123,6 +1149,12 @@ function vaultPage(user) {
     <div class="main-content">
       <!-- Toolbar -->
       <div class="toolbar">
+        <button class="vault-back-btn" onclick="window.location.href='/'" title="Back to chat">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/>
+            <polyline points="12 19 5 12 12 5"/>
+          </svg>
+        </button>
         <div class="toolbar-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="search-input" placeholder="Search files..." oninput="onSearchInput()" />
@@ -1232,7 +1264,7 @@ function vaultPage(user) {
     var selectedIds = new Set();
     var activeDetailItem = null;
     var searchTimeout = null;
-    var filters = { type: '', source: '', q: '', starred: false };
+    var filters = { type: '', source: '', q: '', starred: false, virtualFolder: null };
     var sortField = 'created_at';
     var sortOrder = 'desc';
     var offset = 0;
@@ -1320,6 +1352,8 @@ function vaultPage(user) {
       if (filters.source) params.set('source', filters.source);
       if (filters.q) params.set('q', filters.q);
       if (filters.starred) params.set('starred', 'true');
+      if (filters.virtualFolder === '__uploaded__') params.set('source', 'upload');
+      if (filters.virtualFolder === '__generated__') params.set('source', 'generate_pdf,generate_pptx,generate_chart,generate_document,generate_spreadsheet,ikawn_generate');
       if (currentFolder) params.set('folder', currentFolder);
       params.set('sort', sortField);
       params.set('order', sortOrder);
@@ -1372,6 +1406,8 @@ function vaultPage(user) {
 
       html += folderItemHtml(null, 'All Files', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>');
       html += folderItemHtml('__starred__', 'Starred', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>');
+      html += folderItemHtml('__uploaded__', 'Uploaded', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>');
+      html += folderItemHtml('__generated__', 'Generated', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26z" fill="none"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="12" y1="18" x2="12" y2="22"/></svg>');
 
       for (var i = 0; i < folders.length; i++) {
         html += folderItemHtml(folders[i].name, folders[i].name, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>');
@@ -1383,9 +1419,12 @@ function vaultPage(user) {
     }
 
     function folderItemHtml(key, label, icon) {
-      var active = (key === null && !currentFolder && !filters.starred) ||
+      var virtualKeys = ['__starred__', '__uploaded__', '__generated__'];
+      var active = (key === null && !currentFolder && !filters.starred && !filters.virtualFolder) ||
                    (key === '__starred__' && filters.starred) ||
-                   (key !== null && key !== '__starred__' && currentFolder === key);
+                   (key === '__uploaded__' && filters.virtualFolder === '__uploaded__') ||
+                   (key === '__generated__' && filters.virtualFolder === '__generated__') ||
+                   (key !== null && virtualKeys.indexOf(key) === -1 && currentFolder === key);
       var escapedLabel = escHtml(label);
       var dataFolder = key || 'all';
       var onclick = key === null ? 'selectFolder(null)' : "selectFolder('" + escHtml(key) + "')";
@@ -1406,9 +1445,19 @@ function vaultPage(user) {
       if (key === '__starred__') {
         currentFolder = null;
         filters.starred = true;
+        filters.virtualFolder = null;
+      } else if (key === '__uploaded__') {
+        currentFolder = null;
+        filters.starred = false;
+        filters.virtualFolder = '__uploaded__';
+      } else if (key === '__generated__') {
+        currentFolder = null;
+        filters.starred = false;
+        filters.virtualFolder = '__generated__';
       } else {
         currentFolder = key;
         filters.starred = false;
+        filters.virtualFolder = null;
       }
       loadVaultItems();
       renderFolders();
@@ -1926,7 +1975,7 @@ function vaultPage(user) {
     }
 
     function clearFilters() {
-      filters = { type: '', source: '', q: '', starred: false };
+      filters = { type: '', source: '', q: '', starred: false, virtualFolder: null };
       currentFolder = null;
       document.getElementById('search-input').value = '';
       document.getElementById('type-filter').value = '';

@@ -141,10 +141,11 @@ function esc(s) {
 
 // ── GET /reports — Reports page ──
 router.get('/reports', requireAuth, (req, res) => {
-  res.send(reportsPage());
+  res.send(reportsPage(req.session.user));
 });
 
-function reportsPage() {
+function reportsPage(user) {
+  const isAdmin = user.role === 'admin';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -159,18 +160,64 @@ function reportsPage() {
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: rgb(5,5,5);
-      --bg-card: #111738;
-      --bg-hover: #171E45;
-      --border: #1E2550;
-      --text: #fafafa;
-      --text-dim: #8892b0;
-      --gold: #e5a819;
+      --bg: #0a0a0a;
+      --bg-sidebar: rgb(8,8,8);
+      --bg-card: rgba(255,255,255,0.03);
+      --bg-hover: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.08);
+      --border-solid: rgb(40,40,40);
+      --text: #e8e8e8;
+      --text-dim: rgba(255,255,255,0.45);
+      --text-muted: rgb(100,100,100);
+      --accent: #FFC01C;
+      --accent-soft: rgba(255,192,28,0.08);
+      --gold: #FFC01C;
       --green: #22c55e;
       --red: #ef4444;
+      --rail-w: 48px;
     }
     body { font-family: 'Google Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
     a { color: var(--gold); text-decoration: none; }
+
+    /* Sidebar Rail */
+    .sidebar-rail {
+      position: fixed; left: 0; top: 0; bottom: 0; width: var(--rail-w);
+      background: var(--bg-sidebar); border-right: 1px solid var(--border-solid);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 12px 0; z-index: 100; gap: 0;
+    }
+    .rail-logo {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: var(--accent); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; margin-bottom: 20px; flex-shrink: 0;
+      font-size: 1.1rem; color: rgb(5,5,5); font-weight: 700;
+    }
+    .rail-nav { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 1; }
+    .rail-btn {
+      width: 36px; height: 36px; border-radius: 10px; border: none;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; position: relative;
+    }
+    .rail-btn:hover { background: var(--bg-hover); color: var(--text); }
+    .rail-btn.active { color: var(--accent); background: var(--accent-soft); }
+    .rail-btn svg { width: 18px; height: 18px; }
+    .rail-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .rail-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--border-solid); color: var(--text-dim);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 600; cursor: pointer;
+    }
+    .report-badge {
+      position: absolute; top: 4px; right: 4px; min-width: 14px; height: 14px;
+      background: var(--red); color: #fff; border-radius: 7px; font-size: 9px;
+      display: flex; align-items: center; justify-content: center; padding: 0 3px;
+    }
+
+    .page-wrapper {
+      margin-left: var(--rail-w);
+    }
 
     .header {
       display: flex; align-items: center; justify-content: space-between;
@@ -194,7 +241,7 @@ function reportsPage() {
       background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
       padding: 16px 20px; margin-bottom: 12px; transition: border-color 0.15s;
     }
-    .task-card:hover { border-color: var(--gold); }
+    .task-card:hover { border-color: rgba(255,255,255,0.2); }
     .task-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .task-name { font-weight: 600; font-size: 15px; }
     .task-meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -231,26 +278,66 @@ function reportsPage() {
     .empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
     .empty-state p { font-size: 14px; max-width: 400px; margin: 0 auto; }
 
-    @media (max-width: 640px) {
+    @media (max-width: 768px) {
+      .sidebar-rail { display: none; }
+      .page-wrapper { margin-left: 0; }
       .header, .tabs, .content { padding-left: 16px; padding-right: 16px; }
       .task-header { flex-direction: column; align-items: flex-start; gap: 8px; }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Reports</h1>
-    <a href="/" class="header-back">&larr; Back to Chat</a>
-  </div>
+  <!-- Sidebar Rail -->
+  <nav class="sidebar-rail">
+    <div class="rail-logo" title="${INSTANCE_NAME}" onclick="window.location.href='/'" style="cursor:pointer">
+      \u2726
+    </div>
+    <div class="rail-nav">
+      <button class="rail-btn" onclick="window.location.href='/'" title="Chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/'" title="History">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <button class="rail-btn active" onclick="window.location.href='/reports'" title="Reports" style="position:relative">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span class="report-badge" id="report-badge" style="display:none"></span>
+      </button>
+      <button class="rail-btn" onclick="window.location.href='/vault'" title="Vault">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      ${isAdmin ? `<button class="rail-btn" onclick="window.location.href='/mission'" title="Mission Control">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </button>` : ''}
+    </div>
 
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('results')" id="tab-results">Results</div>
-    <div class="tab" onclick="switchTab('tasks')" id="tab-tasks">Active Tasks</div>
-  </div>
+    <div class="rail-bottom">
+      ${isAdmin ? `<button class="rail-btn" onclick="window.location.href='/admin/brain-health'" title="Brain Health">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </button>` : ''}
+      <div class="rail-avatar" title="${user.name || user.email}">
+        ${(user.name || user.email || '?')[0].toUpperCase()}
+      </div>
+    </div>
+  </nav>
 
-  <div class="content" id="content">
-    <div id="results-tab"></div>
-    <div id="tasks-tab" style="display:none"></div>
+  <div class="page-wrapper">
+    <div class="header">
+      <h1>Reports</h1>
+      <a href="/" class="header-back">&larr; Back to Chat</a>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('results')" id="tab-results">Results</div>
+      <div class="tab" onclick="switchTab('tasks')" id="tab-tasks">Active Tasks</div>
+    </div>
+
+    <div class="content" id="content">
+      <div id="results-tab"></div>
+      <div id="tasks-tab" style="display:none"></div>
+    </div>
   </div>
 
 <script>

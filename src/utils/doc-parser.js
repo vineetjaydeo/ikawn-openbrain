@@ -1,6 +1,9 @@
 const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
 const ExcelJS = require('exceljs');
+const officeparser = require('officeparser');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const MAX_LENGTH = 50000;
@@ -14,6 +17,28 @@ const TEXT_MIME_TYPES = [
   'application/json',
   'application/xml',
 ];
+
+const OFFICEPARSER_MIME_TYPES = [
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.oasis.opendocument.text',
+  'application/rtf',
+  'application/vnd.ms-outlook',
+  'application/vnd.apple.keynote',
+  'application/vnd.apple.pages',
+  'application/vnd.apple.numbers',
+];
+
+const OFFICEPARSER_EXT_MAP = {
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.oasis.opendocument.text': '.odt',
+  'application/rtf': '.rtf',
+  'application/vnd.ms-outlook': '.msg',
+  'application/vnd.apple.keynote': '.key',
+  'application/vnd.apple.pages': '.pages',
+  'application/vnd.apple.numbers': '.numbers',
+};
 
 const XLSX_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -31,10 +56,17 @@ const EXT_TO_MIME = {
   '.xml': 'text/xml',
   '.json': 'application/json',
   '.svg': 'text/xml',
-  '.odt': 'text/plain', // best-effort: raw XML inside, some text extractable
+  '.odt': 'application/vnd.oasis.opendocument.text',
+  '.rtf': 'application/rtf',
+  '.msg': 'application/vnd.ms-outlook',
+  '.key': 'application/vnd.apple.keynote',
+  '.pages': 'application/vnd.apple.pages',
+  '.numbers': 'application/vnd.apple.numbers',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.xls': 'application/vnd.ms-excel',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.ppt': 'application/vnd.ms-powerpoint',
 };
 
 /**
@@ -251,6 +283,16 @@ async function extractText(buffer, mimeType, filename) {
   } else if (resolvedMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     const result = await mammoth.extractRawText({ buffer });
     text = result.value;
+  } else if (OFFICEPARSER_MIME_TYPES.includes(resolvedMime)) {
+    const ext = OFFICEPARSER_EXT_MAP[resolvedMime] || '.bin';
+    const tmpPath = path.join(os.tmpdir(), `doc-${Date.now()}${ext}`);
+    fs.writeFileSync(tmpPath, buffer);
+    try {
+      const ast = await officeparser.parseOffice(tmpPath);
+      text = (ast && typeof ast.toText === 'function') ? ast.toText() : (typeof ast === 'string' ? ast : '');
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch (_) {}
+    }
   } else if (XLSX_MIME_TYPES.includes(resolvedMime)) {
     const xlsxResult = await formatXLSX(buffer);
     text = xlsxResult.text;

@@ -32,6 +32,14 @@ const DOCUMENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.oasis.opendocument.text',
+  'application/rtf',
+  'application/vnd.ms-outlook',
+  'application/vnd.apple.keynote',
+  'application/vnd.apple.pages',
+  'application/vnd.apple.numbers',
 ];
 
 function sanitizeFilename(filename) {

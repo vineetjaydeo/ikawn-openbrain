@@ -2,3 +2,5 @@ node_modules/
 docs/
 scripts/
 tests/
+src/frontend/
+**/dist/

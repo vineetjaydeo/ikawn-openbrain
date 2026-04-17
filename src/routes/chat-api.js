@@ -341,7 +341,10 @@ async function handleChatSend(req, res) {
           // Document uploaded via presign (no server-side extraction at upload time)
           try {
             const buffer = await downloadFromUrl(att.url);
-            const mime = att.contentType || guessMimeFromFilename(att.filename || att.name);
+            const rawMime = att.contentType;
+            const mime = (!rawMime || rawMime === 'application/octet-stream')
+              ? guessMimeFromFilename(att.filename || att.name)
+              : rawMime;
             const text = await extractText(buffer, mime, att.filename || att.name);
             if (text) {
               processed.extracted_text = text;
@@ -531,7 +534,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           if (att.type === 'document' && !att.extracted_text && att.url) {
             try {
               const buffer = await downloadFromUrl(att.url);
-              const mime = att.contentType || guessMimeFromFilename(att.filename || att.name);
+              const rawMime = att.contentType;
+            const mime = (!rawMime || rawMime === 'application/octet-stream')
+              ? guessMimeFromFilename(att.filename || att.name)
+              : rawMime;
               att.extracted_text = await extractText(buffer, mime, att.filename || att.name);
             } catch (err) {
               console.error('Lazy document extraction failed:', err.message);

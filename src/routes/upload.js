@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { uploadToR2, getPresignedUploadUrl } = require('../utils/storage');
-const { extractText } = require('../utils/doc-parser');
+const { extractText, extractStructured, isTabularMime } = require('../utils/doc-parser');
 const { captureMessage } = require('../utils/capture');
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
+
+const MAX_FILES_PER_UPLOAD = 5;
 
 const DOCUMENT_TYPES = [
   'application/pdf',
@@ -12,6 +14,8 @@ const DOCUMENT_TYPES = [
   'text/markdown',
   'text/csv',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
 ];
 
 function sanitizeFilename(filename) {
@@ -71,7 +75,16 @@ router.post('/api/upload/direct', async (req, res, next) => {
     // Extract text from documents
     if (DOCUMENT_TYPES.includes(contentType)) {
       try {
-        result.extracted_text = await extractText(buffer, contentType);
+        const tabular = isTabularMime(contentType);
+        if (tabular) {
+          const structured = await extractStructured(buffer, contentType, filename);
+          if (structured) {
+            result.extracted_text = structured.text;
+            result.structured_metadata = structured.metadata;
+          }
+        } else {
+          result.extracted_text = await extractText(buffer, contentType, filename);
+        }
       } catch (err) {
         // Non-fatal — return upload result without extracted text
         console.error('Text extraction failed:', err.message);
@@ -80,16 +93,30 @@ router.post('/api/upload/direct', async (req, res, next) => {
 
     // Auto-capture extracted document text to memory (fire-and-forget)
     if (result.extracted_text && result.extracted_text.length > 50) {
-      captureMessage({
+      const tabular = isTabularMime(contentType);
+      const memoryCapture = {
         brand_id: req.brand_id || 'ikawn',
         user_id: req.session?.user?.id,
         channel: 'file_upload',
         direction: 'inbound',
-        content: `[Uploaded file: ${filename}]\n\n${result.extracted_text.substring(0, 10000)}`,
+        content: `[Uploaded ${tabular ? 'dataset' : 'file'}: ${filename}]\n\n${result.extracted_text.substring(0, 50000)}`,
         source_ref: `upload-${key}`,
         access_level: 'private',
-        memory_type: 'document',
-      });
+        memory_type: tabular ? 'dataset' : 'document',
+      };
+
+      if (tabular && result.structured_metadata) {
+        memoryCapture.metadata = {
+          type: 'dataset',
+          filename,
+          rowCount: result.structured_metadata.rowCount,
+          columns: result.structured_metadata.columns,
+          sheets: result.structured_metadata.sheets || null,
+          key,
+        };
+      }
+
+      captureMessage(memoryCapture);
     }
 
     res.json(result);

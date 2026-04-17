@@ -283,13 +283,24 @@ router.patch('/api/conversations/:id', async (req, res) => {
 // ── 6. Send chat message (SSE streaming) ──
 
 async function handleChatSend(req, res) {
-  const { conversation_id, content: rawContent, attachments, use_secondary, forced_tier } = req.body;
+  const { conversation_id, content: rawContent, attachments: rawAttachments, use_secondary, forced_tier } = req.body;
+
+  const MAX_ATTACHMENTS = 5;
+  let attachments = rawAttachments;
+  let attachmentsTruncated = false;
+  if (attachments && Array.isArray(attachments) && attachments.length > MAX_ATTACHMENTS) {
+    attachments = attachments.slice(0, MAX_ATTACHMENTS);
+    attachmentsTruncated = true;
+    console.log(`[chat] Truncated attachments from ${rawAttachments.length} to ${MAX_ATTACHMENTS}`);
+  }
 
   const hasAttachments = attachments && Array.isArray(attachments) && attachments.length > 0;
   if (!conversation_id || (!rawContent && !hasAttachments)) {
     return res.status(400).json({ error: 'conversation_id and content (or attachments) are required' });
   }
-  const content = rawContent || '';
+  const content = rawContent || (attachmentsTruncated
+    ? `[Note: ${rawAttachments.length} files were attached but only the first ${MAX_ATTACHMENTS} could be processed.]`
+    : '');
 
   let convInternalId = null;
   let fullResponse = '';
@@ -536,11 +547,16 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         const contentParts = [];
         let textContent = msg.content;
 
-        // Prepend document/link extracted text
-        for (const att of msg.attachments) {
-          if ((att.type === 'document' || att.type === 'link') && att.extracted_text) {
-            textContent = `[Attached ${att.type}: ${att.name || att.url}]\n${att.extracted_text}\n\n${textContent}`;
-          }
+        // Prepend document/link extracted text with clear file delimiters
+        const docAttachments = msg.attachments.filter(att =>
+          (att.type === 'document' || att.type === 'link') && att.extracted_text
+        );
+        if (docAttachments.length > 0) {
+          const fileContextParts = docAttachments.map(att => {
+            const label = att.name || att.filename || att.url || 'unnamed';
+            return `--- FILE: ${label} ---\n${att.extracted_text}\n--- END FILE ---`;
+          });
+          textContent = `${fileContextParts.join('\n\n')}\n\nUser message: ${textContent}`;
         }
 
         if (textContent) {

@@ -56,6 +56,7 @@ const DEFAULT_COST_TIERS = {
   manage_automation: 'medium',
   generate_spreadsheet: 'low',
   generate_chart: 'low',
+  query_data: 'low',
   generate_pptx: 'medium',
   bash_exec: 'high',
   notify: 'high',

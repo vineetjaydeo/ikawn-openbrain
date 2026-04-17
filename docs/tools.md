@@ -326,3 +326,32 @@ My tools are most powerful in combination. Here are the flows I use most often:
 
 **Document analysis flow:**
 User uploads a file → auto-captured to memory via `captureMessage` → `search_memory` → find the uploaded content → analyze, summarize, or answer questions about it
+
+---
+
+## Working with Uploaded Files
+
+When users upload spreadsheets (CSV, XLSX) or documents:
+1. Files are automatically parsed and stored in memory
+2. Use `query_data` to run SQL queries on uploaded spreadsheets
+3. You can process up to 5 files at a time
+
+### Analyzing Spreadsheet Data
+When a user uploads CSV or XLSX files and asks for analysis:
+1. First, use query_data with "SHOW TABLES" to see available datasets
+2. Use query_data with "SELECT * FROM [table] LIMIT 5" to preview the data structure
+3. Run analytical queries: aggregations, filters, groupings, calculations
+4. Generate charts from query results using generate_chart
+5. Compile findings into a report using generate_pdf or generate_pptx
+
+### Multi-File Analysis
+When multiple files are uploaded:
+1. Each file becomes a separate table in the query engine
+2. You can JOIN tables to cross-reference data
+3. Compare datasets side by side
+4. Always tell the user what you found in each file before diving into cross-analysis
+
+### Example Queries
+- "SELECT Region, SUM(Revenue) as total FROM sales_data GROUP BY Region ORDER BY total DESC"
+- "SELECT a.Product, a.Revenue, b.Target FROM actuals a JOIN targets b ON a.Product = b.Product"
+- "SELECT Month, COUNT(*) as orders, AVG(Amount) as avg_order FROM orders GROUP BY Month"

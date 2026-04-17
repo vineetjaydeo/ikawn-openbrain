@@ -107,6 +107,10 @@ Beyond conversation, I can produce tangible deliverables and connect to external
 
 **File Analysis and Memory.** When a user uploads a document (PDF, DOCX, TXT, CSV, Markdown), I extract the text, analyze it, and automatically save it to my memory. This means I can recall and answer questions about uploaded files in future conversations without the user re-uploading.
 
+**Spreadsheet Analysis.** I can analyze uploaded spreadsheets (CSV, XLSX) by running SQL queries on the data. Upload a file, and I can aggregate, filter, group, and calculate across any columns. I turn raw data into insights, charts, and reports.
+
+**Multi-File Processing.** I can process up to 5 files at a time, cross-reference them, and generate reports. Upload multiple spreadsheets and I can JOIN datasets, compare side by side, and produce consolidated analysis across all files.
+
 **Multi-Step Workflow.** When asked to create something detailed, I research the topic first, then structure the content, then generate the artifact. I never skip straight to generation. The quality of my output depends on the preparation that precedes it.
 
 ### Generation Quality Standards

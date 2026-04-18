@@ -148,6 +148,19 @@ if (!feature('REACT_UI')) {
   app.use(pages);
 }
 
+// React frontend — serve BEFORE any auth-gated middleware (app.use with requireAuth/requireAuthOrApiKey
+// applies auth to ALL requests, not just matching routes, so SPA routes must be mounted first)
+if (feature('REACT_UI')) {
+  const frontendDist = path.join(__dirname, 'frontend', 'dist');
+  app.use(express.static(frontendDist));
+  const spaRoutes = ['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/brands', '/knowledge', '/insights', '/settings', '/admin'];
+  spaRoutes.forEach(route => {
+    app.get(route, (req, res) => {
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+  });
+}
+
 // Memory API — requires auth or API key (MUST be before chatApi to avoid requireAuth interception)
 app.use(requireAuthOrApiKey, captureRoute);
 app.use(requireAuthOrApiKey, searchRoute);
@@ -171,34 +184,8 @@ app.use('/api/vault', requireAuth, vaultApiRoute);
 // Vault page — requires auth (handled inside router)
 app.use(vaultPage);
 
-// Debug: trace what reaches SPA zone
-app.use((req, res, next) => {
-  if (!req.path.startsWith('/api') && !req.path.startsWith('/auth') && !req.path.startsWith('/capture') && !req.path.startsWith('/search') && !req.path.startsWith('/recent')) {
-    console.log(`[DEBUG-MW] ${req.method} ${req.path} reached SPA zone, headersSent: ${res.headersSent}`);
-  }
-  next();
-});
-
-// Chat UI at / — requires auth
-// Feature flag: REACT_UI serves new Vite-built React frontend, otherwise legacy inline HTML
-console.log('[DEBUG] Reached REACT_UI check point');
-console.log(`[Features] REACT_UI=${feature('REACT_UI')}`);
-if (feature('REACT_UI')) {
-  const frontendDist = path.join(__dirname, 'frontend', 'dist');
-  app.use(express.static(frontendDist));
-  // SPA fallback: all non-API routes serve index.html for client-side routing
-  const spaRoutes = ['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/brands', '/knowledge', '/insights', '/settings', '/admin'];
-  console.log(`[SPA] Registering ${spaRoutes.length} routes, dist: ${frontendDist}`);
-  spaRoutes.forEach(route => {
-    app.get(route, (req, res) => {
-      console.log(`[SPA] Hit: ${req.path}`);
-      const indexPath = path.join(frontendDist, 'index.html');
-      res.sendFile(indexPath, (err) => {
-        if (err) console.error(`[SPA] sendFile error for ${req.path}:`, err.message);
-      });
-    });
-  });
-} else {
+// Chat UI at / — legacy inline HTML (only when React UI is off)
+if (!feature('REACT_UI')) {
   app.use(chatPage);
 }
 

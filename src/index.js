@@ -171,6 +171,14 @@ app.use('/api/vault', requireAuth, vaultApiRoute);
 // Vault page — requires auth (handled inside router)
 app.use(vaultPage);
 
+// Debug: trace what reaches SPA zone
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api') && !req.path.startsWith('/auth') && !req.path.startsWith('/capture') && !req.path.startsWith('/search') && !req.path.startsWith('/recent')) {
+    console.log(`[DEBUG-MW] ${req.method} ${req.path} reached SPA zone, headersSent: ${res.headersSent}`);
+  }
+  next();
+});
+
 // Chat UI at / — requires auth
 // Feature flag: REACT_UI serves new Vite-built React frontend, otherwise legacy inline HTML
 console.log('[DEBUG] Reached REACT_UI check point');

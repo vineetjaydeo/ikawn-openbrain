@@ -178,9 +178,16 @@ if (feature('REACT_UI')) {
   const frontendDist = path.join(__dirname, 'frontend', 'dist');
   app.use(express.static(frontendDist));
   // SPA fallback: all non-API routes serve index.html for client-side routing
-  app.get(['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/brands', '/knowledge', '/insights', '/settings', '/admin'], (req, res) => {
-    console.log(`[SPA] Serving index.html for ${req.path}`);
-    res.sendFile(path.join(frontendDist, 'index.html'));
+  const spaRoutes = ['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/brands', '/knowledge', '/insights', '/settings', '/admin'];
+  console.log(`[SPA] Registering ${spaRoutes.length} routes, dist: ${frontendDist}`);
+  spaRoutes.forEach(route => {
+    app.get(route, (req, res) => {
+      console.log(`[SPA] Hit: ${req.path}`);
+      const indexPath = path.join(frontendDist, 'index.html');
+      res.sendFile(indexPath, (err) => {
+        if (err) console.error(`[SPA] sendFile error for ${req.path}:`, err.message);
+      });
+    });
   });
 } else {
   app.use(chatPage);

@@ -1,7 +1,7 @@
 import { createRouter, createRoute, createRootRoute, redirect, lazyRouteComponent, Outlet } from '@tanstack/react-router'
 
 // ---------------------------------------------------------------------------
-// Root route - no component, children define their own layouts
+// Root route
 // ---------------------------------------------------------------------------
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -19,7 +19,7 @@ const indexRoute = createRoute({
 })
 
 // ---------------------------------------------------------------------------
-// Login route - no layout wrapper, standalone page
+// Standalone routes (no app shell)
 // ---------------------------------------------------------------------------
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -27,46 +27,85 @@ const loginRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/Login')),
 })
 
-// ---------------------------------------------------------------------------
-// Authenticated layout route - wraps all auth-required routes
-// ---------------------------------------------------------------------------
-const authenticatedRoute = createRoute({
+const splashRoute = createRoute({
   getParentRoute: () => rootRoute,
-  id: 'authenticated',
-  component: lazyRouteComponent(() => import('@/pages/AuthenticatedLayout')),
+  path: '/splash',
+  component: lazyRouteComponent(() => import('@/pages/SplashPage')),
+})
+
+// ---------------------------------------------------------------------------
+// App Shell - wraps all authenticated routes with ThemeContext
+// ---------------------------------------------------------------------------
+const appShellRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'app-shell',
+  component: lazyRouteComponent(() => import('@/pages/AppShell')),
 })
 
 // ---------------------------------------------------------------------------
 // Chat routes
 // ---------------------------------------------------------------------------
 const chatRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
+  getParentRoute: () => appShellRoute,
   path: '/chat',
   component: lazyRouteComponent(() => import('@/pages/Chat')),
 })
 
 const chatConversationRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
+  getParentRoute: () => appShellRoute,
   path: '/chat/$conversationId',
   component: lazyRouteComponent(() => import('@/pages/Chat')),
 })
 
 // ---------------------------------------------------------------------------
-// Memory browser (placeholder)
+// Memory routes
 // ---------------------------------------------------------------------------
 const memoryRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
+  getParentRoute: () => appShellRoute,
   path: '/memory',
   component: lazyRouteComponent(() => import('@/pages/MemoryBrowser')),
 })
 
+const memoryDetailRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: '/memory/$memoryId',
+  component: lazyRouteComponent(() => import('@/pages/MemoryDetailPage')),
+})
+
 // ---------------------------------------------------------------------------
-// Settings (placeholder)
+// Brand, Knowledge, Insights
+// ---------------------------------------------------------------------------
+const brandsRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: '/brands',
+  component: lazyRouteComponent(() => import('@/pages/BrandsPage')),
+})
+
+const knowledgeRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: '/knowledge',
+  component: lazyRouteComponent(() => import('@/pages/KnowledgePage')),
+})
+
+const insightsRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: '/insights',
+  component: lazyRouteComponent(() => import('@/pages/InsightsPage')),
+})
+
+// ---------------------------------------------------------------------------
+// Settings & Admin
 // ---------------------------------------------------------------------------
 const settingsRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
+  getParentRoute: () => appShellRoute,
   path: '/settings',
   component: lazyRouteComponent(() => import('@/pages/Settings')),
+})
+
+const adminRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: '/admin',
+  component: lazyRouteComponent(() => import('@/pages/AdminPage')),
 })
 
 // ---------------------------------------------------------------------------
@@ -75,11 +114,17 @@ const settingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
-  authenticatedRoute.addChildren([
+  splashRoute,
+  appShellRoute.addChildren([
     chatRoute,
     chatConversationRoute,
     memoryRoute,
+    memoryDetailRoute,
+    brandsRoute,
+    knowledgeRoute,
+    insightsRoute,
     settingsRoute,
+    adminRoute,
   ]),
 ])
 

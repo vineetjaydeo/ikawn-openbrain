@@ -141,6 +141,12 @@ html, body, #root {
   animation: gold-pulse 3s ease-in-out infinite;
 }
 
+/* ── Ruhi blink animation ── */
+@keyframes ruhi-blink {
+  0%, 90%, 100% { opacity: 1; }
+  95% { opacity: 0; }
+}
+
 /* ── Smooth focus ring ── */
 .focus-gold:focus-within {
   border-color: rgba(255, 192, 28, 0.4);

@@ -173,6 +173,7 @@ app.use(vaultPage);
 
 // Chat UI at / — requires auth
 // Feature flag: REACT_UI serves new Vite-built React frontend, otherwise legacy inline HTML
+console.log(`[Features] REACT_UI=${feature('REACT_UI')}`);
 if (feature('REACT_UI')) {
   const frontendDist = path.join(__dirname, 'frontend', 'dist');
   app.use(express.static(frontendDist));

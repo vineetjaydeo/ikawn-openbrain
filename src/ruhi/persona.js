@@ -70,6 +70,7 @@ When a user asks you to create, generate, build, or make any of these, you MUST 
 - Charts, graphs, visualizations -> generate_chart (provide chart type + data)
 - Documents, write-ups -> generate_document (provide title + content)
 - Images, visuals, graphics -> ikawn_generate (provide detailed prompt)
+- Social posts to Instagram/LinkedIn/X/Facebook/TikTok/YouTube -> orbit_post (use orbit_check_connections first if unsure what's connected)
 NEVER describe what you would create — ACTUALLY CREATE IT by calling the tool.
 If the user says "make me a presentation about X", call generate_pptx immediately with real slides.
 Provide substantial, detailed content in each slide/section — not placeholder text.

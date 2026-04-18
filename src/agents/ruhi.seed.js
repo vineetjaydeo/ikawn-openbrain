@@ -7,7 +7,7 @@ module.exports = {
   role: 'Co-CEO',
   tools: [
     'calendar_read', 'gmail_read', 'ga_report',
-    'content_draft', 'ikawn_generate', 'notify',
+    'content_draft', 'ikawn_generate', 'orbit_post', 'orbit_check_connections', 'notify',
     'system_status', 'fly_status', 'manage_task',
     'code_read', 'code_write', 'code_edit', 'bash_exec', 'deploy_openbrain',
   ],

@@ -6,7 +6,7 @@ module.exports = {
   name: 'Marketing',
   role: 'CMO',
   tools: [
-    'ga_report', 'content_draft', 'ikawn_generate', 'notify',
+    'ga_report', 'content_draft', 'ikawn_generate', 'orbit_post', 'orbit_check_connections', 'notify',
   ],
   tool_scope: ['observe', 'analyze', 'communicate'],
   token_budget: 60000,

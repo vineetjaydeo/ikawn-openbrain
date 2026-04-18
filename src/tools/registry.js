@@ -53,6 +53,8 @@ const DEFAULT_COST_TIERS = {
   manage_task: 'medium',
   brand_analysis: 'medium',
   ikawn_generate: 'medium',
+  orbit_post: 'medium',
+  orbit_check_connections: 'low',
   manage_automation: 'medium',
   generate_spreadsheet: 'low',
   generate_chart: 'low',

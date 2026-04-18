@@ -55,6 +55,6 @@ module.exports = [
     },
   },
   {
-    ignores: ['node_modules/', 'docs/', 'scripts/', 'tests/'],
+    ignores: ['node_modules/', 'docs/', 'scripts/', 'tests/', 'src/frontend/'],
   },
 ];

@@ -756,7 +756,7 @@ function settingsPage(user) {
         if (!res.ok) throw new Error('Failed to fetch');
         var data = await res.json();
         loadingEl.style.display = 'none';
-        var connectedTypes = new Set((data.connectors || []).filter(function(c) { return c.is_active; }).map(function(c) { return c.connector_type; }));
+        var connectedTypes = new Set((data.connectors || []).filter(function(c) { return c.status === 'active'; }).map(function(c) { return c.connector_type; }));
         Object.keys(PROVIDERS).forEach(function(p) {
           document.getElementById('connector-' + p).style.display = 'flex';
           renderActions(p, connectedTypes);

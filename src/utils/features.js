@@ -28,6 +28,9 @@ const FEATURES = {
   BRAND_API: { default: false, env: 'ENABLE_BRAND_API', description: 'Multi-tenant brand API' },
   ACTIVEPIECES: { default: false, env: 'ENABLE_ACTIVEPIECES', description: 'ActivePieces orchestration integration' },
 
+  // Frontend
+  REACT_UI: { default: false, env: 'ENABLE_REACT_UI', description: 'Serve new React frontend instead of legacy inline HTML' },
+
   // Experimental
   COST_DASHBOARD: { default: true, env: 'ENABLE_COST_DASHBOARD', description: 'OpenAI cost monitoring dashboard' },
 };

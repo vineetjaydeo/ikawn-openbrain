@@ -40,7 +40,7 @@ function NavButton({
     <div className="relative w-full flex items-center justify-center">
       <span
         className={cn(
-          'absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full',
+          'absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full',
           'bg-primary transition-opacity duration-150 ease-out',
           isActive ? 'opacity-100' : 'opacity-0',
         )}
@@ -55,7 +55,7 @@ function NavButton({
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'transition-colors duration-150 ease-out',
+                'transition-colors duration-150 ease-out active:scale-95',
                 isActive
                   ? 'text-primary hover:text-primary'
                   : 'text-muted-foreground hover:text-foreground',
@@ -79,16 +79,16 @@ export function IconRail() {
   return (
     <nav
       className={cn(
-        'hidden lg:flex flex-col items-center w-14 h-full flex-shrink-0',
-        'bg-card border-r border-border',
+        'hidden lg:flex flex-col items-center w-16 h-full flex-shrink-0',
+        'bg-gradient-to-b from-[#111113] to-[#0d0d0f] border-r border-[rgba(255,255,255,0.08)]',
       )}
     >
       {/* Logo */}
       <div className="flex items-center justify-center h-14 w-full">
-        <div className="flex items-center justify-center w-8 h-8">
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(255,192,28,0.08)]">
           <Sparkles
-            size={20}
-            className="text-primary drop-shadow-[0_0_6px_hsl(var(--primary)/0.3)]"
+            size={22}
+            className="text-primary gold-glow drop-shadow-[0_0_6px_hsl(var(--primary)/0.3)]"
           />
         </div>
       </div>
@@ -111,7 +111,7 @@ export function IconRail() {
         <div className="relative w-full flex items-center justify-center">
           <span
             className={cn(
-              'absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full',
+              'absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full',
               'bg-primary transition-opacity duration-150 ease-out',
               activeTab === 'settings' ? 'opacity-100' : 'opacity-0',
             )}
@@ -125,7 +125,7 @@ export function IconRail() {
                   onClick={() => setActiveTab('settings')}
                   aria-label="Settings"
                   className={cn(
-                    'transition-colors duration-150 ease-out',
+                    'transition-colors duration-150 ease-out active:scale-95',
                     activeTab === 'settings'
                       ? 'text-primary hover:text-primary'
                       : 'text-muted-foreground hover:text-foreground',
@@ -142,7 +142,7 @@ export function IconRail() {
           </Tooltip>
         </div>
 
-        <Separator className="w-6" />
+        <Separator className="w-8 opacity-50" />
 
         {/* User Avatar */}
         <Tooltip>

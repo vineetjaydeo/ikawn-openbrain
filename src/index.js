@@ -3,6 +3,7 @@ const cookieSession = require('cookie-session');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
+const { feature } = require('./utils/features');
 const { initSchema, pool } = require('./db');
 const { requireAuth, requireAuthOrApiKey, requireBrand, requireBrandAccess } = require('./auth');
 const authRoutes = require('./routes/auth-routes');
@@ -169,7 +170,17 @@ app.use('/api/vault', requireAuth, vaultApiRoute);
 app.use(vaultPage);
 
 // Chat UI at / — requires auth
-app.use(chatPage);
+// Feature flag: REACT_UI serves new Vite-built React frontend, otherwise legacy inline HTML
+if (feature('REACT_UI')) {
+  const frontendDist = path.join(__dirname, 'frontend', 'dist');
+  app.use(express.static(frontendDist));
+  // SPA fallback: all non-API routes serve index.html for client-side routing
+  app.get(['/', '/chat', '/chat/:id', '/login', '/memory', '/settings'], (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+} else {
+  app.use(chatPage);
+}
 
 // Reports page + API — requires auth (handled inside route)
 app.use(reportsRoute);

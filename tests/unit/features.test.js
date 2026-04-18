@@ -55,7 +55,7 @@ describe('features', () => {
   it('getAllFeatures returns array with all flags', () => {
     const all = getAllFeatures();
     expect(Array.isArray(all)).toBe(true);
-    expect(all.length).toBe(10);
+    expect(all.length).toBe(11);
     // Each entry has the expected shape
     for (const entry of all) {
       expect(entry).toHaveProperty('name');

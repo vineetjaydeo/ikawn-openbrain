@@ -25,8 +25,8 @@ export function BottomTabs() {
     <nav
       className={cn(
         'fixed bottom-0 inset-x-0 z-50 lg:hidden',
-        'h-14 bg-card/95 backdrop-blur-xl',
-        'border-t border-border',
+        'h-[3.25rem] bg-[#111113]/95 backdrop-blur-2xl',
+        'border-t border-[rgba(255,255,255,0.06)] shadow-[0_-4px_20px_rgba(0,0,0,0.3)]',
         'flex items-center justify-around',
         'pb-[env(safe-area-inset-bottom)]',
       )}
@@ -44,7 +44,7 @@ export function BottomTabs() {
             className={cn(
               'flex flex-col items-center justify-center gap-1',
               'flex-1 h-full',
-              'transition-colors duration-150 ease-out',
+              'transition-all duration-150 ease-out',
               'active:scale-95 transform',
               'focus-visible:outline-none',
             )}
@@ -58,9 +58,7 @@ export function BottomTabs() {
               )}
             />
             {isActive && (
-              <span className="text-[10px] font-medium leading-none text-primary">
-                {tab.label}
-              </span>
+              <span className="h-1 w-1 rounded-full bg-primary" />
             )}
           </button>
         )

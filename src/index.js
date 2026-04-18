@@ -144,7 +144,9 @@ app.use(brandChatApiRoute);
 app.use(authRoutes);
 
 // Login/admin/settings pages — no auth on login, auth on others
-app.use(pages);
+if (!feature('REACT_UI')) {
+  app.use(pages);
+}
 
 // Memory API — requires auth or API key (MUST be before chatApi to avoid requireAuth interception)
 app.use(requireAuthOrApiKey, captureRoute);
@@ -175,7 +177,7 @@ if (feature('REACT_UI')) {
   const frontendDist = path.join(__dirname, 'frontend', 'dist');
   app.use(express.static(frontendDist));
   // SPA fallback: all non-API routes serve index.html for client-side routing
-  app.get(['/', '/chat', '/chat/:id', '/login', '/memory', '/settings'], (req, res) => {
+  app.get(['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/brands', '/knowledge', '/insights', '/settings', '/admin'], (req, res) => {
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 } else {

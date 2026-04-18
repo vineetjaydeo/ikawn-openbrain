@@ -179,6 +179,7 @@ if (feature('REACT_UI')) {
   app.use(express.static(frontendDist));
   // SPA fallback: all non-API routes serve index.html for client-side routing
   app.get(['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/brands', '/knowledge', '/insights', '/settings', '/admin'], (req, res) => {
+    console.log(`[SPA] Serving index.html for ${req.path}`);
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 } else {

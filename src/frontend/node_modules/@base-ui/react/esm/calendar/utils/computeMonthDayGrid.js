@@ -1,0 +1,17 @@
+import { getDayList } from "../use-day-list/getDayList.js";
+import { getWeekList } from "../use-week-list/getWeekList.js";
+
+/**
+ * Computes a flat, chronologically ordered array of all days in a month's grid.
+ * Composes `getWeekList` and `getDayList` to produce the same result as the rendered grid.
+ */
+export function computeMonthDayGrid(adapter, month, fixedWeekNumber, weeks) {
+  const weeksList = weeks ?? getWeekList(adapter, {
+    date: month,
+    amount: fixedWeekNumber ?? 'end-of-month'
+  });
+  return weeksList.flatMap(week => getDayList(adapter, {
+    date: week,
+    amount: 7
+  }));
+}

@@ -1,0 +1,2 @@
+import{u as o,j as n}from"./index-jQGgS9YZ.js";import{u as r}from"./tokens-u7ZvYJv0.js";import{S as i}from"./screens-d-B29yjRCk.js";import"./components-DIYU7B5k.js";import"./chat-pay7bZxk.js";function h(){const t=r(),s=o();return n.jsx(i,{t,onNavigate:e=>{s({to:{chat:"/chat",memory:"/memory",brands:"/brands",knowledge:"/knowledge",insights:"/insights",settings:"/settings"}[e]||"/chat"})}})}export{h as default};
+//# sourceMappingURL=Settings-BnAAkoGb.js.map

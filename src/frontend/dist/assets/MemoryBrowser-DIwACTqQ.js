@@ -1,0 +1,2 @@
+import{u as o,j as r}from"./index-jQGgS9YZ.js";import{u as n}from"./tokens-u7ZvYJv0.js";import{S as a}from"./screens-b-D4Mss6my.js";import"./components-DIYU7B5k.js";import"./chat-pay7bZxk.js";function h(){const t=n(),e=o();return r.jsx(a,{t,onNavigate:s=>{e({to:{chat:"/chat",memory:"/memory",brands:"/brands",knowledge:"/knowledge",insights:"/insights",settings:"/settings"}[s]||"/chat"})}})}export{h as default};
+//# sourceMappingURL=MemoryBrowser-DIwACTqQ.js.map

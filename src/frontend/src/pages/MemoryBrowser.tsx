@@ -1,22 +1,25 @@
+import { useNavigate } from '@tanstack/react-router'
+import { useTheme } from '@/design/tokens'
+import { Screen_MemoryBrowser } from '@/design/screens-b'
+
 export default function MemoryBrowser() {
+  const t = useTheme()
+  const navigate = useNavigate()
+
   return (
-    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <span
-        className="mb-4 text-4xl"
-        style={{ color: '#FFC01C' }}
-        aria-hidden="true"
-      >
-        {'\u2726'}
-      </span>
-      <h1
-        className="text-xl font-semibold tracking-tight text-white"
-        style={{ fontFamily: 'var(--font-display)' }}
-      >
-        Memory Browser
-      </h1>
-      <p className="mt-3 max-w-sm text-sm text-[#71717a] leading-relaxed">
-        Browse and search through Lucy's memory. Coming soon.
-      </p>
-    </div>
+    <Screen_MemoryBrowser
+      t={t}
+      onNavigate={(screen: string) => {
+        const routes: Record<string, string> = {
+          chat: '/chat',
+          memory: '/memory',
+          brands: '/brands',
+          knowledge: '/knowledge',
+          insights: '/insights',
+          settings: '/settings',
+        }
+        navigate({ to: routes[screen] || '/chat' })
+      }}
+    />
   )
 }

@@ -1,4 +1,5 @@
 import { useRef, useCallback } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { Paperclip, ArrowUp, Square } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
@@ -14,6 +15,7 @@ export function ChatInput() {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
 
+  const navigate = useNavigate()
   const { sendMessage, cancelStream } = useStreamChat()
   const { create: createConversation } = useConversations()
 
@@ -48,11 +50,12 @@ export function ChatInput() {
       textareaRef.current.style.height = 'auto'
     }
 
-    let convId = activeConversationId
+    let convId: string | null = activeConversationId
+    const isNewConversation = !convId
     if (!convId) {
       try {
-        const result = await createConversation(text.slice(0, 60))
-        convId = result.conversation.id
+        const result = await createConversation(text.slice(0, 60)) as any
+        convId = result.conversation?.id ?? result.id
         setActiveConversation(convId)
       } catch {
         // If conversation creation fails, use a temporary id
@@ -61,12 +64,22 @@ export function ChatInput() {
       }
     }
 
-    await sendMessage(convId, text)
+    if (!convId) return
+
+    // Send message first (adds optimistic messages to store),
+    // then navigate (store persists via Zustand across re-mount)
+    sendMessage(convId, text)
+
+    // Navigate to conversation URL if we just created it
+    if (isNewConversation) {
+      navigate({ to: '/chat/$conversationId', params: { conversationId: convId } })
+    }
   }, [
     draftText,
     isStreaming,
     activeConversationId,
     setDraftText,
+    navigate,
     sendMessage,
     createConversation,
     setActiveConversation,

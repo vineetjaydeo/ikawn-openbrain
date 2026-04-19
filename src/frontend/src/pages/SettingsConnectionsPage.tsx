@@ -1,39 +1,79 @@
-import { useNavigate } from '@tanstack/react-router'
-import { useTheme, RUHI_FONTS } from '@/design/tokens'
-import { LeftRail } from '@/design/chat'
-import { RuhiIcon } from '@/design/icons'
+import { useConnectors } from '@/hooks/useSettings';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function SettingsConnectionsPage() {
-  const t = useTheme()
-  const navigate = useNavigate()
-
-  const handleNavigate = (screen: string) => {
-    const routes: Record<string, string> = {
-      chat: '/chat', memory: '/memory', vault: '/vault',
-      tasks: '/tasks', settings: '/settings', admin: '/admin',
-    }
-    navigate({ to: routes[screen] || '/chat' })
-  }
+  const { data: connectors, isLoading, error } = useConnectors();
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', background: t.bg }}>
-      <LeftRail t={t} active="settings" onNavigate={handleNavigate} />
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: 16,
-      }}>
-        <RuhiIcon name="link" size={48} color={t.textMuted} />
-        <div style={{
-          fontFamily: RUHI_FONTS.display, fontSize: 22, fontWeight: 600,
-          color: t.textPrimary, letterSpacing: -0.3,
-        }}>Connected Services</div>
-        <div style={{
-          fontFamily: RUHI_FONTS.body, fontSize: 14, color: t.textSecondary,
-          maxWidth: 360, textAlign: 'center', lineHeight: 1.6,
-        }}>
-          Manage Google, Microsoft, and other service connections.
-        </div>
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
+        <h1 className="text-2xl font-semibold text-white tracking-tight">
+          Connected Services
+        </h1>
+
+        <Card className="bg-[#111] border-white/[0.08]">
+          <CardHeader>
+            <CardTitle className="text-white text-lg">Connections</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading && (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-32 bg-white/[0.06]" />
+                    <Skeleton className="h-5 w-20 bg-white/[0.06]" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {error && (
+              <p className="text-sm text-red-400">
+                Failed to load connections.
+              </p>
+            )}
+
+            {connectors && connectors.length === 0 && (
+              <p className="text-sm text-white/40">
+                No services connected yet.
+              </p>
+            )}
+
+            {connectors && connectors.length > 0 && (
+              <div className="space-y-3">
+                {connectors.map((connector, index) => (
+                  <div key={connector.id}>
+                    <div className="flex items-center justify-between py-1">
+                      <div>
+                        <p className="text-sm text-white">{connector.name}</p>
+                        <p className="text-xs text-white/40 mt-0.5">
+                          {connector.provider}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          connector.connected
+                            ? 'border-emerald-500/30 text-emerald-400 text-xs'
+                            : 'border-white/[0.12] text-white/40 text-xs'
+                        }
+                      >
+                        {connector.connected ? 'Connected' : 'Disconnected'}
+                      </Badge>
+                    </div>
+                    {index < connectors.length - 1 && (
+                      <Separator className="bg-white/[0.08] mt-3" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
-  )
+  );
 }

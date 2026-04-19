@@ -100,7 +100,7 @@ export const RUHI_LIGHT: RuhiTheme = {
 
 export const RUHI_FONTS = {
   display: "'Parkinsans', 'Inter', system-ui, sans-serif",
-  body: "'Google Sans', 'Google Sans Text', 'Roboto', -apple-system, system-ui, sans-serif",
+  body: "'Inter', system-ui, sans-serif",
   mono: "'Roboto Mono', ui-monospace, Menlo, monospace",
 } as const;
 

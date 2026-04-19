@@ -64,7 +64,7 @@ export function ConversationList() {
     if (isMobile) setSidebarOpen(false)
     try {
       const result = await create('New conversation')
-      const newId = result.conversation.id
+      const newId = result.id
       navigate({ to: '/chat/$conversationId', params: { conversationId: newId } })
     } catch {
       // Creation failed - stay on new chat screen

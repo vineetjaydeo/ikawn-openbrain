@@ -1,4 +1,5 @@
 import { MessageSquare, ListTodo, FolderOpen, Settings, Sparkles } from 'lucide-react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -71,10 +72,25 @@ function NavButton({
   )
 }
 
+const tabRoutes: Record<string, string> = {
+  chat: '/chat',
+  tasks: '/tasks',
+  vault: '/vault',
+  settings: '/settings',
+}
+
 export function IconRail() {
-  const activeTab = useUIStore((s) => s.activeTab)
   const setActiveTab = useUIStore((s) => s.setActiveTab)
   const user = useAuthStore((s) => s.user)
+  const navigate = useNavigate()
+  const routerState = useRouterState()
+
+  const currentPath = routerState.location.pathname
+  const derivedActiveTab = currentPath.startsWith('/settings') ? 'settings'
+    : currentPath.startsWith('/tasks') ? 'tasks'
+    : currentPath.startsWith('/vault') ? 'vault'
+    : currentPath.startsWith('/admin') ? 'admin'
+    : 'chat'
 
   return (
     <nav
@@ -99,8 +115,11 @@ export function IconRail() {
           <NavButton
             key={item.key}
             item={item}
-            isActive={activeTab === item.key}
-            onClick={() => setActiveTab(item.key)}
+            isActive={derivedActiveTab === item.key}
+            onClick={() => {
+              setActiveTab(item.key)
+              navigate({ to: tabRoutes[item.key] || '/chat' })
+            }}
           />
         ))}
       </div>
@@ -113,7 +132,7 @@ export function IconRail() {
             className={cn(
               'absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full',
               'bg-primary transition-opacity duration-150 ease-out',
-              activeTab === 'settings' ? 'opacity-100' : 'opacity-0',
+              derivedActiveTab === 'settings' ? 'opacity-100' : 'opacity-0',
             )}
           />
           <Tooltip>
@@ -122,11 +141,14 @@ export function IconRail() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setActiveTab('settings')}
+                  onClick={() => {
+                    setActiveTab('settings')
+                    navigate({ to: '/settings' })
+                  }}
                   aria-label="Settings"
                   className={cn(
                     'transition-colors duration-150 ease-out active:scale-95',
-                    activeTab === 'settings'
+                    derivedActiveTab === 'settings'
                       ? 'text-primary hover:text-primary'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
@@ -135,7 +157,7 @@ export function IconRail() {
             >
               <Settings
                 size={20}
-                strokeWidth={activeTab === 'settings' ? 2 : 1.5}
+                strokeWidth={derivedActiveTab === 'settings' ? 2 : 1.5}
               />
             </TooltipTrigger>
             <TooltipContent side="right">Settings</TooltipContent>

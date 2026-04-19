@@ -17,6 +17,7 @@ import {
 import { RuhiIcon } from './icons';
 import { CHAT_TRANSCRIPT, MEMORY_RECALL } from './data';
 import { LeftRail, ChatHeader, Message, Composer, MemoryRecallRail } from './chat';
+import { type ChatMessage as ChatMessageData } from './data';
 
 // ---- Types ----
 

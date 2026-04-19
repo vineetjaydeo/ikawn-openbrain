@@ -1,4 +1,5 @@
 import { MessageSquare, ListTodo, FolderOpen, Settings } from 'lucide-react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui'
 
@@ -17,9 +18,24 @@ const tabs: TabItem[] = [
   { key: 'settings', icon: Settings, label: 'Settings' },
 ]
 
+const tabRoutes: Record<string, string> = {
+  chat: '/chat',
+  tasks: '/tasks',
+  vault: '/vault',
+  settings: '/settings',
+}
+
 export function BottomTabs() {
-  const activeTab = useUIStore((s) => s.activeTab)
   const setActiveTab = useUIStore((s) => s.setActiveTab)
+  const navigate = useNavigate()
+  const routerState = useRouterState()
+
+  const currentPath = routerState.location.pathname
+  const derivedActiveTab = currentPath.startsWith('/settings') ? 'settings'
+    : currentPath.startsWith('/tasks') ? 'tasks'
+    : currentPath.startsWith('/vault') ? 'vault'
+    : currentPath.startsWith('/admin') ? 'admin'
+    : 'chat'
 
   return (
     <nav
@@ -33,12 +49,15 @@ export function BottomTabs() {
     >
       {tabs.map((tab) => {
         const Icon = tab.icon
-        const isActive = activeTab === tab.key
+        const isActive = derivedActiveTab === tab.key
 
         return (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key)
+              navigate({ to: tabRoutes[tab.key] || '/chat' })
+            }}
             aria-label={tab.label}
             aria-current={isActive ? 'page' : undefined}
             className={cn(

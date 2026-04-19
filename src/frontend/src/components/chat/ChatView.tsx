@@ -90,7 +90,7 @@ export function ChatView() {
     }
   }, [detail?.messages, isStreaming, setMessages])
 
-  const conversationTitle = detail?.conversation?.title
+  const conversationTitle = detail?.title
 
   // Auto-scroll to bottom on new messages or streaming updates
   useEffect(() => {

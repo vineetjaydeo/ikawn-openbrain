@@ -1,2 +1,0 @@
-import{u as o,j as r}from"./index-BEs_CM1s.js";import{u as m}from"./tokens-BKpNFgnR.js";import{a as i}from"./screens-b-CgSVRNFC.js";import"./components-BWhKj-VR.js";import"./chat-BF6SMdEq.js";function v(){const t=m(),a=o(),e=s=>{a({to:{chat:"/chat",memory:"/memory",vault:"/vault",tasks:"/tasks",settings:"/settings",admin:"/admin"}[s]||"/chat"})};return r.jsx(i,{t,onNavigate:e})}export{v as default};
-//# sourceMappingURL=MemoryDetailPage-cK2KOdbM.js.map

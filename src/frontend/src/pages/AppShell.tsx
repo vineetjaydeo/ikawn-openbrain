@@ -1,10 +1,21 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useContext } from 'react'
 import { Outlet, useNavigate } from '@tanstack/react-router'
 import { ThemeContext, RUHI_DARK, RUHI_LIGHT } from '@/design/tokens'
 import type { RuhiTheme } from '@/design/tokens'
 import { useAuth } from '@/hooks/useAuth'
+import { UserLayout } from '@/components/layout/UserLayout'
 
 type ThemeMode = 'dark' | 'light'
+
+// Context for theme mode control (separate from ThemeContext which provides design tokens)
+export const ThemeModeContext = React.createContext<{
+  mode: ThemeMode
+  toggle: () => void
+}>({ mode: 'dark', toggle: () => {} })
+
+export function useThemeMode() {
+  return useContext(ThemeModeContext)
+}
 
 function getInitialTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'dark'
@@ -28,10 +39,11 @@ export default function AppShell() {
     })
   }, [])
 
-  // Apply background color to document based on theme
+  // Apply background color and dark class to document based on theme
   useEffect(() => {
     document.documentElement.style.background = theme.bg
-  }, [theme.bg])
+    document.documentElement.classList.toggle('dark', themeMode === 'dark')
+  }, [theme.bg, themeMode])
 
   // Auth guard
   useEffect(() => {
@@ -67,8 +79,12 @@ export default function AppShell() {
   }
 
   return (
-    <ThemeContext.Provider value={theme}>
-      <Outlet />
-    </ThemeContext.Provider>
+    <ThemeModeContext.Provider value={{ mode: themeMode, toggle: toggleTheme }}>
+      <ThemeContext.Provider value={theme}>
+        <UserLayout>
+          <Outlet />
+        </UserLayout>
+      </ThemeContext.Provider>
+    </ThemeModeContext.Provider>
   )
 }

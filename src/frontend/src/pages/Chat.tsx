@@ -31,10 +31,15 @@ export default function Chat() {
     }
   }, [conversationId, setActiveConversation, clearMessages])
 
-  // Load messages when conversation detail arrives
+  // Load messages from server -- but don't overwrite if we already have
+  // messages in the store (e.g. from optimistic send or active streaming)
   useEffect(() => {
-    if (conversationDetail?.messages) {
-      setMessages(conversationDetail.messages)
+    if (conversationDetail?.messages && conversationDetail.messages.length > 0) {
+      // Only load from server if store is empty (initial load)
+      const currentMessages = useChatStore.getState().messages
+      if (currentMessages.length === 0) {
+        setMessages(conversationDetail.messages)
+      }
     }
   }, [conversationDetail, setMessages])
 
@@ -52,14 +57,13 @@ export default function Chat() {
     async (text: string) => {
       let targetId = conversationId
 
-      // If no active conversation, create one
+      // If no active conversation, create one first
       if (!targetId) {
         if (creatingRef.current) return
         creatingRef.current = true
         try {
           const result = await createConversation(text.slice(0, 60))
           targetId = result.conversation.id
-          navigate({ to: `/chat/${targetId}` })
         } catch {
           creatingRef.current = false
           return
@@ -67,7 +71,14 @@ export default function Chat() {
         creatingRef.current = false
       }
 
+      // Send message FIRST (adds optimistic messages to store),
+      // then navigate (which may re-mount, but store persists via Zustand)
       sendMessage(targetId, text)
+
+      // Navigate to conversation URL if we just created it
+      if (!conversationId && targetId) {
+        navigate({ to: `/chat/${targetId}` })
+      }
     },
     [conversationId, createConversation, navigate, sendMessage],
   )

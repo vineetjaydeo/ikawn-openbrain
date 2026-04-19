@@ -31,9 +31,10 @@ export function useAuth() {
   } = useQuery({
     queryKey: queryKeys.auth.me,
     queryFn: () =>
-      apiFetch<AuthResponse>('/auth/me').then((r) => {
-        setUser(r.user);
-        return r.user;
+      // /auth/me returns user object directly, not { user: {...} }
+      apiFetch<User>('/auth/me').then((u) => {
+        setUser(u);
+        return u;
       }),
     retry: false,
     staleTime: 5 * 60 * 1000,
@@ -41,7 +42,8 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: (creds: LoginCredentials) =>
-      apiFetch<AuthResponse>('/auth/login', {
+      // /auth/login returns { ok: true, user: {...} }
+      apiFetch<{ ok: boolean; user: User }>('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(creds),

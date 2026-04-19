@@ -34,11 +34,13 @@ export default function Chat() {
   // Load messages from server -- but don't overwrite if we already have
   // messages in the store (e.g. from optimistic send or active streaming)
   useEffect(() => {
-    if (conversationDetail?.messages && conversationDetail.messages.length > 0) {
+    // API returns messages directly on the conversation detail object
+    const msgs = conversationDetail?.messages
+    if (msgs && msgs.length > 0) {
       // Only load from server if store is empty (initial load)
       const currentMessages = useChatStore.getState().messages
       if (currentMessages.length === 0) {
-        setMessages(conversationDetail.messages)
+        setMessages(msgs as any)
       }
     }
   }, [conversationDetail, setMessages])
@@ -63,7 +65,7 @@ export default function Chat() {
         creatingRef.current = true
         try {
           const result = await createConversation(text.slice(0, 60))
-          targetId = result.conversation.id
+          targetId = result.id
         } catch {
           creatingRef.current = false
           return
@@ -100,7 +102,7 @@ export default function Chat() {
 
   // Find conversation title
   const currentConv = conversations?.find((c) => c.id === conversationId)
-  const title = currentConv?.title || conversationDetail?.conversation?.title
+  const title = currentConv?.title || conversationDetail?.title
 
   return (
     <Screen_Home

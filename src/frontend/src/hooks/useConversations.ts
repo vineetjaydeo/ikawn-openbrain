@@ -7,17 +7,11 @@ import { apiFetch } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import type { Conversation, Message } from '@/stores/chat';
 
-interface ConversationListResponse {
-  conversations: Conversation[];
-}
-
 interface ConversationDetailResponse {
-  conversation: Conversation;
-  messages: Message[];
-}
-
-interface CreateConversationResponse {
-  conversation: Conversation;
+  id: string;
+  title: string;
+  messages?: Message[];
+  [key: string]: unknown;
 }
 
 interface UpdateTitlePayload {
@@ -31,15 +25,15 @@ export function useConversations() {
   const listQuery = useQuery({
     queryKey: queryKeys.conversations.all,
     queryFn: () =>
-      apiFetch<ConversationListResponse>('/api/conversations').then(
-        (r) => r.conversations,
-      ),
+      // API returns array directly, not { conversations: [...] }
+      apiFetch<Conversation[]>('/api/conversations'),
     staleTime: 30 * 1000,
   });
 
   const createMutation = useMutation({
     mutationFn: (title?: string) =>
-      apiFetch<CreateConversationResponse>('/api/conversations', {
+      // API returns conversation object directly, not { conversation: {...} }
+      apiFetch<Conversation>('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
@@ -65,7 +59,7 @@ export function useConversations() {
 
   const updateTitleMutation = useMutation({
     mutationFn: ({ id, title }: UpdateTitlePayload) =>
-      apiFetch<CreateConversationResponse>(`/api/conversations/${id}`, {
+      apiFetch<Conversation>(`/api/conversations/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
@@ -97,6 +91,7 @@ export function useConversationDetail(id: string | null) {
   return useQuery({
     queryKey: queryKeys.conversations.detail(id ?? ''),
     queryFn: () =>
+      // API returns conversation object directly with messages array
       apiFetch<ConversationDetailResponse>(`/api/conversations/${id}`),
     enabled: !!id,
     staleTime: 10 * 1000,

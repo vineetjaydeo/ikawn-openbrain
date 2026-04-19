@@ -132,8 +132,15 @@ export function ChatView() {
 
   return (
     <div className="flex h-full w-full" style={{ background: '#0A0A0A' }}>
-      {/* Desktop sidebar */}
-      {!isMobile && <ConversationList />}
+      {/* Conversation list as overlay sheet — triggered from header */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetContent side="left" showCloseButton={false} className="w-80 p-0" style={{ background: '#111113' }}>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Conversations</SheetTitle>
+          </SheetHeader>
+          <ConversationList />
+        </SheetContent>
+      </Sheet>
 
       {/* Main message area */}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -149,23 +156,25 @@ export function ChatView() {
             gap: 10,
           }}
         >
-          {isMobile && (
-            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-              <SheetTrigger
-                render={
-                  <Button variant="ghost" size="icon-sm" />
-                }
-              >
-                <Menu className="text-muted-foreground" />
-              </SheetTrigger>
-              <SheetContent side="left" showCloseButton={false} className="w-80 p-0">
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Conversations</SheetTitle>
-                </SheetHeader>
-                <ConversationList />
-              </SheetContent>
-            </Sheet>
-          )}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 8,
+              background: 'transparent',
+              border: '1px solid transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#A8A8A8',
+              flexShrink: 0,
+            }}
+            aria-label="Open conversations"
+          >
+            <Menu size={16} />
+          </button>
           <span
             style={{
               fontSize: 14,

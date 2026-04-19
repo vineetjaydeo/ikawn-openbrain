@@ -87,7 +87,13 @@ export function useStreamChat() {
             try {
               const parsed: StreamEventDelta = JSON.parse(data);
 
-              if (
+              if (parsed.type === 'chunk' && parsed.text) {
+                // OpenBrain format: {"type":"chunk","text":"..."}
+                fullContent += parsed.text;
+                updateStreamingMessage(fullContent);
+              } else if (parsed.type === 'done') {
+                // Stream complete
+              } else if (
                 parsed.type === 'content_block_delta' ||
                 parsed.delta?.text
               ) {
@@ -96,10 +102,6 @@ export function useStreamChat() {
               } else if (parsed.type === 'text' || parsed.content) {
                 fullContent += parsed.content ?? parsed.text ?? '';
                 updateStreamingMessage(fullContent);
-              } else if (parsed.type === 'message_complete') {
-                if (parsed.content) {
-                  updateStreamingMessage(parsed.content);
-                }
               } else if (parsed.type === 'error') {
                 updateStreamingMessage(
                   `Error: ${parsed.message ?? 'Something went wrong'}`,

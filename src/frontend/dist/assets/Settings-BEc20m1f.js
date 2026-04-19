@@ -1,2 +1,0 @@
-import{u as e,j as o}from"./index-7jtGXdnn.js";import{u as r}from"./tokens-BLncqTyW.js";import{S as i}from"./screens-d-DI3HILO_.js";import"./components-D7aF_c7V.js";import"./chat-5ktC_p-q.js";function f(){const t=r(),s=e();return o.jsx(i,{t,onNavigate:a=>{s({to:{chat:"/chat",memory:"/memory",vault:"/vault",tasks:"/tasks",settings:"/settings",admin:"/admin"}[a]||"/chat"})}})}export{f as default};
-//# sourceMappingURL=Settings-BEc20m1f.js.map

@@ -1,2 +1,0 @@
-import{u as o,j as m}from"./index-7jtGXdnn.js";import{u as n}from"./tokens-BLncqTyW.js";import{a as i}from"./screens-d-DI3HILO_.js";import"./components-D7aF_c7V.js";import"./chat-5ktC_p-q.js";function v(){const t=n(),a=o(),s=e=>{a({to:{chat:"/chat",memory:"/memory",vault:"/vault",tasks:"/tasks",settings:"/settings",admin:"/admin"}[e]||"/chat"})};return m.jsx(i,{t,onNavigate:s})}export{v as default};
-//# sourceMappingURL=AdminPage-BgG9R8sL.js.map

@@ -153,7 +153,7 @@ if (!feature('REACT_UI')) {
 if (feature('REACT_UI')) {
   const frontendDist = path.join(__dirname, 'frontend', 'dist');
   app.use(express.static(frontendDist));
-  const spaRoutes = ['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/brands', '/knowledge', '/insights', '/settings', '/admin'];
+  const spaRoutes = ['/', '/chat', '/chat/:id', '/login', '/splash', '/memory', '/memory/:id', '/vault', '/tasks', '/settings', '/settings/connections', '/admin'];
   spaRoutes.forEach(route => {
     app.get(route, (req, res) => {
       res.sendFile(path.join(frontendDist, 'index.html'));

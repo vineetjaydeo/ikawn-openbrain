@@ -18,7 +18,9 @@ export async function apiFetch<T>(
   });
 
   if (res.status === 401) {
-    window.location.href = '/login';
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/splash') {
+      window.location.href = '/login';
+    }
     throw new ApiError(401, 'Unauthorized');
   }
 

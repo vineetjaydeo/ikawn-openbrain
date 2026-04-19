@@ -34,6 +34,11 @@ export interface ScreenHomeProps {
   onToggleTheme?: () => void;
   theme?: string;
   onNavigate?: (screen: string) => void;
+  messages?: ChatMessageData[];
+  onSend?: (text: string) => void;
+  isStreaming?: boolean;
+  conversationTitle?: string;
+  memoryRecall?: import('./data').MemoryRecallItem[];
 }
 
 export interface ScreenEmptyStatesProps {
@@ -178,31 +183,70 @@ export function Screen_SignIn({ t, error = false }: ScreenSignInProps) {
 
 // ---- Home / Chat ----
 
-export function Screen_Home({ t, onToggleTheme, theme, onNavigate }: ScreenHomeProps) {
+export function Screen_Home({ t, onToggleTheme, theme, onNavigate, messages, onSend, isStreaming, conversationTitle, memoryRecall }: ScreenHomeProps) {
+  const displayMessages = messages && messages.length > 0 ? messages : CHAT_TRANSCRIPT;
+  const hasRealMessages = messages && messages.length > 0;
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [displayMessages.length, isStreaming]);
+
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', background: t.bg }}>
       <LeftRail t={t} active="chat" onNavigate={onNavigate}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <ChatHeader t={t} onToggleTheme={onToggleTheme} theme={theme}/>
-        <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px 8px', display: 'flex', flexDirection: 'column' }}>
+        <ChatHeader t={t} onToggleTheme={onToggleTheme} theme={theme} title={conversationTitle}/>
+        <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '24px 32px 8px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ maxWidth: 760, width: '100%', margin: '0 auto', flex: 1 }}>
-            {/* day divider */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '8px 0 16px',
-            }}>
-              <div style={{ flex: 1, height: 1, background: t.borderSubtle }}/>
-              <div style={{ fontFamily: RUHI_FONTS.body, fontSize: 11, color: t.textMuted, letterSpacing: 0.4 }}>
-                Today . 18 April
-              </div>
-              <div style={{ flex: 1, height: 1, background: t.borderSubtle }}/>
-            </div>
-            {CHAT_TRANSCRIPT.map((m, i) => <Message key={i} t={t} m={m} idx={i}/>)}
+            {!hasRealMessages ? (
+              <>
+                {/* Empty state */}
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  justifyContent: 'center', flex: 1, minHeight: 400, textAlign: 'center',
+                }}>
+                  <div style={{
+                    fontSize: 48, color: t.accent, marginBottom: 20,
+                    fontFamily: RUHI_FONTS.display,
+                  }}>{'\u2726'}</div>
+                  <div style={{
+                    fontFamily: RUHI_FONTS.display, fontSize: 26, fontWeight: 600,
+                    color: t.textPrimary, letterSpacing: -0.4, marginBottom: 8,
+                  }}>What can I help with?</div>
+                  <div style={{
+                    fontFamily: RUHI_FONTS.body, fontSize: 14, color: t.textSecondary,
+                    maxWidth: 400, lineHeight: 1.6,
+                  }}>
+                    Ask me anything. I have access to your memories, documents, and connected services.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Day divider */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '8px 0 16px',
+                }}>
+                  <div style={{ flex: 1, height: 1, background: t.borderSubtle }}/>
+                  <div style={{ fontFamily: RUHI_FONTS.body, fontSize: 11, color: t.textMuted, letterSpacing: 0.4 }}>
+                    Today
+                  </div>
+                  <div style={{ flex: 1, height: 1, background: t.borderSubtle }}/>
+                </div>
+                {displayMessages.map((m, i) => <Message key={i} t={t} m={m} idx={i}/>)}
+              </>
+            )}
           </div>
         </div>
-        <Composer t={t}/>
+        <Composer t={t} onSend={onSend} disabled={isStreaming} suggestedPrompts={!hasRealMessages}/>
       </div>
-      <MemoryRecallRail t={t} items={MEMORY_RECALL}/>
+      {hasRealMessages && memoryRecall && memoryRecall.length > 0 && (
+        <MemoryRecallRail t={t} items={memoryRecall}/>
+      )}
     </div>
   );
 }

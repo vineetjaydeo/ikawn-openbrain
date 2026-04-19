@@ -73,24 +73,18 @@ const memoryDetailRoute = createRoute({
 })
 
 // ---------------------------------------------------------------------------
-// Brand, Knowledge, Insights
+// Vault & Tasks
 // ---------------------------------------------------------------------------
-const brandsRoute = createRoute({
+const vaultRoute = createRoute({
   getParentRoute: () => appShellRoute,
-  path: '/brands',
-  component: lazyRouteComponent(() => import('@/pages/BrandsPage')),
+  path: '/vault',
+  component: lazyRouteComponent(() => import('@/pages/VaultPage')),
 })
 
-const knowledgeRoute = createRoute({
+const tasksRoute = createRoute({
   getParentRoute: () => appShellRoute,
-  path: '/knowledge',
-  component: lazyRouteComponent(() => import('@/pages/KnowledgePage')),
-})
-
-const insightsRoute = createRoute({
-  getParentRoute: () => appShellRoute,
-  path: '/insights',
-  component: lazyRouteComponent(() => import('@/pages/InsightsPage')),
+  path: '/tasks',
+  component: lazyRouteComponent(() => import('@/pages/TasksPage')),
 })
 
 // ---------------------------------------------------------------------------
@@ -100,6 +94,12 @@ const settingsRoute = createRoute({
   getParentRoute: () => appShellRoute,
   path: '/settings',
   component: lazyRouteComponent(() => import('@/pages/Settings')),
+})
+
+const settingsConnectionsRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: '/settings/connections',
+  component: lazyRouteComponent(() => import('@/pages/SettingsConnectionsPage')),
 })
 
 const adminRoute = createRoute({
@@ -120,10 +120,10 @@ const routeTree = rootRoute.addChildren([
     chatConversationRoute,
     memoryRoute,
     memoryDetailRoute,
-    brandsRoute,
-    knowledgeRoute,
-    insightsRoute,
+    vaultRoute,
+    tasksRoute,
     settingsRoute,
+    settingsConnectionsRoute,
     adminRoute,
   ]),
 ])

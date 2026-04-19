@@ -38,6 +38,7 @@ export interface ChatHeaderProps {
   theme?: string;
   brand?: string;
   right?: boolean;
+  title?: string;
 }
 
 export interface IconButtonProps {
@@ -80,18 +81,23 @@ export interface ComposerProps {
   t: RuhiTheme;
   suggestedPrompts?: boolean;
   mobile?: boolean;
+  value?: string;
+  onChange?: (value: string) => void;
+  onSend?: (text: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
 }
 
 // ---- Left Rail ----
 
 export function LeftRail({ t, active = 'chat', collapsed = false, onNavigate, mobile = false }: LeftRailProps) {
   const items: { id: string; icon: IconName; label: string; count?: number }[] = [
-    { id: 'chat', icon: 'chat', label: 'Chat', count: 4 },
-    { id: 'memory', icon: 'memory', label: 'Memory', count: 312 },
-    { id: 'brands', icon: 'brand', label: 'Brands', count: 5 },
-    { id: 'knowledge', icon: 'knowledge', label: 'Knowledge' },
-    { id: 'insights', icon: 'insights', label: 'Insights' },
+    { id: 'chat', icon: 'chat', label: 'Chat' },
+    { id: 'memory', icon: 'memory', label: 'Memory' },
+    { id: 'vault', icon: 'folder', label: 'Vault' },
+    { id: 'tasks', icon: 'layers', label: 'Tasks' },
     { id: 'settings', icon: 'settings', label: 'Settings' },
+    { id: 'admin', icon: 'shield', label: 'Admin' },
   ];
   const currentBrand = BRANDS[0];
   const w = collapsed ? 64 : 240;
@@ -219,7 +225,7 @@ export function LeftRail({ t, active = 'chat', collapsed = false, onNavigate, mo
 
 // ---- Chat header ----
 
-export function ChatHeader({ t, onToggleTheme, theme, brand, right = true }: ChatHeaderProps) {
+export function ChatHeader({ t, onToggleTheme, theme, brand, right = true, title }: ChatHeaderProps) {
   const [showDetails, setShowDetails] = useState(false);
   return (
     <div style={{
@@ -232,7 +238,7 @@ export function ChatHeader({ t, onToggleTheme, theme, brand, right = true }: Cha
         <div style={{
           fontFamily: RUHI_FONTS.body, fontSize: 14, fontWeight: 600,
           color: t.textPrimary, letterSpacing: 0.1,
-        }}>Treasury exposure review</div>
+        }}>{title || 'New conversation'}</div>
         <button
           onClick={() => setShowDetails(v => !v)}
           style={{
@@ -280,7 +286,10 @@ export function IconButton({ t, icon, dot, onClick, active }: IconButtonProps) {
 // ---- Message ----
 
 export function Message({ t, m, idx = 0 }: MessageProps) {
-  if (m.role === 'user') {
+  // Support both design data (role:'agent', text) and API data (role:'assistant', content)
+  const messageText = m.text || (m as any).content || '';
+  const isUser = m.role === 'user';
+  if (isUser) {
     return (
       <div style={{ display: 'flex', gap: 14, padding: '18px 0' }}>
         <UserAvatar t={t} initials="AK" size={30} color="#5B6BFF"/>
@@ -295,7 +304,7 @@ export function Message({ t, m, idx = 0 }: MessageProps) {
           <div style={{
             fontFamily: RUHI_FONTS.body, fontSize: 14.5, lineHeight: 1.6,
             color: t.textPrimary,
-          }}>{m.text}</div>
+          }}>{messageText}</div>
         </div>
       </div>
     );
@@ -496,14 +505,33 @@ export function MemoryRecallCard({ t, m, idx = 0 }: MemoryRecallCardProps) {
 
 // ---- Composer ----
 
-export function Composer({ t, suggestedPrompts = true, mobile = false }: ComposerProps) {
+export function Composer({ t, suggestedPrompts = true, mobile = false, value, onChange, onSend, disabled, placeholder }: ComposerProps) {
+  const [localValue, setLocalValue] = useState('');
+  const text = value !== undefined ? value : localValue;
+  const setText = onChange || setLocalValue;
+  const placeholderText = placeholder || 'Ask Lucy anything...';
+
+  const handleSend = () => {
+    const trimmed = text.trim();
+    if (!trimmed || disabled) return;
+    onSend?.(trimmed);
+    if (!onChange) setLocalValue('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
     <div style={{
       padding: mobile ? '12px 14px 14px' : '14px 28px 22px',
       borderTop: `1px solid ${t.borderSubtle}`,
       background: t.bg, flexShrink: 0,
     }}>
-      {suggestedPrompts && !mobile && (
+      {suggestedPrompts && !mobile && !text && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           {SUGGESTED_PROMPTS.map((p, i) => <SuggestedPrompt key={i} t={t} {...p}/>)}
         </div>
@@ -514,20 +542,28 @@ export function Composer({ t, suggestedPrompts = true, mobile = false }: Compose
         borderRadius: 12, padding: mobile ? 10 : 12,
         boxShadow: t === RUHI_LIGHT ? '0 1px 2px rgba(0,0,0,0.03)' : 'none',
       }}>
-        <div style={{
-          fontFamily: RUHI_FONTS.body, fontSize: 14.5, color: t.textMuted,
-          padding: '6px 4px 14px', minHeight: mobile ? 24 : 40,
-        }}>
-          Ask Ruhi about treasury, credit, or compliance...
-        </div>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholderText}
+          disabled={disabled}
+          rows={1}
+          style={{
+            width: '100%', resize: 'none', border: 'none', outline: 'none',
+            background: 'transparent',
+            fontFamily: RUHI_FONTS.body, fontSize: 14.5, color: t.textPrimary,
+            padding: '6px 4px 14px', minHeight: mobile ? 24 : 40,
+            lineHeight: 1.5,
+          }}
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <IconButton t={t} icon="paperclip"/>
-          <IconButton t={t} icon="mic"/>
           <div style={{ flex: 1 }}/>
           <div style={{
             fontFamily: RUHI_FONTS.mono, fontSize: 11, color: t.textMuted, marginRight: 10,
           }}>Cmd+Enter</div>
-          <RuhiButton t={t} variant="primary" size="sm" icon="send">
+          <RuhiButton t={t} variant="primary" size="sm" icon="send" onClick={handleSend}>
             Send
           </RuhiButton>
         </div>
@@ -538,7 +574,7 @@ export function Composer({ t, suggestedPrompts = true, mobile = false }: Compose
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
       }}>
         <RuhiIcon name="lock" size={11} color={t.textMuted}/>
-        Memory use limited by your access level. Private memories are never shared across brands.
+        Your data stays on this server. Nothing leaves your infrastructure.
       </div>
     </div>
   );

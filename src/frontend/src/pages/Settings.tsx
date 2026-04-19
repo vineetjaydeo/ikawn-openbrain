@@ -13,10 +13,10 @@ export default function Settings() {
         const routes: Record<string, string> = {
           chat: '/chat',
           memory: '/memory',
-          brands: '/brands',
-          knowledge: '/knowledge',
-          insights: '/insights',
+          vault: '/vault',
+          tasks: '/tasks',
           settings: '/settings',
+          admin: '/admin',
         }
         navigate({ to: routes[screen] || '/chat' })
       }}

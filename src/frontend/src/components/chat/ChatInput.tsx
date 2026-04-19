@@ -1,6 +1,6 @@
 import { useRef, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Paperclip, ArrowUp, Square } from 'lucide-react'
+import { Paperclip, Square } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -96,75 +96,141 @@ export function ChatInput() {
   )
 
   return (
-    <div className="flex justify-center px-4 pb-5 pt-2">
+    <div
+      style={{
+        padding: '14px 28px 22px',
+        borderTop: '1px solid #2A2A2A',
+        background: '#0A0A0A',
+      }}
+    >
+      {/* Composer box */}
       <div
-        className={cn(
-          'flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#141416] px-4 py-3 focus-gold transition-all duration-200'
-        )}
+        style={{
+          background: '#161616',
+          border: '1px solid #2A2A2A',
+          borderRadius: 12,
+          padding: 12,
+          maxWidth: 760,
+          margin: '0 auto',
+        }}
       >
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 hover:text-foreground hover:bg-muted/50 active:scale-95 transition-all duration-150"
-          aria-label="Attach file"
-        >
-          <Paperclip className="text-muted-foreground" />
-        </Button>
-
+        {/* Textarea */}
         <textarea
           ref={textareaRef}
           value={draftText}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="Message Lucy..."
+          placeholder="Ask Lucy about your brand, content, or data..."
           rows={1}
-          className={cn(
-            'max-h-[120px] min-h-[20px] flex-1 resize-none bg-transparent text-sm text-foreground',
-            'placeholder:text-muted-foreground/40',
-            'outline-none'
-          )}
+          style={{
+            width: '100%',
+            minHeight: 20,
+            maxHeight: 120,
+            resize: 'none',
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            fontFamily: 'Inter, sans-serif',
+            fontSize: '14.5px',
+            color: '#F5F5F5',
+            padding: '6px 4px 14px',
+          }}
+          className="placeholder:text-[#6B6B6B]"
         />
 
-        <AnimatePresence mode="wait">
-          {isStreaming ? (
-            <motion.div
-              key="stop"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-              className="shrink-0"
-            >
-              <Button
-                size="icon-sm"
-                className="rounded-full bg-red-500/80 hover:bg-red-500 active:scale-90 transition-all duration-150"
-                onClick={cancelStream}
-                aria-label="Stop generating"
+        {/* Bottom toolbar row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Left: paperclip */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 hover:text-foreground hover:bg-muted/50 active:scale-95 transition-all duration-150"
+            aria-label="Attach file"
+          >
+            <Paperclip className="text-muted-foreground" />
+          </Button>
+
+          {/* Right: hint + send/stop */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {!isStreaming && (
+              <span
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 11,
+                  color: '#6B6B6B',
+                }}
               >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </Button>
-            </motion.div>
-          ) : hasText ? (
-            <motion.div
-              key="send"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-              className="shrink-0"
-            >
-              <Button
-                size="icon-sm"
-                className="rounded-full bg-gradient-to-r from-[#FFC01C] to-[#F59E0B] hover:from-[#e5a819] hover:to-[#d98f0a] active:scale-90 transition-all duration-150 shadow-[0_0_12px_rgba(255,192,28,0.25)]"
-                onClick={() => void handleSubmit()}
-                aria-label="Send message"
-              >
-                <ArrowUp />
-              </Button>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+                Cmd+Enter
+              </span>
+            )}
+
+            <AnimatePresence mode="wait">
+              {isStreaming ? (
+                <motion.div
+                  key="stop"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                  className="shrink-0"
+                >
+                  <Button
+                    size="icon-sm"
+                    className="rounded-full bg-red-500/80 hover:bg-red-500 active:scale-90 transition-all duration-150"
+                    onClick={cancelStream}
+                    aria-label="Stop generating"
+                  >
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                  </Button>
+                </motion.div>
+              ) : hasText ? (
+                <motion.div
+                  key="send"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                  className="shrink-0"
+                >
+                  <button
+                    onClick={() => void handleSubmit()}
+                    aria-label="Send message"
+                    style={{
+                      background: '#FFC01C',
+                      color: '#0A0A0A',
+                      padding: '0 12px',
+                      height: 32,
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 500,
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'Inter, sans-serif',
+                    }}
+                  >
+                    Send
+                  </button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
+
+      {/* Footer */}
+      <p
+        style={{
+          fontSize: 11,
+          color: '#6B6B6B',
+          textAlign: 'center',
+          marginTop: 10,
+          maxWidth: 760,
+          marginLeft: 'auto',
+          marginRight: 'auto',
+        }}
+      >
+        Memory use limited by your access level.
+      </p>
     </div>
   )
 }

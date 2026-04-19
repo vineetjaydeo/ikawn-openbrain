@@ -2,7 +2,6 @@ import { useEffect, type ReactNode } from 'react'
 import { IconRail } from './IconRail'
 import { BottomTabs } from './BottomTabs'
 import { useUIStore } from '@/stores/ui'
-import { TooltipProvider } from '@/components/ui/tooltip'
 
 const MOBILE_BREAKPOINT = 1024
 
@@ -28,14 +27,12 @@ export function UserLayout({ children }: UserLayoutProps) {
   }, [setIsMobile])
 
   return (
-    <TooltipProvider>
-      <div className="flex h-dvh bg-background">
-        <IconRail />
-        <main className="flex-1 flex flex-col min-w-0 pb-14 lg:pb-0">
-          {children}
-        </main>
-        <BottomTabs />
-      </div>
-    </TooltipProvider>
+    <div className="flex h-dvh bg-background">
+      <IconRail />
+      <main className="flex-1 flex flex-col min-w-0 pb-14 lg:pb-0">
+        {children}
+      </main>
+      <BottomTabs />
+    </div>
   )
 }

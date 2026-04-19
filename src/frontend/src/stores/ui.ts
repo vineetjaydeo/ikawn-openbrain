@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 interface UIState {
   sidebarOpen: boolean
-  activeTab: 'chat' | 'tasks' | 'vault' | 'settings'
+  activeTab: 'chat' | 'memory' | 'tasks' | 'vault' | 'settings'
   isMobile: boolean
   setSidebarOpen: (open: boolean) => void
   setActiveTab: (tab: UIState['activeTab']) => void

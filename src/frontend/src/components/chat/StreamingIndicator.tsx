@@ -1,23 +1,24 @@
-import { motion } from 'motion/react'
-
-const dots = [0, 1, 2] as const
-
 export function StreamingIndicator() {
   return (
-    <div className="flex items-center gap-1 pt-2">
-      {dots.map((i) => (
-        <motion.div
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingTop: 8 }}>
+      {[0, 1, 2].map((i) => (
+        <span
           key={i}
-          className="h-1.5 w-1.5 rounded-full bg-primary"
-          animate={{ y: [0, -6, 0] }}
-          transition={{
-            duration: 0.6,
-            repeat: Infinity,
-            delay: i * 0.15,
-            ease: 'easeInOut',
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: 5,
+            backgroundColor: '#6B6B6B',
+            animation: `blink 1.2s infinite ${i * 0.2}s`,
           }}
         />
       ))}
+      <style>{`
+        @keyframes blink {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }

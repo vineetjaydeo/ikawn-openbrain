@@ -1,18 +1,10 @@
-import { MessageSquare, ListTodo, FolderOpen, Settings, Sparkles } from 'lucide-react'
+import { MessageSquare, Brain, FolderOpen, ListTodo, Settings } from 'lucide-react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import { Button } from '@/components/ui/button'
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from '@/components/ui/tooltip'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Separator } from '@/components/ui/separator'
 
-type TabKey = 'chat' | 'tasks' | 'vault' | 'settings'
+type TabKey = 'chat' | 'memory' | 'vault' | 'tasks' | 'settings'
 
 interface NavItem {
   key: TabKey
@@ -22,61 +14,38 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { key: 'chat', icon: MessageSquare, label: 'Chat' },
-  { key: 'tasks', icon: ListTodo, label: 'Tasks' },
+  { key: 'memory', icon: Brain, label: 'Memory' },
   { key: 'vault', icon: FolderOpen, label: 'Vault' },
+  { key: 'tasks', icon: ListTodo, label: 'Tasks' },
+  { key: 'settings', icon: Settings, label: 'Settings' },
 ]
 
-function NavButton({
-  item,
-  isActive,
-  onClick,
-}: {
-  item: NavItem
-  isActive: boolean
-  onClick: () => void
-}) {
-  const Icon = item.icon
-
-  return (
-    <div className="relative w-full flex items-center justify-center">
-      <span
-        className={cn(
-          'absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full',
-          'bg-primary transition-opacity duration-150 ease-out',
-          isActive ? 'opacity-100' : 'opacity-0',
-        )}
-      />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClick}
-              aria-label={item.label}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'transition-colors duration-150 ease-out active:scale-95',
-                isActive
-                  ? 'text-primary hover:text-primary'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            />
-          }
-        >
-          <Icon size={20} strokeWidth={isActive ? 2 : 1.5} />
-        </TooltipTrigger>
-        <TooltipContent side="right">{item.label}</TooltipContent>
-      </Tooltip>
-    </div>
-  )
+const tabRoutes: Record<TabKey, string> = {
+  chat: '/chat',
+  memory: '/memory',
+  vault: '/vault',
+  tasks: '/tasks',
+  settings: '/settings',
 }
 
-const tabRoutes: Record<string, string> = {
-  chat: '/chat',
-  tasks: '/tasks',
-  vault: '/vault',
-  settings: '/settings',
+function getInitials(name?: string): string {
+  if (!name) return 'U'
+  return name
+    .split(' ')
+    .map((w) => w.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
+
+function getAvatarColor(name?: string): string {
+  if (!name) return '#6B6B6B'
+  const colors = ['#E07C4F', '#7C4FE0', '#4FE07C', '#E04F7C', '#4F7CE0', '#E0C04F']
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return colors[Math.abs(hash) % colors.length]
 }
 
 export function IconRail() {
@@ -86,110 +55,224 @@ export function IconRail() {
   const routerState = useRouterState()
 
   const currentPath = routerState.location.pathname
-  const derivedActiveTab = currentPath.startsWith('/settings') ? 'settings'
-    : currentPath.startsWith('/tasks') ? 'tasks'
-    : currentPath.startsWith('/vault') ? 'vault'
-    : currentPath.startsWith('/admin') ? 'admin'
-    : 'chat'
+  const derivedActiveTab: TabKey = currentPath.startsWith('/settings')
+    ? 'settings'
+    : currentPath.startsWith('/tasks')
+      ? 'tasks'
+      : currentPath.startsWith('/vault')
+        ? 'vault'
+        : currentPath.startsWith('/memory')
+          ? 'memory'
+          : 'chat'
+
+  const handleNav = (key: TabKey) => {
+    setActiveTab(key)
+    navigate({ to: tabRoutes[key] })
+  }
 
   return (
     <nav
-      className={cn(
-        'hidden lg:flex flex-col items-center w-16 h-full flex-shrink-0',
-        'bg-gradient-to-b from-[#111113] to-[#0d0d0f] border-r border-[rgba(255,255,255,0.08)]',
-      )}
+      className="hidden lg:flex flex-col flex-shrink-0"
+      style={{
+        width: 240,
+        height: '100%',
+        background: '#0A0A0A',
+        borderRight: '1px solid #2A2A2A',
+        padding: '20px 12px 16px',
+      }}
     >
-      {/* Logo */}
-      <div className="flex items-center justify-center h-14 w-full">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[rgba(255,192,28,0.08)]">
-          <Sparkles
-            size={22}
-            className="text-primary gold-glow drop-shadow-[0_0_6px_hsl(var(--primary)/0.3)]"
-          />
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <div className="flex-1 flex flex-col items-center gap-1 mt-2 w-full">
-        {navItems.map((item) => (
-          <NavButton
-            key={item.key}
-            item={item}
-            isActive={derivedActiveTab === item.key}
-            onClick={() => {
-              setActiveTab(item.key)
-              navigate({ to: tabRoutes[item.key] || '/chat' })
+      {/* Brand wordmark */}
+      <div
+        className="flex items-center"
+        style={{ padding: '0 8px', marginBottom: 16 }}
+      >
+        <div
+          className="flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 4,
+            background: '#0A0A0A',
+            border: '1px solid #3A3A3A',
+          }}
+        >
+          <div
+            style={{
+              width: 6,
+              height: 6,
+              background: '#FFC01C',
+              borderRadius: 1,
             }}
           />
-        ))}
+        </div>
+        <span
+          style={{
+            fontFamily: 'Parkinsans, sans-serif',
+            fontSize: 20,
+            fontWeight: 600,
+            letterSpacing: -0.5,
+            color: '#F5F5F5',
+            marginLeft: 8,
+          }}
+        >
+          ruhi
+        </span>
+        <span
+          className="ml-auto"
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 9.5,
+            fontWeight: 600,
+            letterSpacing: 0.8,
+            color: '#6B6B6B',
+          }}
+        >
+          v3.1
+        </span>
       </div>
 
-      {/* Bottom pinned items */}
-      <div className="mt-auto flex flex-col items-center gap-1 pb-3 w-full">
-        {/* Settings */}
-        <div className="relative w-full flex items-center justify-center">
-          <span
-            className={cn(
-              'absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full',
-              'bg-primary transition-opacity duration-150 ease-out',
-              derivedActiveTab === 'settings' ? 'opacity-100' : 'opacity-0',
-            )}
-          />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setActiveTab('settings')
-                    navigate({ to: '/settings' })
-                  }}
-                  aria-label="Settings"
-                  className={cn(
-                    'transition-colors duration-150 ease-out active:scale-95',
-                    derivedActiveTab === 'settings'
-                      ? 'text-primary hover:text-primary'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                />
-              }
-            >
-              <Settings
-                size={20}
-                strokeWidth={derivedActiveTab === 'settings' ? 2 : 1.5}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="right">Settings</TooltipContent>
-          </Tooltip>
+      {/* Brand switcher */}
+      <div
+        style={{
+          background: '#161616',
+          border: '1px solid #2A2A2A',
+          borderRadius: 10,
+          padding: '10px 12px',
+          marginBottom: 16,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: '#F5F5F5',
+            lineHeight: 1.3,
+          }}
+        >
+          Lucy
         </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: '#6B6B6B',
+            lineHeight: 1.3,
+            marginTop: 2,
+          }}
+        >
+          R&D Assistant
+        </div>
+      </div>
 
-        <Separator className="w-8 opacity-50" />
+      {/* Section label */}
+      <div
+        style={{
+          padding: '10px 12px 6px',
+          fontSize: 11,
+          fontWeight: 500,
+          color: '#6B6B6B',
+          letterSpacing: 0.4,
+        }}
+      >
+        Workspace
+      </div>
 
-        {/* User Avatar */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                aria-label="Account"
-                className={cn(
-                  'flex items-center justify-center w-full h-10',
-                  'transition-colors duration-150 ease-out',
-                  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                )}
-              />
-            }
+      {/* Nav items */}
+      <div className="flex flex-col gap-0.5">
+        {navItems.map((item) => {
+          const isActive = derivedActiveTab === item.key
+          const Icon = item.icon
+          return (
+            <button
+              key={item.key}
+              onClick={() => handleNav(item.key)}
+              aria-current={isActive ? 'page' : undefined}
+              className={cn(
+                'relative flex items-center w-full cursor-pointer border-none outline-none',
+                'transition-colors duration-150 ease-out',
+              )}
+              style={{
+                height: 36,
+                padding: '0 12px',
+                borderRadius: 8,
+                gap: 10,
+                background: isActive ? '#161616' : 'transparent',
+                color: isActive ? '#F5F5F5' : '#A8A8A8',
+                fontSize: 13,
+                fontWeight: isActive ? 500 : 400,
+              }}
+            >
+              {isActive && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: -12,
+                    top: 6,
+                    bottom: 6,
+                    width: 2,
+                    background: '#FFC01C',
+                    borderRadius: 1,
+                  }}
+                />
+              )}
+              <Icon size={16} strokeWidth={isActive ? 2 : 1.5} />
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* User block */}
+      <div
+        className="flex items-center"
+        style={{
+          padding: '10px 12px',
+          borderRadius: 10,
+          background: '#161616',
+          border: '1px solid #2A2A2A',
+          gap: 10,
+        }}
+      >
+        <div
+          className="flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: getAvatarColor(user?.name),
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 600,
+          }}
+        >
+          {getInitials(user?.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div
+            className="truncate"
+            style={{
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: '#F5F5F5',
+              lineHeight: 1.3,
+            }}
           >
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
-                {user?.name?.charAt(0).toUpperCase() ?? 'U'}
-              </AvatarFallback>
-            </Avatar>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            {user?.name ?? 'Account'}
-          </TooltipContent>
-        </Tooltip>
+            {user?.name ?? 'User'}
+          </div>
+          <div
+            className="truncate"
+            style={{
+              fontSize: 11,
+              color: '#6B6B6B',
+              lineHeight: 1.3,
+              marginTop: 1,
+            }}
+          >
+            {user?.role ?? user?.email ?? ''}
+          </div>
+        </div>
       </div>
     </nav>
   )

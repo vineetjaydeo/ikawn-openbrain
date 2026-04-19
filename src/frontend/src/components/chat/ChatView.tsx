@@ -21,23 +21,53 @@ import { useConversationDetail } from '@/hooks/useConversations'
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-center">
-      <span className="mb-4 text-5xl gold-glow text-primary" aria-hidden="true">
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        textAlign: 'center',
+        padding: '0 24px',
+      }}
+    >
+      <span
+        style={{
+          fontSize: 48,
+          color: '#FFC01C',
+          fontFamily: 'Parkinsans, sans-serif',
+          marginBottom: 16,
+        }}
+        aria-hidden="true"
+      >
         {'\u2726'}
       </span>
-      <h3 className="text-xl font-semibold tracking-tight text-foreground">
-        Start a conversation
+      <h3
+        style={{
+          fontFamily: 'Parkinsans, sans-serif',
+          fontSize: 26,
+          fontWeight: 600,
+          color: '#F5F5F5',
+          letterSpacing: '-0.4px',
+          margin: 0,
+        }}
+      >
+        What can I help with?
       </h3>
       <p
-        className={cn(
-          'mt-3 max-w-sm text-sm text-muted-foreground leading-relaxed',
-          'font-[var(--font-serif)]'
-        )}
+        style={{
+          fontFamily: 'Inter, sans-serif',
+          fontSize: 14,
+          color: '#A8A8A8',
+          maxWidth: 400,
+          lineHeight: 1.6,
+          marginTop: 12,
+        }}
       >
         Ask Lucy anything about your brand, strategy, content, or data.
         She will research, analyze, and deliver actionable insights.
       </p>
-      <p className="mt-6 text-xs text-muted-foreground/40">Press Enter to send</p>
     </div>
   )
 }
@@ -101,14 +131,24 @@ export function ChatView() {
   const showSkeleton = !!activeConversationId && isLoadingMessages && messages.length === 0
 
   return (
-    <div className="flex h-full w-full bg-background">
+    <div className="flex h-full w-full" style={{ background: '#0A0A0A' }}>
       {/* Desktop sidebar */}
       {!isMobile && <ConversationList />}
 
       {/* Main message area */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <div className="flex items-center gap-2 border-b border-[rgba(255,255,255,0.06)] px-5 py-3.5 bg-[rgba(255,255,255,0.015)]">
+        <div
+          style={{
+            height: 60,
+            padding: '0 28px',
+            borderBottom: '1px solid #2A2A2A',
+            background: '#0A0A0A',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
           {isMobile && (
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
               <SheetTrigger
@@ -126,14 +166,43 @@ export function ChatView() {
               </SheetContent>
             </Sheet>
           )}
-          <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: '#F5F5F5',
+              letterSpacing: '0.1px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {conversationTitle ?? 'New conversation'}
+          </span>
+          <span
+            style={{
+              padding: '3px 8px',
+              borderRadius: 999,
+              border: '1px solid #2A2A2A',
+              fontSize: 11,
+              color: '#6B6B6B',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            Details
           </span>
         </div>
 
         {/* Messages */}
         <ScrollArea className="flex-1">
-          <div className="mx-auto max-w-3xl px-4 py-8 lg:px-6">
+          <div
+            style={{
+              maxWidth: 760,
+              margin: '0 auto',
+              padding: '24px 32px 8px',
+            }}
+          >
             {showSkeleton ? (
               <MessagesSkeleton />
             ) : showEmpty ? (

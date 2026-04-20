@@ -40,7 +40,7 @@ function calculateCost(model, inputTokens, outputTokens) {
  * Call Claude with tool_use support. Primary path for Tier 2 agent execution.
  */
 async function callClaude(params) {
-  const { system, messages, tools = [], serverTools = [], maxTokens = 4096, model: modelOverride } = params;
+  const { system, messages, tools = [], serverTools = [], maxTokens = 2048, model: modelOverride } = params;
   const model = modelOverride || 'claude-sonnet-4-6';
   const client = getAnthropic();
 
@@ -77,7 +77,7 @@ async function callClaude(params) {
  * Converts Anthropic-style messages to Gemini format.
  */
 async function callGeminiFallback(params) {
-  const { system, messages, tools = [], maxTokens = 4096 } = params;
+  const { system, messages, tools = [], maxTokens = 2048 } = params;
   const modelName = 'gemini-2.5-flash';
   const genAI = getGenAI();
 
@@ -166,7 +166,7 @@ async function callWithFallback(params) {
  * @returns {{ stream: AsyncIterable, getResult: () => Promise<{ response, cost }> }}
  */
 function callClaudeStreaming(params) {
-  const { system, messages, tools = [], serverTools = [], maxTokens = 4096, model: modelOverride } = params;
+  const { system, messages, tools = [], serverTools = [], maxTokens = 2048, model: modelOverride } = params;
   const model = modelOverride || 'claude-sonnet-4-6';
   const client = getAnthropic();
 

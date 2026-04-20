@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@/hooks/useAuth'
 import { RUHI_DARK, RUHI_FONTS } from '@/design/tokens'
@@ -15,8 +15,13 @@ export default function Login() {
   const [password, setPassword] = useState('')
 
   // If already authenticated, redirect to chat
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      navigate({ to: '/chat' })
+    }
+  }, [isLoading, isAuthenticated, navigate])
+
   if (!isLoading && isAuthenticated) {
-    navigate({ to: '/chat' })
     return null
   }
 

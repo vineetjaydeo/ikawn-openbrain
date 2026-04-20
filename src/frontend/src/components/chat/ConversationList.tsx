@@ -54,7 +54,7 @@ export function ConversationList() {
 
   function handleSelect(id: string) {
     navigate({ to: '/chat/$conversationId', params: { conversationId: id } })
-    if (isMobile) setSidebarOpen(false)
+    setSidebarOpen(false)
   }
 
   async function handleNewChat() {
@@ -109,11 +109,14 @@ export function ConversationList() {
             {conversations?.map((conv) => {
               const isActive = activeConversationId === conv.id
               return (
-                <button
+                <div
                   key={conv.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSelect(conv.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelect(conv.id) }}
                   className={cn(
-                    'group flex w-full flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left',
+                    'group flex w-full flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left cursor-pointer',
                     'border-l-2 transition-all duration-150',
                     'hover:bg-[rgba(255,255,255,0.04)] hover:translate-x-0.5',
                     isActive
@@ -150,7 +153,7 @@ export function ConversationList() {
                       {conv.lastMessage}
                     </span>
                   )}
-                </button>
+                </div>
               )
             })}
 

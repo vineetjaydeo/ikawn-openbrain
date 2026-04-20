@@ -103,7 +103,7 @@ async function executeReasoningLoop({
   dollarCap,
   messages,
   executeToolFn,
-  maxIterations = 25,
+  maxIterations = 8,
   onEvent,
   timeoutMs,
   userId,

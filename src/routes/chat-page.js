@@ -1125,7 +1125,7 @@ function chatPage(user, isDirectChat = false) {
     .task-card-dismiss:hover { color: var(--text-dim); }
 
     /* ==================== NEW UI: CONNECTED SERVICES ==================== */
-    .header-connectors { display: flex; align-items: center; gap: 6px; margin-left: auto; margin-right: 8px; }
+    .header-connectors { display: none; }
     .header-connector {
       width: 26px; height: 26px; border-radius: 6px;
       display: flex; align-items: center; justify-content: center;

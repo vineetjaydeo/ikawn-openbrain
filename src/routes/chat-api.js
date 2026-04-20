@@ -435,7 +435,7 @@ async function handleChatSend(req, res) {
 
     // Build messages array from conversation history
     // With context summary: fewer raw messages needed (summary provides older context)
-    const historyLimit = convRows[0].context_summary ? 10 : 15;
+    const historyLimit = convRows[0].context_summary ? 8 : 10;
     const { rows: historyRows } = await pool.query(
       'SELECT role, content, attachments, tier FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT $2',
       [convInternalId, historyLimit]
@@ -491,11 +491,6 @@ ${kb.soul || ''}
 === HOW YOU REMEMBER ===
 ${kb.memory || ''}
 
-=== YOUR CAPABILITIES ===
-${kb.tools || ''}
-
-=== YOUR VERSION HISTORY ===
-${kb.changelog || ''}
 ${memoryContext}
 ${contextSummary ? `=== CONVERSATION CONTEXT (auto-generated summary) ===
 Topic: ${contextSummary.topic || 'General conversation'}

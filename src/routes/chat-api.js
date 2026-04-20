@@ -713,12 +713,13 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       }
 
       try {
+        const timeoutMs = toolName === 'generate_pptx' ? 120000 : TOOL_TIMEOUT_MS;
         const execResult = await Promise.race([
           registryTool.execute(
             toolInput || {},
             { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: conversation_id, pool }
           ),
-          new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after 30s`)), TOOL_TIMEOUT_MS))
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after ${timeoutMs / 1000}s`)), timeoutMs))
         ]);
 
         // Special handling for ikawn_generate

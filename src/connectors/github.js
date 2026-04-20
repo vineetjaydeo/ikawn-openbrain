@@ -19,6 +19,29 @@ async function githubFetch(path) {
   return res.json();
 }
 
+async function githubFetchWithHeaders(path) {
+  const url = path.startsWith('http') ? path : `https://api.github.com${path}`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${GITHUB_TOKEN}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'ikawn-openbrain',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`GitHub API ${res.status}: ${res.statusText} for ${path}`);
+  }
+  const data = await res.json();
+  return { data, headers: Object.fromEntries(res.headers.entries()) };
+}
+
+function getNextPageUrl(headers) {
+  const link = headers['link'];
+  if (!link) return null;
+  const match = link.match(/<([^>]+)>;\s*rel="next"/);
+  return match ? match[1] : null;
+}
+
 async function upsertMemory({ content, memory_type, source_ref, source_url, project, author, access_level }) {
   // captureMessage handles ON CONFLICT by source_ref (idempotent)
   const id = await captureMessage({
@@ -29,6 +52,7 @@ async function upsertMemory({ content, memory_type, source_ref, source_url, proj
     source_ref,
     access_level: access_level || 'internal',
     metadata: { project: project || null },
+    memory_type: memory_type || 'conversation',
   });
   return id;
 }
@@ -36,29 +60,35 @@ async function upsertMemory({ content, memory_type, source_ref, source_url, proj
 async function syncCommits(repo, since) {
   let added = 0;
   const sinceParam = since ? `&since=${since}` : `&since=${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()}`;
+  let url = `/repos/${GITHUB_ORG}/${repo}/commits?per_page=100${sinceParam}`;
 
   try {
-    const commits = await githubFetch(`/repos/${GITHUB_ORG}/${repo}/commits?per_page=100${sinceParam}`);
+    while (url) {
+      const response = await githubFetchWithHeaders(url);
+      const commits = response.data;
 
-    for (const commit of commits) {
-      const content = [
-        `[Commit] ${commit.commit.message}`,
-        `Author: ${commit.commit.author?.name || 'unknown'}`,
-        `Date: ${commit.commit.author?.date || ''}`,
-        `SHA: ${commit.sha}`,
-        `Repo: ${repo}`,
-      ].join('\n');
+      for (const commit of commits) {
+        const content = [
+          `[Commit] ${commit.commit.message}`,
+          `Author: ${commit.commit.author?.name || 'unknown'}`,
+          `Date: ${commit.commit.author?.date || ''}`,
+          `SHA: ${commit.sha}`,
+          `Repo: ${repo}`,
+        ].join('\n');
 
-      const id = await upsertMemory({
-        content,
-        memory_type: 'github_commit',
-        source_ref: commit.sha,
-        source_url: commit.html_url,
-        project: repo,
-        author: commit.commit.author?.name || 'unknown',
-        access_level: 'internal',
-      });
-      if (id) added++;
+        const id = await upsertMemory({
+          content,
+          memory_type: 'github_commit',
+          source_ref: commit.sha,
+          source_url: commit.html_url,
+          project: repo,
+          author: commit.commit.author?.name || 'unknown',
+          access_level: 'internal',
+        });
+        if (id) added++;
+      }
+
+      url = getNextPageUrl(response.headers);
     }
   } catch (err) {
     console.error(`Error syncing commits for ${repo}:`, err.message);
@@ -68,30 +98,37 @@ async function syncCommits(repo, since) {
 
 async function syncIssues(repo) {
   let added = 0;
+  let url = `/repos/${GITHUB_ORG}/${repo}/issues?state=all&per_page=100&sort=updated&direction=desc`;
+
   try {
-    const issues = await githubFetch(`/repos/${GITHUB_ORG}/${repo}/issues?state=all&per_page=100&sort=updated&direction=desc`);
+    while (url) {
+      const response = await githubFetchWithHeaders(url);
+      const issues = response.data;
 
-    for (const issue of issues) {
-      if (issue.pull_request) continue; // skip PRs in issues endpoint
+      for (const issue of issues) {
+        if (issue.pull_request) continue; // skip PRs in issues endpoint
 
-      const content = [
-        `[Issue] ${issue.title}`,
-        `Status: ${issue.state}`,
-        `Labels: ${(issue.labels || []).map(l => l.name).join(', ') || 'none'}`,
-        `Assignee: ${issue.assignee?.login || 'unassigned'}`,
-        issue.body ? `\n${issue.body.slice(0, 1000)}` : '',
-      ].join('\n');
+        const content = [
+          `[Issue] ${issue.title}`,
+          `Status: ${issue.state}`,
+          `Labels: ${(issue.labels || []).map(l => l.name).join(', ') || 'none'}`,
+          `Assignee: ${issue.assignee?.login || 'unassigned'}`,
+          issue.body ? `\n${issue.body.slice(0, 1000)}` : '',
+        ].join('\n');
 
-      const id = await upsertMemory({
-        content,
-        memory_type: 'github_issue',
-        source_ref: `issue-${repo}-${issue.number}`,
-        source_url: issue.html_url,
-        project: repo,
-        author: issue.user?.login || 'unknown',
-        access_level: 'internal',
-      });
-      if (id) added++;
+        const id = await upsertMemory({
+          content,
+          memory_type: 'github_issue',
+          source_ref: `issue-${repo}-${issue.number}`,
+          source_url: issue.html_url,
+          project: repo,
+          author: issue.user?.login || 'unknown',
+          access_level: 'internal',
+        });
+        if (id) added++;
+      }
+
+      url = getNextPageUrl(response.headers);
     }
   } catch (err) {
     console.error(`Error syncing issues for ${repo}:`, err.message);
@@ -101,28 +138,35 @@ async function syncIssues(repo) {
 
 async function syncPRs(repo) {
   let added = 0;
+  let url = `/repos/${GITHUB_ORG}/${repo}/pulls?state=all&per_page=100&sort=updated&direction=desc`;
+
   try {
-    const prs = await githubFetch(`/repos/${GITHUB_ORG}/${repo}/pulls?state=all&per_page=100&sort=updated&direction=desc`);
+    while (url) {
+      const response = await githubFetchWithHeaders(url);
+      const prs = response.data;
 
-    for (const pr of prs) {
-      const content = [
-        `[PR] ${pr.title}`,
-        `Status: ${pr.state}${pr.merged_at ? ' (merged)' : ''}`,
-        `Author: ${pr.user?.login || 'unknown'}`,
-        `Base: ${pr.base?.ref || ''} <- ${pr.head?.ref || ''}`,
-        pr.body ? `\n${pr.body.slice(0, 1000)}` : '',
-      ].join('\n');
+      for (const pr of prs) {
+        const content = [
+          `[PR] ${pr.title}`,
+          `Status: ${pr.state}${pr.merged_at ? ' (merged)' : ''}`,
+          `Author: ${pr.user?.login || 'unknown'}`,
+          `Base: ${pr.base?.ref || ''} <- ${pr.head?.ref || ''}`,
+          pr.body ? `\n${pr.body.slice(0, 1000)}` : '',
+        ].join('\n');
 
-      const id = await upsertMemory({
-        content,
-        memory_type: 'github_pr',
-        source_ref: `pr-${repo}-${pr.number}`,
-        source_url: pr.html_url,
-        project: repo,
-        author: pr.user?.login || 'unknown',
-        access_level: 'internal',
-      });
-      if (id) added++;
+        const id = await upsertMemory({
+          content,
+          memory_type: 'github_pr',
+          source_ref: `pr-${repo}-${pr.number}`,
+          source_url: pr.html_url,
+          project: repo,
+          author: pr.user?.login || 'unknown',
+          access_level: 'internal',
+        });
+        if (id) added++;
+      }
+
+      url = getNextPageUrl(response.headers);
     }
   } catch (err) {
     console.error(`Error syncing PRs for ${repo}:`, err.message);

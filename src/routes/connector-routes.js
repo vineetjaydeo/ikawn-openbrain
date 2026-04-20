@@ -24,8 +24,18 @@ const BASE_URL = process.env.BASE_URL || 'https://ruhi.ikawn.in';
 
 const VALID_CONNECTOR_TYPES = [
   'gmail', 'outlook', 'google_calendar', 'outlook_calendar',
-  'google_analytics', 'meta_campaigns',
+  'google_analytics', 'meta_campaigns', 'github',
 ];
+
+const CONNECTOR_META = {
+  gmail: { name: 'Gmail', provider: 'google' },
+  google_calendar: { name: 'Google Calendar', provider: 'google' },
+  google_analytics: { name: 'Google Analytics', provider: 'google' },
+  outlook: { name: 'Outlook', provider: 'microsoft' },
+  outlook_calendar: { name: 'Outlook Calendar', provider: 'microsoft' },
+  meta_campaigns: { name: 'Meta Campaigns', provider: 'meta' },
+  github: { name: 'GitHub', provider: 'github' },
+};
 
 // ── Sync function mapping ──
 const SYNC_HANDLERS = {
@@ -48,7 +58,18 @@ router.get('/api/connectors', requireAuthOrApiKey, async (req, res) => {
     if (!brandId) {
       return res.status(400).json({ error: 'Brand ID required' });
     }
-    const connectors = await listConnectors(brandId);
+    const rows = await listConnectors(brandId);
+    const connectors = rows.map(row => {
+      const meta = CONNECTOR_META[row.connector_type] || { name: row.connector_type, provider: 'unknown' };
+      return {
+        id: row.connector_type,
+        type: row.connector_type,
+        name: meta.name,
+        connected: row.status === 'active',
+        provider: meta.provider,
+        last_sync: row.last_sync,
+      };
+    });
     res.json({ connectors });
   } catch (err) {
     console.error('[ConnectorRoutes] List error:', err.message);

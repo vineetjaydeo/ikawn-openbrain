@@ -19,9 +19,13 @@ async function getGoogleClient(brandId, requiredScopes = []) {
     return null;
   }
 
+  // Tokens are stored in ob_connector_credentials by the OAuth callback.
+  // Try gmail first, fall back to google_calendar (both hold the same Google tokens).
   const { rows } = await pool.query(
-    'SELECT * FROM brand_oauth_tokens WHERE brand_id = $1 AND provider = $2',
-    [brandId, 'google']
+    `SELECT credentials FROM ob_connector_credentials
+     WHERE brand_id = $1 AND connector_type = ANY($2) AND status = 'active'
+     ORDER BY updated_at DESC LIMIT 1`,
+    [brandId, ['gmail', 'google_calendar', 'google_analytics']]
   );
 
   if (rows.length === 0) {
@@ -29,25 +33,29 @@ async function getGoogleClient(brandId, requiredScopes = []) {
     return null;
   }
 
-  const token = rows[0];
+  const creds = rows[0].credentials;
   const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
 
   oauth2Client.setCredentials({
-    access_token: token.access_token,
-    refresh_token: token.refresh_token,
-    expiry_date: new Date(token.expires_at).getTime(),
+    access_token: creds.access_token,
+    refresh_token: creds.refresh_token,
+    expiry_date: creds.expiry_date,
   });
 
   // Auto-refresh if expired (5 min buffer)
-  const expiresAt = new Date(token.expires_at).getTime();
+  const expiresAt = creds.expiry_date || 0;
   if (Date.now() > expiresAt - 5 * 60 * 1000) {
     try {
       const { credentials } = await oauth2Client.refreshAccessToken();
       await pool.query(
-        `UPDATE brand_oauth_tokens
-         SET access_token = $1, expires_at = $2, updated_at = NOW()
-         WHERE brand_id = $3 AND provider = 'google'`,
-        [credentials.access_token, new Date(credentials.expiry_date), brandId]
+        `UPDATE ob_connector_credentials
+         SET credentials = credentials || $1::jsonb, updated_at = NOW()
+         WHERE brand_id = $2 AND connector_type = ANY($3) AND status = 'active'`,
+        [
+          JSON.stringify({ access_token: credentials.access_token, expiry_date: credentials.expiry_date }),
+          brandId,
+          ['gmail', 'google_calendar', 'google_analytics'],
+        ]
       );
       console.log(`[GoogleAuth] Refreshed token for brand ${brandId}`);
     } catch (err) {

@@ -767,7 +767,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         const execResult = await Promise.race([
           registryTool.execute(
             toolInput || {},
-            { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: conversation_id, pool }
+            { brandId: req.brand_id, userId: req.session?.user?.id, conversationId: convInternalId, pool }
           ),
           new Promise((_, reject) => setTimeout(() => reject(new Error(`Tool ${toolName} timed out after ${timeoutMs / 1000}s`)), timeoutMs))
         ]);
@@ -1146,7 +1146,7 @@ router.get('/api/tasks/active/:conversationId', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {
     const { rows: convRows } = await pool.query(
-      'SELECT id FROM conversations WHERE external_id = $1 AND brand_id = $2',
+      'SELECT id FROM conversations WHERE uuid = $1 AND brand_id = $2',
       [req.params.conversationId, req.brand_id]
     );
     if (!convRows.length) return res.json([]);

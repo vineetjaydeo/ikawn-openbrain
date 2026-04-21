@@ -190,6 +190,11 @@ async function initSchema() {
       ALTER TABLE messages ADD COLUMN IF NOT EXISTS tier TEXT
     `);
 
+    // Completion tracking
+    await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS stop_reason TEXT`);
+    await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_complete BOOLEAN DEFAULT false`);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,

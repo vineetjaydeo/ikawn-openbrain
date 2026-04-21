@@ -652,7 +652,8 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
 
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
@@ -887,10 +888,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       }
     }
 
-    // Save assistant message to DB (with tier for cost tracking)
+    // Save assistant message to DB (with tier + completion tracking)
     const { rows: assistantMsgRows } = await pool.query(
-      'INSERT INTO messages (conversation_id, role, content, model, tier) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [convInternalId, 'assistant', fullResponse, model, tier]
+      'INSERT INTO messages (conversation_id, role, content, model, tier, stop_reason, completed_at, is_complete) VALUES ($1, $2, $3, $4, $5, $6, NOW(), true) RETURNING *',
+      [convInternalId, 'assistant', fullResponse, model, tier, 'end_turn']
     );
 
     // Fetch latest context_summary (may have been updated by worker since conversation load)
@@ -969,8 +970,8 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     if (fullResponse && convInternalId) {
       try {
         await pool.query(
-          'INSERT INTO messages (conversation_id, role, content, model, tier) VALUES ($1, $2, $3, $4, $5)',
-          [convInternalId, 'assistant', fullResponse + '\n\n*[Response interrupted]*', model || 'unknown', tier || null]
+          'INSERT INTO messages (conversation_id, role, content, model, tier, stop_reason, completed_at, is_complete) VALUES ($1, $2, $3, $4, $5, $6, NOW(), false)',
+          [convInternalId, 'assistant', fullResponse, model || 'unknown', tier || null, 'error']
         );
       } catch (saveErr) {
         console.error('Failed to save partial response:', saveErr.message);
@@ -979,7 +980,15 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
 
     // If headers already sent, just end the stream
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: 'Internal server error' })}\n\n`);
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'Internal server error' })}\n\n`);
+        res.write(`data: ${JSON.stringify({
+          type: 'done',
+          stop_reason: 'error',
+          error: err.message,
+          partial: true
+        })}\n\n`);
+      } catch {} // res may already be closed
       res.end();
     } else {
       res.status(500).json({ error: 'Internal server error' });

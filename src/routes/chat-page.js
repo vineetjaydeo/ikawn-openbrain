@@ -2104,6 +2104,19 @@ function chatPage(user, isDirectChat = false) {
       input.addEventListener('input', () => { updateSendBtn(); saveDraftLocal(); });
       restoreDraft();
 
+      // Auto-focus input on page load (desktop only)
+      if (window.innerWidth > 768) input.focus();
+
+      // Type-to-focus: pressing any printable key focuses the input
+      document.addEventListener('keydown', function(e) {
+        if (window.innerWidth <= 768) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key.length !== 1) return; // skip non-printable (arrows, F-keys, Escape, etc.)
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+        input.focus();
+      });
+
       // Fetch unread reports count for badge
       fetch('/api/reports/unread-count', { headers: { 'Accept': 'application/json' } })
         .then(r => r.ok ? r.json() : null)

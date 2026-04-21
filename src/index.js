@@ -122,6 +122,7 @@ app.get('/favicon.ico', (req, res) => {
 
 // Health check — no auth
 const appVersion = require('../package.json').version;
+const { captureMessage } = require('./utils/capture');
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: appVersion, timestamp: new Date().toISOString() });
@@ -249,6 +250,19 @@ async function start() {
       // Memory lifecycle — run daily (clean expired memories)
       cleanExpiredMemories().catch(err => console.error('Initial memory cleanup error:', err));
       setInterval(() => cleanExpiredMemories().catch(err => console.error('Memory cleanup error:', err)), 24 * 60 * 60 * 1000);
+
+      // Capture deploy event in memory — Lucy knows when she was last deployed
+      captureMessage({
+        brand_id: 'ikawn',
+        channel: 'system',
+        direction: 'outbound',
+        content: `OpenBrain deployed: v${appVersion} at ${new Date().toISOString()}. Node ${process.version}, PID ${process.pid}.`,
+        metadata: { version: appVersion, event: 'deploy' },
+        source_ref: `deploy_${appVersion}_${Date.now()}`,
+        access_level: 'internal',
+        memory_type: 'system_event'
+      }).then(id => id && console.log(`[deploy] Captured deploy memory: ${id}`))
+        .catch(() => {});
     });
   } catch (err) {
     console.error('Failed to start:', err);

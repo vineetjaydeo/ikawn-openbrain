@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Paperclip, Square } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
@@ -94,6 +94,45 @@ export function ChatInput() {
     },
     [handleSubmit]
   )
+
+  // Auto-focus input on desktop keypress
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      // Only on desktop
+      if (window.innerWidth <= 768) return
+
+      // Skip modifier-only keys
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+
+      // Skip non-printable keys
+      const nonPrintable = [
+        'Tab', 'Escape', 'Enter', 'Backspace', 'Delete',
+        'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+        'Home', 'End', 'PageUp', 'PageDown',
+        'Control', 'Meta', 'Alt', 'Shift', 'CapsLock',
+        'NumLock', 'ScrollLock', 'Insert', 'PrintScreen',
+        'Pause', 'ContextMenu',
+      ]
+      if (nonPrintable.includes(e.key)) return
+      if (e.key.startsWith('F') && /^F\d{1,2}$/.test(e.key)) return
+
+      // Skip if already focused on an input, textarea, or contenteditable
+      const active = document.activeElement
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable)
+      ) {
+        return
+      }
+
+      // Focus the textarea — the browser will type the character into it
+      textareaRef.current?.focus()
+    }
+
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
 
   return (
     <div

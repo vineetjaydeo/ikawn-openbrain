@@ -8,6 +8,7 @@ export interface Message {
   timestamp?: Date
   attachments?: { name: string; type: string; url: string }[]
   isStreaming?: boolean
+  incomplete?: boolean
 }
 
 export interface Conversation {
@@ -51,6 +52,7 @@ interface ChatState {
   clearMessages: () => void
   addActiveTask: (task: Omit<ActiveTask, 'startedAt'>) => void
   updateActiveTask: (taskId: number, updates: Partial<ActiveTask>) => void
+  markLastMessageIncomplete: () => void
   clearActiveTasks: () => void
 }
 
@@ -75,6 +77,15 @@ export const useChatStore = create<ChatState>((set) => ({
   setIsStreaming: (streaming) => set({ isStreaming: streaming }),
   setDraftText: (text) => set({ draftText: text }),
   clearMessages: () => set({ messages: [], activeTasks: [] }),
+  markLastMessageIncomplete: () =>
+    set((state) => {
+      const msgs = [...state.messages]
+      const last = msgs[msgs.length - 1]
+      if (last && last.role === 'assistant') {
+        msgs[msgs.length - 1] = { ...last, incomplete: true, isStreaming: false }
+      }
+      return { messages: msgs }
+    }),
   addActiveTask: (task) => set((state) => ({
     activeTasks: [...state.activeTasks, { ...task, startedAt: Date.now() }]
   })),

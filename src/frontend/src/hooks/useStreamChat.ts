@@ -9,6 +9,11 @@ interface StreamEventDelta {
   message?: string;
   taskId?: number;
   taskType?: string;
+  stop_reason?: string;
+  partial?: boolean;
+  error?: string;
+  message_id?: string;
+  conversation_id?: string;
 }
 
 export function useStreamChat() {
@@ -18,6 +23,9 @@ export function useStreamChat() {
     (s) => s.updateStreamingMessage,
   );
   const setIsStreaming = useChatStore((s) => s.setIsStreaming);
+  const markLastMessageIncomplete = useChatStore(
+    (s) => s.markLastMessageIncomplete,
+  );
 
   const sendMessage = useCallback(
     async (
@@ -72,6 +80,8 @@ export function useStreamChat() {
         const decoder = new TextDecoder();
         let buffer = '';
         let fullContent = '';
+        let receivedDone = false;
+        let isIncomplete = false;
 
         for (;;) {
           const { done, value } = await reader.read();
@@ -94,7 +104,13 @@ export function useStreamChat() {
                 fullContent += parsed.text;
                 updateStreamingMessage(fullContent);
               } else if (parsed.type === 'done') {
-                // Stream complete
+                receivedDone = true;
+                if (
+                  parsed.stop_reason === 'error' ||
+                  parsed.partial === true
+                ) {
+                  isIncomplete = true;
+                }
               } else if (
                 parsed.type === 'content_block_delta' ||
                 parsed.delta?.text
@@ -125,17 +141,27 @@ export function useStreamChat() {
             }
           }
         }
+
+        // Stream closed without a done event — treat as truncated
+        if (!receivedDone) {
+          isIncomplete = true;
+        }
+
+        if (isIncomplete) {
+          markLastMessageIncomplete();
+        }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return;
         const errorMsg =
           err instanceof Error ? err.message : 'Stream failed';
         updateStreamingMessage(`Error: ${errorMsg}`);
+        markLastMessageIncomplete();
       } finally {
         setIsStreaming(false);
         abortRef.current = null;
       }
     },
-    [addMessage, updateStreamingMessage, setIsStreaming],
+    [addMessage, updateStreamingMessage, setIsStreaming, markLastMessageIncomplete],
   );
 
   const cancelStream = useCallback(() => {

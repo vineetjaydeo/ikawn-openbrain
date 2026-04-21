@@ -7,6 +7,7 @@ import type { Components } from 'react-markdown'
 import { cn } from '@/lib/utils'
 import { StreamingIndicator } from '@/components/chat/StreamingIndicator'
 import { useAuthStore } from '@/stores/auth'
+import { useChatStore } from '@/stores/chat'
 import type { Message } from '@/stores/chat'
 
 function formatTime(date: Date | string | undefined): string {
@@ -113,11 +114,13 @@ const markdownComponents: Components = {
 
 interface ChatMessageProps {
   message: Message
+  onContinue?: () => void
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onContinue }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const user = useAuthStore((s) => s.user)
+  const setDraftText = useChatStore((s) => s.setDraftText)
 
   const remarkPlugins = useMemo(() => [remarkGfm], [])
   const rehypePlugins = useMemo(() => [rehypeHighlight], [])
@@ -231,6 +234,61 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </div>
 
             {message.isStreaming && <StreamingIndicator />}
+
+            {message.incomplete && !message.isStreaming && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: 'rgba(255, 192, 28, 0.06)',
+                  border: '1px solid rgba(255, 192, 28, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: '#A8A8A8',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Response may be incomplete
+                </span>
+                <button
+                  onClick={() => {
+                    if (onContinue) {
+                      onContinue()
+                    } else {
+                      setDraftText('Continue from where you left off')
+                    }
+                  }}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: '#FFC01C',
+                    background: 'transparent',
+                    border: '1px solid rgba(255, 192, 28, 0.3)',
+                    borderRadius: 6,
+                    padding: '3px 10px',
+                    cursor: 'pointer',
+                    fontFamily: 'Inter, sans-serif',
+                    transition: 'border-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 192, 28, 0.6)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 192, 28, 0.3)'
+                  }}
+                >
+                  Continue
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

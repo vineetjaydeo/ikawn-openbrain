@@ -73,6 +73,56 @@ const TIER_MODELS = {
 };
 
 /**
+ * Recency injection: always fetch the N most recent memories regardless of query.
+ * This gives Lucy temporal awareness — she knows what happened recently even when
+ * the user's query has no semantic overlap with the memory content.
+ */
+async function getRecentActivity(brandId = 'ikawn', limit = 10) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT content, memory_type, source, author, created_at
+       FROM memories
+       WHERE brand_id = $1
+         AND (archived IS NULL OR archived = false)
+         AND deleted_at IS NULL
+         AND author != 'ruhi'
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [brandId, limit]
+    );
+    if (rows.length === 0) return '';
+
+    const lines = rows.map((m, i) => {
+      const ts = new Date(m.created_at);
+      const ago = formatTimeAgo(ts);
+      const src = m.source || 'unknown';
+      const type = m.memory_type || 'note';
+      const by = m.author ? `, by ${m.author}` : '';
+      return `[${i + 1}] (${type}, ${src}, ${ago}${by}) ${m.content.slice(0, 400)}`;
+    });
+
+    return `\n\n=== RECENT ACTIVITY (latest ${rows.length} events — use these to answer "what happened recently/today/this week") ===\n${lines.join('\n\n')}`;
+  } catch (err) {
+    console.error('Recent activity fetch error:', err.message);
+    return '';
+  }
+}
+
+/** Format a Date as a human-readable relative time string */
+function formatTimeAgo(date) {
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString();
+}
+
+/**
  * RAG: search memories for relevant context.
  * Uses hybrid scoring: semantic similarity + recency boost.
  * Recent memories get a significant boost so "latest" queries return fresh results.
@@ -444,7 +494,10 @@ async function handleChatSend(req, res) {
 
     // RAG: search memories for context relevant to the user's message (scoped to user + brand)
     const isAdmin = req.session.user.role === 'admin';
-    const memoryContext = content ? await searchMemories(content, 5, req.session.user.id, req.brand_id, isAdmin) : '';
+    const [memoryContext, recentActivity] = await Promise.all([
+      content ? searchMemories(content, 5, req.session.user.id, req.brand_id, isAdmin) : Promise.resolve(''),
+      getRecentActivity(req.brand_id, 10)
+    ]);
 
     // @mention detection — check if user is addressing a specific agent
     let mentionedAgent = null;
@@ -471,6 +524,7 @@ async function handleChatSend(req, res) {
 You are speaking with: ${req.session.user.name || 'User'}
 
 RELEVANT CONTEXT:
+${recentActivity}
 ${memoryContext}
 
 RULES:
@@ -490,7 +544,7 @@ ${kb.soul || ''}
 
 === HOW YOU REMEMBER ===
 ${kb.memory || ''}
-
+${recentActivity}
 ${memoryContext}
 ${contextSummary ? `=== CONVERSATION CONTEXT (auto-generated summary) ===
 Topic: ${contextSummary.topic || 'General conversation'}

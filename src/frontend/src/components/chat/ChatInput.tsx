@@ -95,6 +95,15 @@ export function ChatInput() {
     [handleSubmit]
   )
 
+  // Auto-focus textarea on mount and conversation switch (desktop only)
+  useEffect(() => {
+    if (window.innerWidth > 768) {
+      // Small delay to ensure DOM is ready after route transition
+      const timer = setTimeout(() => textareaRef.current?.focus(), 100)
+      return () => clearTimeout(timer)
+    }
+  }, [activeConversationId])
+
   // Auto-focus input on desktop keypress
   useEffect(() => {
     function handleGlobalKeyDown(e: KeyboardEvent) {
@@ -159,6 +168,7 @@ export function ChatInput() {
           value={draftText}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          autoFocus
           placeholder="Ask Lucy about your brand, content, or data..."
           rows={1}
           style={{

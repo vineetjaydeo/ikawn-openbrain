@@ -11,6 +11,7 @@ const POLL_INTERVAL_MS = 10000;
 const MAX_CONCURRENT = 2;
 const TASK_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const DOLLAR_CAP_PER_TASK = 0.50;
+const DIGEST_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 // Task-type-specific system prompts
 const TASK_TYPE_PROMPTS = {
@@ -107,6 +108,7 @@ class BackgroundExecutor {
     this._stopping = false;
     this._activeTasks = new Set();
     this._recoveryInterval = null;
+    this._digestInterval = null;
   }
 
   /**
@@ -429,6 +431,88 @@ class BackgroundExecutor {
   }
 
   /**
+   * Summarize recent memories into a periodic activity digest.
+   * Runs every 4 hours. Skips if fewer than 3 new memories since last digest.
+   */
+  async runActivityDigest() {
+    try {
+      // Find the last digest timestamp
+      const lastDigest = await this.pool.query(
+        `SELECT created_at FROM memories
+         WHERE memory_type = 'activity_digest' AND brand_id = 'ikawn'
+         ORDER BY created_at DESC LIMIT 1`
+      );
+      const since = lastDigest.rows.length > 0
+        ? lastDigest.rows[0].created_at
+        : new Date(Date.now() - DIGEST_INTERVAL_MS);
+
+      // Fetch memories since last digest
+      const { rows } = await this.pool.query(
+        `SELECT content, memory_type, source, author, created_at
+         FROM memories
+         WHERE brand_id = 'ikawn'
+           AND created_at > $1
+           AND memory_type != 'activity_digest'
+           AND (archived IS NULL OR archived = false)
+           AND deleted_at IS NULL
+           AND author != 'ruhi'
+         ORDER BY created_at ASC`,
+        [since]
+      );
+
+      if (rows.length < 3) {
+        console.log(`[digest] Only ${rows.length} memories since last digest — skipping`);
+        return;
+      }
+
+      // Group by source for the summary
+      const grouped = {};
+      for (const r of rows) {
+        const src = r.source || 'unknown';
+        if (!grouped[src]) grouped[src] = [];
+        grouped[src].push(r.content.slice(0, 200));
+      }
+
+      const summaryInput = Object.entries(grouped)
+        .map(([src, items]) => `[${src}] (${items.length} items):\n${items.map(i => `- ${i}`).join('\n')}`)
+        .join('\n\n');
+
+      // Use Haiku to summarize
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic();
+      const resp = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: `Summarize this activity log into a concise digest (3-8 bullet points). Focus on what happened, who did what, and key decisions. Be specific with names, numbers, dates. No fluff.\n\n${summaryInput}`
+        }]
+      });
+
+      const digest = resp.content[0]?.text;
+      if (!digest) {
+        console.error('[digest] Empty Haiku response');
+        return;
+      }
+
+      // Save as a memory entry
+      await captureMessage({
+        brand_id: 'ikawn',
+        channel: 'system',
+        direction: 'inbound',
+        content: `Activity Digest (${new Date().toISOString().slice(0, 16)}Z):\n${digest}`,
+        memory_type: 'activity_digest',
+        source_ref: `digest-${Date.now()}`,
+        access_level: 'internal'
+      });
+
+      console.log(`[digest] Saved digest covering ${rows.length} memories`);
+    } catch (err) {
+      console.error('[digest] Error:', err.message);
+    }
+  }
+
+  /**
    * Poll for pending tasks and process them.
    */
   async pollOnce() {
@@ -469,6 +553,9 @@ class BackgroundExecutor {
     // Stuck task recovery: check every 60s + immediately on boot
     this._recoveryInterval = setInterval(() => this.recoverStuckTasks(), 60000);
     this.recoverStuckTasks();
+
+    // Activity digest: summarize recent memories every 4 hours
+    this._digestInterval = setInterval(() => this.runActivityDigest(), DIGEST_INTERVAL_MS);
   }
 
   /**
@@ -484,6 +571,7 @@ class BackgroundExecutor {
       clearInterval(this._recoveryInterval);
       this._recoveryInterval = null;
     }
+    if (this._digestInterval) { clearInterval(this._digestInterval); this._digestInterval = null; }
 
     if (this._activeTasks.size > 0) {
       console.log(`[BackgroundExecutor] Waiting for ${this._activeTasks.size} active task(s) to finish...`);

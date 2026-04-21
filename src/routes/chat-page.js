@@ -1104,8 +1104,7 @@ function chatPage(user, isDirectChat = false) {
     /* ==================== NEW UI: BACKGROUND TASK CARD ==================== */
     .task-card {
       background: rgba(255,192,28,0.06); border: 1px solid rgba(255,192,28,0.2);
-      border-radius: 12px; padding: 16px 20px; margin: 12px 0;
-      max-width: 480px;
+      border-radius: 12px; padding: 16px 20px; margin: 8px 0;
       animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
     .task-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -1123,6 +1122,51 @@ function chatPage(user, isDirectChat = false) {
       background: none; border: none; margin-top: 8px; padding: 4px 0;
     }
     .task-card-dismiss:hover { color: var(--text-dim); }
+
+    /* Organic blob loader — plays during background task processing */
+    .task-blob-loader {
+      display: flex; align-items: center; gap: 12px; margin: 4px 0 8px;
+    }
+    .task-blob-loader .blob-container {
+      position: relative; width: 32px; height: 32px;
+    }
+    .task-blob-loader .blob {
+      position: absolute; width: 100%; height: 100%;
+      border-radius: 50%; filter: blur(1px);
+    }
+    .task-blob-loader .blob:nth-child(1) {
+      background: rgba(255,192,28,0.5);
+      animation: blobMorph1 2s ease-in-out infinite;
+    }
+    .task-blob-loader .blob:nth-child(2) {
+      background: rgba(245,158,11,0.4);
+      animation: blobMorph2 2s ease-in-out infinite 0.3s;
+    }
+    .task-blob-loader .blob:nth-child(3) {
+      background: rgba(255,192,28,0.3);
+      animation: blobMorph3 2s ease-in-out infinite 0.6s;
+    }
+    .task-blob-loader .blob-label {
+      font-size: 0.75rem; color: var(--text-dim); font-family: 'Google Sans', sans-serif;
+    }
+    @keyframes blobMorph1 {
+      0%, 100% { border-radius: 50%; transform: translate(0, 0) scale(1); }
+      25% { border-radius: 40% 60% 60% 40%; transform: translate(4px, -3px) scale(1.1); }
+      50% { border-radius: 50% 40% 50% 60%; transform: translate(-2px, 4px) scale(0.9); }
+      75% { border-radius: 60% 50% 40% 50%; transform: translate(3px, 2px) scale(1.05); }
+    }
+    @keyframes blobMorph2 {
+      0%, 100% { border-radius: 50%; transform: translate(0, 0) scale(0.9); }
+      25% { border-radius: 60% 40% 50% 50%; transform: translate(-4px, 3px) scale(1); }
+      50% { border-radius: 40% 60% 40% 60%; transform: translate(3px, -4px) scale(1.1); }
+      75% { border-radius: 50% 50% 60% 40%; transform: translate(-2px, -2px) scale(0.95); }
+    }
+    @keyframes blobMorph3 {
+      0%, 100% { border-radius: 50%; transform: translate(0, 0) scale(1.05); }
+      25% { border-radius: 50% 60% 40% 50%; transform: translate(2px, 4px) scale(0.9); }
+      50% { border-radius: 60% 40% 60% 40%; transform: translate(-3px, -3px) scale(1.1); }
+      75% { border-radius: 40% 50% 50% 60%; transform: translate(4px, -2px) scale(1); }
+    }
 
     /* ==================== NEW UI: CONNECTED SERVICES ==================== */
     .header-connectors { display: none; }
@@ -3877,8 +3921,24 @@ function chatPage(user, isDirectChat = false) {
       artifacts.className = 'task-card-artifacts';
       artifacts.id = 'task-artifacts-' + taskId;
 
+      var blobLoader = document.createElement('div');
+      blobLoader.className = 'task-blob-loader';
+      blobLoader.id = 'task-loader-' + taskId;
+      var blobContainer = document.createElement('div');
+      blobContainer.className = 'blob-container';
+      var b1 = document.createElement('div'); b1.className = 'blob';
+      var b2 = document.createElement('div'); b2.className = 'blob';
+      var b3 = document.createElement('div'); b3.className = 'blob';
+      blobContainer.appendChild(b1); blobContainer.appendChild(b2); blobContainer.appendChild(b3);
+      var blobLabel = document.createElement('span');
+      blobLabel.className = 'blob-label';
+      blobLabel.textContent = 'Working on it...';
+      blobLoader.appendChild(blobContainer);
+      blobLoader.appendChild(blobLabel);
+
       card.appendChild(header);
       card.appendChild(progress);
+      card.appendChild(blobLoader);
       card.appendChild(step);
       card.appendChild(artifacts);
 
@@ -3921,6 +3981,8 @@ function chatPage(user, isDirectChat = false) {
           if (data.status === 'completed') {
             clearInterval(activeTaskPollers[taskId]);
             delete activeTaskPollers[taskId];
+            var loaderEl = document.getElementById('task-loader-' + taskId);
+            if (loaderEl) loaderEl.style.display = 'none';
             if (statusEl) { statusEl.textContent = 'Complete'; statusEl.style.color = 'var(--success, #22c55e)'; }
             if (barEl) barEl.style.width = '100%';
             if (stepEl) stepEl.textContent = data.result?.summary || 'Task completed';
@@ -3940,6 +4002,8 @@ function chatPage(user, isDirectChat = false) {
           } else if (data.status === 'failed') {
             clearInterval(activeTaskPollers[taskId]);
             delete activeTaskPollers[taskId];
+            var loaderElFail = document.getElementById('task-loader-' + taskId);
+            if (loaderElFail) loaderElFail.style.display = 'none';
             if (statusEl) { statusEl.textContent = 'Failed'; statusEl.style.color = 'var(--danger, #ef4444)'; }
             if (stepEl) stepEl.textContent = data.error_message || 'Task failed';
           }

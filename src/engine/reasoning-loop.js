@@ -288,6 +288,8 @@ async function executeReasoningLoop({
     for (const block of toolUseBlocks) {
       let resultContent;
       let success = true;
+      let artifactData = null;
+      let taskData = null;
 
       try {
         if (toolRegistry) {
@@ -335,13 +337,13 @@ async function executeReasoningLoop({
           } else {
             // Success
             resultContent = typeof envelope.data === 'string' ? envelope.data : JSON.stringify(envelope.data);
-            // Capture structured data for artifact/task SSE events
+            // Capture structured data for artifact/task SSE events (stored in local vars, NOT on the block)
             const ARTIFACT_TOOLS = ['generate_pdf','generate_pptx','generate_chart','generate_document','generate_spreadsheet'];
             if (ARTIFACT_TOOLS.includes(block.name) && typeof envelope.data !== 'string') {
-              block._artifactData = envelope.data;
+              artifactData = envelope.data;
             }
             if (block.name === 'start_background_task' && typeof envelope.data !== 'string') {
-              block._taskData = envelope.data;
+              taskData = envelope.data;
             }
             toolCallCount++;
           }
@@ -356,7 +358,7 @@ async function executeReasoningLoop({
       }
 
       if (onEvent) {
-        onEvent({ type: 'tool_result', name: block.name, success, artifactData: block._artifactData || null, taskData: block._taskData || null });
+        onEvent({ type: 'tool_result', name: block.name, success, artifactData, taskData });
       }
 
       const resultStr = typeof resultContent === 'string' ? resultContent : JSON.stringify(resultContent);

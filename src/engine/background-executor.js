@@ -413,7 +413,7 @@ class BackgroundExecutor {
           // Update placeholder message if exists
           if (task.placeholder_message_id) {
             await this.pool.query(
-              `UPDATE ob_memory SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
+              `UPDATE memories SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
               ['Failed to generate presentation after multiple attempts.',
                JSON.stringify({ type: 'artifact_failed', error: 'Exceeded retry limit', taskId: task.id }),
                task.placeholder_message_id]

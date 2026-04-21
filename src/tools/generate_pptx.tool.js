@@ -471,7 +471,7 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
     // Update placeholder message in-place
     if (placeholderMessageId) {
       await pool.query(
-        `UPDATE ob_memory SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
+        `UPDATE memories SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
         [
           `Presentation "${config.title}" is ready (${slides.length} slides). [Download](${url})`,
           JSON.stringify({ type: 'artifact_complete', url, filename, slideCount: slides.length, taskId }),
@@ -493,7 +493,7 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
     ).catch(() => {});
     if (placeholderMessageId) {
       await pool.query(
-        `UPDATE ob_memory SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
+        `UPDATE memories SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
         [`Failed to generate presentation: ${err.message}`, JSON.stringify({ type: 'artifact_failed', error: err.message, taskId }), placeholderMessageId]
       ).catch(() => {});
     }
@@ -612,7 +612,7 @@ module.exports = {
 
       // Update placeholder with taskId
       if (placeholderMessageId) {
-        pool.query('UPDATE ob_memory SET metadata = metadata || $1::jsonb WHERE id = $2',
+        pool.query('UPDATE memories SET metadata = metadata || $1::jsonb WHERE id = $2',
           [JSON.stringify({ taskId }), placeholderMessageId]).catch(() => {});
       }
 

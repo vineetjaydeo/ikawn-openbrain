@@ -7,6 +7,8 @@ interface StreamEventDelta {
   text?: string;
   content?: string;
   message?: string;
+  taskId?: number;
+  taskType?: string;
 }
 
 export function useStreamChat() {
@@ -102,6 +104,13 @@ export function useStreamChat() {
               } else if (parsed.type === 'text' || parsed.content) {
                 fullContent += parsed.content ?? parsed.text ?? '';
                 updateStreamingMessage(fullContent);
+              } else if (parsed.type === 'task_started' && parsed.taskId) {
+                const { addActiveTask } = useChatStore.getState();
+                addActiveTask({
+                  taskId: parsed.taskId,
+                  taskType: parsed.taskType || 'unknown',
+                  status: 'pending',
+                });
               } else if (parsed.type === 'error') {
                 updateStreamingMessage(
                   `Error: ${parsed.message ?? 'Something went wrong'}`,

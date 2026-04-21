@@ -14,10 +14,12 @@ import {
 } from '@/components/ui/sheet'
 import { ConversationList } from '@/components/chat/ConversationList'
 import { ChatMessage } from '@/components/chat/ChatMessage'
+import { TaskProgressCard } from '@/components/chat/TaskProgressCard'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { useChatStore } from '@/stores/chat'
 import { useUIStore } from '@/stores/ui'
 import { useConversationDetail } from '@/hooks/useConversations'
+import { useTaskPolling } from '@/hooks/useTaskPolling'
 
 function EmptyState() {
   return (
@@ -103,9 +105,12 @@ export function ChatView() {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const setMessages = useChatStore((s) => s.setMessages)
   const isStreaming = useChatStore((s) => s.isStreaming)
+  const activeTasks = useChatStore((s) => s.activeTasks)
   const isMobile = useUIStore((s) => s.isMobile)
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+
+  useTaskPolling()
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -225,6 +230,9 @@ export function ChatView() {
                     <ChatMessage key={msg.id} message={msg} />
                   ))}
                 </AnimatePresence>
+                {activeTasks.map((task) => (
+                  <TaskProgressCard key={task.taskId} task={task} />
+                ))}
                 <div ref={messagesEndRef} />
               </div>
             )}

@@ -106,6 +106,7 @@ class BackgroundExecutor {
     this._pollInterval = null;
     this._stopping = false;
     this._activeTasks = new Set();
+    this._recoveryInterval = null;
   }
 
   /**
@@ -364,6 +365,70 @@ class BackgroundExecutor {
   }
 
   /**
+   * Recover tasks that stopped heartbeating (stuck/crashed).
+   * Re-enqueues up to 2 retries, then marks failed.
+   */
+  async recoverStuckTasks() {
+    try {
+      // Find tasks that stopped heartbeating (stuck/crashed)
+      const stuck = await this.pool.query(
+        `SELECT * FROM ob_background_tasks
+         WHERE status = 'running'
+         AND last_heartbeat_at IS NOT NULL
+         AND last_heartbeat_at < NOW() - INTERVAL '60 seconds'`
+      );
+
+      for (const task of stuck.rows) {
+        if (task.retry_count < 2) {
+          // Re-enqueue for retry
+          await this.pool.query(
+            `UPDATE ob_background_tasks SET status = 'pending', retry_count = retry_count + 1,
+             last_heartbeat_at = NULL, started_at = NULL WHERE id = $1`,
+            [task.id]
+          );
+          console.log(`[BackgroundExecutor] Re-enqueued stuck task #${task.id} (retry ${task.retry_count + 1}/2)`);
+
+          // For pptx_generation tasks, fire off direct processing
+          if (task.task_type === 'pptx_generation' && task.context) {
+            try {
+              const generatePptx = require('../tools/generate_pptx.tool');
+              if (generatePptx.retryTask) {
+                generatePptx.retryTask(task);
+              }
+            } catch (e) {
+              console.error(`[BackgroundExecutor] Failed to trigger PPTX retry for task #${task.id}:`, e.message);
+            }
+          }
+        } else {
+          // Max retries exceeded — mark failed
+          await this.pool.query(
+            `UPDATE ob_background_tasks SET status = 'failed', error_message = 'Exceeded retry limit after process restart',
+             completed_at = NOW() WHERE id = $1`,
+            [task.id]
+          );
+          console.log(`[BackgroundExecutor] Failed stuck task #${task.id} (exceeded 2 retries)`);
+
+          // Update placeholder message if exists
+          if (task.placeholder_message_id) {
+            await this.pool.query(
+              `UPDATE ob_memory SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
+              ['Failed to generate presentation after multiple attempts.',
+               JSON.stringify({ type: 'artifact_failed', error: 'Exceeded retry limit', taskId: task.id }),
+               task.placeholder_message_id]
+            ).catch(() => {});
+          }
+        }
+      }
+
+      if (stuck.rows.length > 0) {
+        console.log(`[BackgroundExecutor] Recovered ${stuck.rows.length} stuck task(s)`);
+      }
+    } catch (err) {
+      console.error('[BackgroundExecutor] Error in recoverStuckTasks:', err.message);
+    }
+  }
+
+  /**
    * Poll for pending tasks and process them.
    */
   async pollOnce() {
@@ -400,6 +465,10 @@ class BackgroundExecutor {
 
     // Run first poll immediately
     this.pollOnce();
+
+    // Stuck task recovery: check every 60s + immediately on boot
+    this._recoveryInterval = setInterval(() => this.recoverStuckTasks(), 60000);
+    this.recoverStuckTasks();
   }
 
   /**
@@ -410,6 +479,10 @@ class BackgroundExecutor {
     if (this._pollInterval) {
       clearInterval(this._pollInterval);
       this._pollInterval = null;
+    }
+    if (this._recoveryInterval) {
+      clearInterval(this._recoveryInterval);
+      this._recoveryInterval = null;
     }
 
     if (this._activeTasks.size > 0) {

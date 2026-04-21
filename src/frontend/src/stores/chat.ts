@@ -20,11 +20,28 @@ export interface Conversation {
   updatedAt?: Date
 }
 
+export interface TaskProgress {
+  current_slide: number
+  total_slides: number
+  phase: string
+}
+
+export interface ActiveTask {
+  taskId: number
+  taskType: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  progress?: TaskProgress
+  result?: { url: string; filename: string; slideCount: number }
+  error?: string
+  startedAt: number
+}
+
 interface ChatState {
   activeConversationId: string | null
   messages: Message[]
   isStreaming: boolean
   draftText: string
+  activeTasks: ActiveTask[]
   setActiveConversation: (id: string | null) => void
   setMessages: (messages: Message[]) => void
   addMessage: (message: Message) => void
@@ -32,6 +49,9 @@ interface ChatState {
   setIsStreaming: (streaming: boolean) => void
   setDraftText: (text: string) => void
   clearMessages: () => void
+  addActiveTask: (task: Omit<ActiveTask, 'startedAt'>) => void
+  updateActiveTask: (taskId: number, updates: Partial<ActiveTask>) => void
+  clearActiveTasks: () => void
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -39,6 +59,7 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   isStreaming: false,
   draftText: '',
+  activeTasks: [],
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setMessages: (messages) => set({ messages }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
@@ -53,5 +74,12 @@ export const useChatStore = create<ChatState>((set) => ({
     }),
   setIsStreaming: (streaming) => set({ isStreaming: streaming }),
   setDraftText: (text) => set({ draftText: text }),
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], activeTasks: [] }),
+  addActiveTask: (task) => set((state) => ({
+    activeTasks: [...state.activeTasks, { ...task, startedAt: Date.now() }]
+  })),
+  updateActiveTask: (taskId, updates) => set((state) => ({
+    activeTasks: state.activeTasks.map(t => t.taskId === taskId ? { ...t, ...updates } : t)
+  })),
+  clearActiveTasks: () => set({ activeTasks: [] }),
 }))

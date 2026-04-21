@@ -1423,6 +1423,14 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_bg_tasks_brand_user ON ob_background_tasks(brand_id, user_id);
     `);
 
+    // ── v23: Async PPTX generation columns on ob_background_tasks ──
+    await client.query(`
+      ALTER TABLE ob_background_tasks ADD COLUMN IF NOT EXISTS last_heartbeat_at TIMESTAMPTZ;
+      ALTER TABLE ob_background_tasks ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0;
+      ALTER TABLE ob_background_tasks ADD COLUMN IF NOT EXISTS placeholder_message_id TEXT;
+      ALTER TABLE ob_background_tasks ADD COLUMN IF NOT EXISTS context_hash TEXT;
+    `);
+
     // ── Vault ──
     await client.query(`
       CREATE TABLE IF NOT EXISTS vault_items (
@@ -1469,7 +1477,15 @@ async function initSchema() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_file_url_unique ON vault_items(file_url) WHERE deleted_at IS NULL;
     `);
 
-    console.log('Database schema initialized (v22 — vault)');
+    // ── v23: Link vault items to background tasks (async PPTX) ──
+    await client.query(`
+      ALTER TABLE vault_items ADD COLUMN IF NOT EXISTS task_id INT;
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_items_task_id ON vault_items(task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL;
+    `);
+
+    console.log('Database schema initialized (v23 — async pptx)');
   } finally {
     client.release();
   }

@@ -708,7 +708,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       }
 
       try {
-        const timeoutMs = toolName === 'generate_pptx' ? 120000 : TOOL_TIMEOUT_MS;
+        const timeoutMs = TOOL_TIMEOUT_MS;
         const execResult = await Promise.race([
           registryTool.execute(
             toolInput || {},
@@ -743,7 +743,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           ).catch(err => console.warn('[Vault] Artifact capture failed:', err.message));
         }
         // Emit task_started for background tasks (legacy path)
-        if (toolName === 'start_background_task' && execResult?.success && execResult?.data?.taskId) {
+        if (['start_background_task', 'generate_pptx'].includes(toolName) && execResult?.success && execResult?.data?.taskId) {
           res.write(`data: ${JSON.stringify({ type: 'task_started', ...execResult.data })}\n\n`);
         }
 

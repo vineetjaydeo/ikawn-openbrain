@@ -2,7 +2,22 @@
 'use strict';
 
 const PptxGenJS = require('pptxgenjs');
+const crypto = require('crypto');
 const { uploadToR2 } = require('../utils/storage');
+const { pool } = require('../db');
+const { captureMessage } = require('../utils/capture');
+
+// ── Concurrency gate: max 2 concurrent PPTX builds per process ───────────────
+function createLimit(concurrency) {
+  let active = 0;
+  const queue = [];
+  const next = () => { if (queue.length > 0 && active < concurrency) queue.shift()(); };
+  return (fn) => new Promise((resolve, reject) => {
+    const run = () => { active++; fn().then(resolve, reject).finally(() => { active--; next(); }); };
+    active < concurrency ? run() : queue.push(run);
+  });
+}
+const pptxLimit = createLimit(2);
 
 // ── Theme definitions ──────────────────────────────────────────────────────────
 
@@ -359,6 +374,134 @@ function sanitizeFilename(title) {
     .toLowerCase();
 }
 
+// ── Async background worker ──────────────────────────────────────────────────
+
+async function buildAndUploadPptx(config, context, taskId, placeholderMessageId) {
+  const hb = setInterval(async () => {
+    try { await pool.query('UPDATE ob_background_tasks SET last_heartbeat_at = NOW() WHERE id = $1', [taskId]); } catch(e) {}
+  }, 5000);
+
+  try {
+    const title = (config.title || '').trim();
+    const slides = Array.isArray(config.slides) ? config.slides : [];
+    const themeName = THEMES[config.theme] ? config.theme : 'corporate';
+    const theme = THEMES[themeName];
+
+    // Mark task as running
+    await pool.query('UPDATE ob_background_tasks SET status = $1, last_heartbeat_at = NOW() WHERE id = $2', ['running', taskId]);
+
+    const pptx = new PptxGenJS();
+    pptx.layout = 'LAYOUT_16x9';
+    pptx.author = 'Lucy AI';
+    pptx.title = title;
+
+    const totalSlides = slides.length + 1; // +1 for the cover
+
+    // Cover slide (always first)
+    addTitleSlide(pptx, title, null, theme, 1, totalSlides);
+
+    // Content slides
+    for (let i = 0; i < slides.length; i++) {
+      const slideData = slides[i];
+      const slideType = (slideData.type || 'content').toLowerCase();
+      const slideNum = i + 2; // cover is 1
+
+      switch (slideType) {
+        case 'title':
+          addTitleSlide(pptx, slideData.title || '', slideData.content || '', theme, slideNum, totalSlides);
+          break;
+        case 'two-column':
+          addTwoColumnSlide(pptx, slideData, theme, slideNum, totalSlides);
+          break;
+        case 'section-break':
+          addSectionBreakSlide(pptx, slideData, theme, slideNum, totalSlides);
+          break;
+        case 'content':
+        default:
+          addContentSlide(pptx, slideData, theme, slideNum, totalSlides);
+          break;
+      }
+
+      // Progress updates every 5 slides
+      if (i % 5 === 0) {
+        pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
+          [JSON.stringify({ current_slide: i, total_slides: slides.length, phase: 'building' }), taskId]).catch(() => {});
+      }
+    }
+
+    // Export to buffer
+    const buffer = await pptx.write({ outputType: 'nodebuffer' });
+
+    // Idempotent R2 key
+    const safeName = sanitizeFilename(title);
+    const filename = `${safeName}.pptx`;
+    const r2Key = `pptx/${taskId}.pptx`;
+
+    // Update progress: uploading
+    await pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
+      [JSON.stringify({ current_slide: slides.length, total_slides: slides.length, phase: 'uploading' }), taskId]);
+
+    // Upload to R2 with one retry
+    let url;
+    try {
+      url = await uploadToR2(
+        r2Key,
+        buffer,
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        context.brandId
+      );
+    } catch (uploadErr) {
+      // Wait 2s and retry once
+      await new Promise(r => setTimeout(r, 2000));
+      url = await uploadToR2(
+        r2Key,
+        buffer,
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        context.brandId
+      );
+    }
+
+    // Vault capture
+    pool.query(`INSERT INTO vault_items (brand_id, user_id, filename, file_url, file_type, mime_type, source, task_id, created_at, updated_at)
+  VALUES ($1, $2, $3, $4, 'presentation', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'generate_pptx', $5, NOW(), NOW())
+  ON CONFLICT (task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL
+  DO UPDATE SET file_url = EXCLUDED.file_url, updated_at = NOW()`,
+      [context.brandId || 'ikawn', context.userId, filename, url, taskId]).catch(() => {});
+
+    // Update placeholder message in-place
+    if (placeholderMessageId) {
+      await pool.query(
+        `UPDATE ob_memory SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
+        [
+          `Presentation "${config.title}" is ready (${slides.length} slides). [Download](${url})`,
+          JSON.stringify({ type: 'artifact_complete', url, filename, slideCount: slides.length, taskId }),
+          placeholderMessageId
+        ]
+      ).catch(() => {});
+    }
+
+    // Mark task complete
+    await pool.query(
+      'UPDATE ob_background_tasks SET status = $1, result = $2, completed_at = NOW(), last_heartbeat_at = NOW() WHERE id = $3',
+      ['completed', JSON.stringify({ url, filename, slideCount: slides.length }), taskId]
+    );
+  } catch (err) {
+    console.error(`[generate_pptx] Background task ${taskId} failed:`, err);
+    await pool.query(
+      'UPDATE ob_background_tasks SET status = $1, error_message = $2, completed_at = NOW() WHERE id = $3',
+      ['failed', err.message, taskId]
+    ).catch(() => {});
+    if (placeholderMessageId) {
+      await pool.query(
+        `UPDATE ob_memory SET content = $1, metadata = metadata || $2::jsonb WHERE id = $3`,
+        [`Failed to generate presentation: ${err.message}`, JSON.stringify({ type: 'artifact_failed', error: err.message, taskId }), placeholderMessageId]
+      ).catch(() => {});
+    }
+  } finally {
+    clearInterval(hb);
+  }
+}
+
 // ── Tool export ────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -401,14 +544,23 @@ module.exports = {
     },
   },
 
+  retryTask: (task) => {
+    try {
+      const config = JSON.parse(task.context);
+      pptxLimit(() => buildAndUploadPptx(config, {
+        brandId: task.brand_id, userId: task.user_id, conversationId: task.conversation_id
+      }, task.id, task.placeholder_message_id))
+        .catch(err => console.error(`[generate_pptx] Retry failed for task #${task.id}:`, err));
+    } catch (err) {
+      console.error(`[generate_pptx] Failed to parse context for retry task #${task.id}:`, err);
+    }
+  },
+
   async execute(config, context) {
-    const { brandId, userId } = context;
     const title = (config.title || '').trim();
     const slides = Array.isArray(config.slides) ? config.slides : [];
-    const themeName = THEMES[config.theme] ? config.theme : 'corporate';
-    const theme = THEMES[themeName];
 
-    // Validate inputs
+    // Validate inputs (sync errors)
     if (!title) {
       return { success: false, data: null, summary: 'Presentation title is required.' };
     }
@@ -420,67 +572,66 @@ module.exports = {
     }
 
     try {
-      const pptx = new PptxGenJS();
-      pptx.layout = 'LAYOUT_16x9';
-      pptx.author = 'Lucy AI';
-      pptx.title = title;
-
-      const totalSlides = slides.length + 1; // +1 for the cover
-
-      // Cover slide (always first)
-      const firstSlideContent = slides[0]?.content || '';
-      addTitleSlide(pptx, title, firstSlideContent ? null : null, theme, 1, totalSlides);
-
-      // Content slides
-      for (let i = 0; i < slides.length; i++) {
-        const slideData = slides[i];
-        const slideType = (slideData.type || 'content').toLowerCase();
-        const slideNum = i + 2; // cover is 1
-
-        switch (slideType) {
-          case 'title':
-            addTitleSlide(pptx, slideData.title || '', slideData.content || '', theme, slideNum, totalSlides);
-            break;
-          case 'two-column':
-            addTwoColumnSlide(pptx, slideData, theme, slideNum, totalSlides);
-            break;
-          case 'section-break':
-            addSectionBreakSlide(pptx, slideData, theme, slideNum, totalSlides);
-            break;
-          case 'content':
-          default:
-            addContentSlide(pptx, slideData, theme, slideNum, totalSlides);
-            break;
-        }
+      // Deduplication check
+      const contextHash = crypto.createHash('sha256').update(JSON.stringify(config)).digest('hex');
+      const existing = await pool.query(
+        `SELECT id FROM ob_background_tasks WHERE user_id = $1 AND task_type = 'pptx_generation'
+         AND status IN ('pending', 'running') AND context_hash = $2 AND created_at > NOW() - INTERVAL '30 seconds'`,
+        [context.userId, contextHash]
+      );
+      if (existing.rows.length > 0) {
+        return {
+          success: true,
+          data: { taskId: existing.rows[0].id, status: 'pending', taskType: 'pptx_generation' },
+          summary: `Presentation is already being generated (task #${existing.rows[0].id}).`
+        };
       }
 
-      // Export to buffer
-      const buffer = await pptx.write({ outputType: 'nodebuffer' });
+      // Insert placeholder message
+      const msgResult = await captureMessage({
+        brand_id: context.brandId || 'ikawn',
+        session_id: context.conversationId || context.sessionId,
+        channel: 'chat',
+        direction: 'outbound',
+        content: `Generating presentation "${config.title}"...`,
+        metadata: { type: 'artifact_pending', taskId: null },
+        source_ref: null,
+        user_id: context.userId,
+        memory_type: 'task_result'
+      });
+      const placeholderMessageId = msgResult || null;
 
-      // Upload to R2
-      const safeName = sanitizeFilename(title);
-      const filename = `${safeName}.pptx`;
-      const key = `artifacts/${brandId || 'ikawn'}/${userId || 'unknown'}/${Date.now()}_${filename}`;
-      const url = await uploadToR2(
-        key,
-        buffer,
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        brandId
+      // Insert task
+      const taskResult = await pool.query(
+        `INSERT INTO ob_background_tasks (brand_id, user_id, conversation_id, task_type, task_description, context, context_hash, placeholder_message_id, status)
+         VALUES ($1, $2, $3, 'pptx_generation', $4, $5, $6, $7, 'pending') RETURNING id`,
+        [context.brandId || 'ikawn', context.userId, context.conversationId || context.sessionId,
+         `Generate presentation: ${config.title}`, JSON.stringify(config), contextHash, placeholderMessageId]
       );
+      const taskId = taskResult.rows[0].id;
 
-      const slideCount = totalSlides;
+      // Update placeholder with taskId
+      if (placeholderMessageId) {
+        pool.query('UPDATE ob_memory SET metadata = metadata || $1::jsonb WHERE id = $2',
+          [JSON.stringify({ taskId }), placeholderMessageId]).catch(() => {});
+      }
 
+      // Fire async worker (no await)
+      pptxLimit(() => buildAndUploadPptx(config, context, taskId, placeholderMessageId))
+        .catch(err => console.error(`[generate_pptx] Unhandled error in async worker for task ${taskId}:`, err));
+
+      // Return immediately
       return {
         success: true,
-        data: { url, filename, slideCount },
-        summary: `Generated presentation: "${title}" (${slideCount} slides). Download: ${url}`,
+        data: { taskId, status: 'pending', taskType: 'pptx_generation' },
+        summary: `Presentation "${config.title}" is being generated in the background. You will be notified when it is ready.`
       };
     } catch (err) {
-      console.error('[generate_pptx] Failed:', err);
+      console.error('[generate_pptx] Failed to enqueue task:', err);
       return {
         success: false,
         data: null,
-        summary: `Failed to generate presentation: ${err.message}`,
+        summary: `Failed to start presentation generation: ${err.message}`,
       };
     }
   },

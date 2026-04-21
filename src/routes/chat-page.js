@@ -2558,6 +2558,7 @@ function chatPage(user, isDirectChat = false) {
         }
         autoGrow(input);
         updateSendBtn();
+        restoreActiveTasks();
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -3949,6 +3950,22 @@ function chatPage(user, isDirectChat = false) {
       scrollToBottom(false);
 
       pollTaskStatus(taskId);
+    }
+
+    // Restore active task cards on page load / conversation switch
+    async function restoreActiveTasks() {
+      if (!activeConvId) return;
+      try {
+        var res = await fetch('/api/tasks/active/' + activeConvId);
+        if (!res.ok) return;
+        var tasks = await res.json();
+        for (var i = 0; i < tasks.length; i++) {
+          var t = tasks[i];
+          if (!document.getElementById('task-card-' + t.id)) {
+            showBackgroundTaskCard(t.id, t.task_type, t.task_description || 'Background task');
+          }
+        }
+      } catch(e) {}
     }
 
     function pollTaskStatus(taskId) {

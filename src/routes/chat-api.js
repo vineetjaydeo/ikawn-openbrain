@@ -1141,6 +1141,29 @@ router.get('/api/conversations/:id/markdown', async (req, res) => {
 
 // ── 6b. Background task status polling ──
 
+// Active tasks for a conversation — used to restore task cards on page refresh
+router.get('/api/tasks/active/:conversationId', async (req, res) => {
+  if (!requireAuth(req, res)) return;
+  try {
+    const { rows: convRows } = await pool.query(
+      'SELECT id FROM conversations WHERE external_id = $1 AND brand_id = $2',
+      [req.params.conversationId, req.brand_id]
+    );
+    if (!convRows.length) return res.json([]);
+    const { rows } = await pool.query(
+      `SELECT id, task_type, status, progress, task_description, created_at
+       FROM ob_background_tasks
+       WHERE conversation_id = $1 AND brand_id = $2 AND status IN ('pending', 'running')
+       ORDER BY created_at DESC LIMIT 5`,
+      [convRows[0].id, req.brand_id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('GET /api/tasks/active error:', err);
+    res.json([]);
+  }
+});
+
 router.get('/api/tasks/:taskId/status', async (req, res) => {
   if (!requireAuth(req, res)) return;
   try {

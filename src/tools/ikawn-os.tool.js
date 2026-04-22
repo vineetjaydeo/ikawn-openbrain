@@ -4,7 +4,7 @@
 module.exports = {
   name: 'ikawn_generate',
   description: 'Trigger image/video generation on ikawn OS (os.ikawn.com) via external API',
-  tier: 'agent',
+  tier: 'direct',
   parameters: {
     agent: { type: 'string', required: true, description: 'Agent', enum: ['genie', 'remix', 'prism', 'lazarus'] },
     prompt: { type: 'string', required: true, description: 'Generation prompt' },

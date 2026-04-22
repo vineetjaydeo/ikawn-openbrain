@@ -166,7 +166,7 @@ async function callWithFallback(params) {
  * @returns {{ stream: AsyncIterable, getResult: () => Promise<{ response, cost }> }}
  */
 function callClaudeStreaming(params) {
-  const { system, messages, tools = [], serverTools = [], maxTokens = 2048, model: modelOverride } = params;
+  const { system, messages, tools = [], serverTools = [], maxTokens = 2048, model: modelOverride, toolChoice } = params;
   const model = modelOverride || 'claude-sonnet-4-6';
   const client = getAnthropic();
 
@@ -181,6 +181,10 @@ function callClaudeStreaming(params) {
     messages,
   };
   if (allTools.length > 0) apiParams.tools = allTools;
+  if (toolChoice && allTools.length > 0) {
+    apiParams.tool_choice = toolChoice;
+    console.log(`[LLM] tool_choice forced: ${JSON.stringify(toolChoice)}, tools: ${allTools.map(t => t.name).join(',')}`);
+  }
 
   const anthropicStream = client.messages.stream(apiParams);
 
@@ -215,7 +219,13 @@ function callClaudeStreaming(params) {
       } else if (event.type === 'content_block_stop') {
         if (currentBlock) {
           if (currentBlock.type === 'tool_use') {
-            try { currentBlock.input = JSON.parse(currentBlock.input || '{}'); } catch (_) { currentBlock.input = {}; }
+            try {
+              currentBlock.input = JSON.parse(currentBlock.input || '{}');
+            } catch (parseErr) {
+              console.warn(`[LLM] Tool input JSON parse failed for ${currentBlock.name}: ${parseErr.message}`);
+              currentBlock.input = {};
+              currentBlock._parseError = true;
+            }
           } else if (currentBlock.type === 'server_tool_use' || currentBlock.type === 'web_search_tool_use') {
             yield { type: 'server_tool_done', name: currentBlock.name };
           }

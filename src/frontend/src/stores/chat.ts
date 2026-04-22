@@ -86,9 +86,10 @@ export const useChatStore = create<ChatState>((set) => ({
       }
       return { messages: msgs }
     }),
-  addActiveTask: (task) => set((state) => ({
-    activeTasks: [...state.activeTasks, { ...task, startedAt: Date.now() }]
-  })),
+  addActiveTask: (task) => set((state) => {
+    if (state.activeTasks.some(t => t.taskId === task.taskId)) return state;
+    return { activeTasks: [...state.activeTasks, { ...task, startedAt: Date.now() }] };
+  }),
   updateActiveTask: (taskId, updates) => set((state) => ({
     activeTasks: state.activeTasks.map(t => t.taskId === taskId ? { ...t, ...updates } : t)
   })),

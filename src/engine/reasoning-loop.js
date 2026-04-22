@@ -6,6 +6,54 @@ const { resolveModel } = require('./model-router');
 const { logLLMCall, checkBudget } = require('./cost-tracker');
 const { captureFromLoopTurn } = require('./episodic-capture');
 
+/**
+ * Recover a tool call that Claude wrote as text instead of a proper tool_use block.
+ * Scans text for patterns like `toolName({...})` and synthesizes a tool_use block.
+ * Only matches against registered tool names to avoid false positives.
+ */
+function recoverToolCallFromText(textBlocks, tools) {
+  if (!tools || tools.length === 0) return null;
+  const toolNames = tools.map(t => t.name).filter(Boolean);
+  const fullText = textBlocks.map(b => b.text).join('\n');
+
+  for (const name of toolNames) {
+    // Pattern 1: toolName({ ... }) — function call syntax
+    const fnPattern = new RegExp(name + '\\s*\\(\\s*(\\{[\\s\\S]*\\})\\s*\\)', 'm');
+    const fnMatch = fullText.match(fnPattern);
+    if (fnMatch && fnMatch[1]) {
+      try {
+        const input = JSON.parse(fnMatch[1]);
+        console.log('[Harness] Recovered fn-syntax tool call: ' + name + ' (' + Object.keys(input).length + ' params)');
+        return { type: 'tool_use', id: 'recovered_' + randomUUID().slice(0, 8), name, input, _rawMatch: fnMatch[0] };
+      } catch (e) {
+        console.warn('[Harness] Found fn-syntax ' + name + '() but JSON parse failed: ' + e.message);
+      }
+    }
+
+    // Pattern 2: <invoke name="toolName"><parameter name="key">value</parameter>...</invoke> — XML syntax
+    const xmlPattern = new RegExp('<invoke\\s+name="' + name + '"[^>]*>([\\s\\S]*?)</invoke>', 'm');
+    const xmlMatch = fullText.match(xmlPattern);
+    if (xmlMatch && xmlMatch[1]) {
+      try {
+        const input = {};
+        const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
+        let pm;
+        while ((pm = paramRegex.exec(xmlMatch[1])) !== null) {
+          const val = pm[2].trim();
+          try { input[pm[1]] = JSON.parse(val); } catch (_) { input[pm[1]] = val; }
+        }
+        if (Object.keys(input).length > 0) {
+          console.log('[Harness] Recovered XML-syntax tool call: ' + name + ' (' + Object.keys(input).length + ' params)');
+          return { type: 'tool_use', id: 'recovered_' + randomUUID().slice(0, 8), name, input, _rawMatch: xmlMatch[0] };
+        }
+      } catch (e) {
+        console.warn('[Harness] Found XML-syntax ' + name + ' but parse failed: ' + e.message);
+      }
+    }
+  }
+  return null;
+}
+
 // Lazy accessors — allow test injection via _setCallClaude() / _setCallClaudeStreaming()
 let _callClaudeFn = null;
 function getCallClaude() { return _callClaudeFn || _callClaude; }
@@ -109,6 +157,7 @@ async function executeReasoningLoop({
   userId,
   toolRegistry,
   trustLevel,
+  toolChoice,
 }) {
   const { modelId } = resolveModel(modelTier);
   const executionId = randomUUID();
@@ -178,6 +227,8 @@ async function executeReasoningLoop({
       messages,
       tools: tools.length > 0 ? tools : undefined,
       model: modelId,
+      // Force tool_choice only on first iteration; clear after successful execution
+      toolChoice: (i === 0 && toolChoice) ? toolChoice : undefined,
     };
 
     let response, cost;
@@ -226,6 +277,17 @@ async function executeReasoningLoop({
     const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
     const textBlocks = response.content.filter(b => b.type === 'text');
 
+    // ── Harness: Recover text-based tool calls ──
+    // If Claude wrote a tool call as text instead of a proper tool_use block, recover it
+    if (toolUseBlocks.length === 0 && textBlocks.length > 0) {
+      const recovered = recoverToolCallFromText(textBlocks, tools);
+      if (recovered) {
+        toolUseBlocks.push(recovered);
+        // Also inject it into response.content so it gets appended as assistant message correctly
+        response.content.push({ type: 'tool_use', id: recovered.id, name: recovered.name, input: recovered.input });
+      }
+    }
+
     // Accumulate text from each turn for timeout partial results
     const turnText = textBlocks.map(b => b.text).join('\n');
     if (turnText) accumulatedText += (accumulatedText ? '\n' : '') + turnText;
@@ -252,6 +314,15 @@ async function executeReasoningLoop({
           converged: true,
         };
       }
+    }
+
+    // ── Harness: Tool choice compliance check ──
+    // If tool_choice was forced but Claude still returned no tool calls, retry once with stronger prompt
+    if (toolUseBlocks.length === 0 && toolChoice && toolChoice.type === 'tool' && i === 0) {
+      console.warn(`[Harness] tool_choice forced ${toolChoice.name} but Claude returned text only on turn ${i} — retrying`);
+      messages.push({ role: 'assistant', content: response.content });
+      messages.push({ role: 'user', content: `[System: You MUST call the ${toolChoice.name} tool now. Do not describe what you would create — invoke the tool directly with the required parameters.]` });
+      continue; // Retry this iteration
     }
 
     // No tool calls — final text response, we're done
@@ -290,6 +361,22 @@ async function executeReasoningLoop({
       let success = true;
       let artifactData = null;
       let taskData = null;
+
+      // ── Harness: Input schema validation ──
+      const toolDef = tools.find(t => t.name === block.name);
+      if (toolDef?.input_schema?.required) {
+        const missing = toolDef.input_schema.required.filter(f => !(f in (block.input || {})));
+        if (missing.length > 0) {
+          console.warn(`[Harness] Tool ${block.name} missing required fields: ${missing.join(', ')}`);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: `Input validation error: missing required fields: ${missing.join(', ')}. Please provide all required parameters.`,
+            is_error: true,
+          });
+          continue;
+        }
+      }
 
       try {
         if (toolRegistry) {
@@ -335,8 +422,16 @@ async function executeReasoningLoop({
             resultContent = `Tool error: ${envelope.error}`;
             success = false;
           } else {
-            // Success
-            resultContent = typeof envelope.data === 'string' ? envelope.data : JSON.stringify(envelope.data);
+            // Success — prefer human-readable summary over raw JSON
+            if (envelope.summary) {
+              resultContent = envelope.summary;
+            } else if (typeof envelope.data === 'string') {
+              resultContent = envelope.data;
+            } else if (envelope.data?.taskId) {
+              resultContent = `Task queued (ID: ${envelope.data.taskId}). The user can see a live progress card.`;
+            } else {
+              resultContent = JSON.stringify(envelope.data);
+            }
             // Capture structured data for artifact/task SSE events (stored in local vars, NOT on the block)
             const ARTIFACT_TOOLS = ['generate_pdf','generate_pptx','generate_chart','generate_document','generate_spreadsheet'];
             if (ARTIFACT_TOOLS.includes(block.name) && typeof envelope.data !== 'string') {
@@ -380,6 +475,29 @@ async function executeReasoningLoop({
 
     // Append tool results as user message
     messages.push({ role: 'user', content: toolResults });
+  }
+
+  // ── Harness: Mandatory tool_result pairing (inspired by Claude Code's yieldMissingToolResultBlocks) ──
+  // Ensure no orphaned tool_use blocks — Anthropic API rejects conversations with unpaired tool_use
+  const lastAssistant = messages.filter(m => m.role === 'assistant').pop();
+  if (lastAssistant?.content && Array.isArray(lastAssistant.content)) {
+    const orphanToolUses = lastAssistant.content.filter(b => b.type === 'tool_use');
+    if (orphanToolUses.length > 0) {
+      const pairedIds = new Set(
+        messages.filter(m => m.role === 'user' && Array.isArray(m.content))
+          .flatMap(m => m.content)
+          .filter(b => b.type === 'tool_result')
+          .map(b => b.tool_use_id)
+      );
+      const orphans = orphanToolUses.filter(tu => !pairedIds.has(tu.id));
+      if (orphans.length > 0) {
+        console.warn(`[Harness] Patching ${orphans.length} orphaned tool_use block(s)`);
+        messages.push({
+          role: 'user',
+          content: orphans.map(tu => ({ type: 'tool_result', tool_use_id: tu.id, content: 'Tool execution was interrupted — max iterations reached', is_error: true })),
+        });
+      }
+    }
   }
 
   // Max iterations reached

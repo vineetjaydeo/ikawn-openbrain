@@ -20,6 +20,7 @@ import { useChatStore } from '@/stores/chat'
 import { useUIStore } from '@/stores/ui'
 import { useConversationDetail } from '@/hooks/useConversations'
 import { useTaskPolling } from '@/hooks/useTaskPolling'
+import { apiFetch } from '@/lib/api'
 
 function EmptyState() {
   return (
@@ -124,6 +125,30 @@ export function ChatView() {
       setMessages(detail.messages)
     }
   }, [detail?.messages, isStreaming, setMessages])
+
+  // Restore active tasks on page load / conversation switch
+  const addActiveTask = useChatStore((s) => s.addActiveTask)
+  const clearActiveTasks = useChatStore((s) => s.clearActiveTasks)
+  useEffect(() => {
+    if (!activeConversationId || isStreaming) return
+    apiFetch<Array<{ id: number; task_type: string; status: string; progress: unknown; result: unknown; error_message: string | null; created_at: string }>>(
+      `/api/tasks/active/${activeConversationId}`
+    ).then((tasks) => {
+      clearActiveTasks()
+      for (const t of tasks) {
+        if (t.status === 'pending' || t.status === 'running') {
+          addActiveTask({
+            taskId: t.id,
+            taskType: t.task_type || 'unknown',
+            status: t.status as 'pending' | 'running' | 'completed' | 'failed',
+            progress: t.progress as undefined,
+            result: t.result as undefined,
+            error: t.error_message || undefined,
+          })
+        }
+      }
+    }).catch(() => { /* best-effort */ })
+  }, [activeConversationId, isStreaming, addActiveTask, clearActiveTasks])
 
   const conversationTitle = detail?.title
 

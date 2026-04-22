@@ -7,6 +7,12 @@ const { uploadToR2 } = require('../utils/storage');
 const { pool } = require('../db');
 const { captureMessage } = require('../utils/capture');
 const { sendTelegramMessage } = require('../utils/telegram');
+const { getBrandProfile } = require('../services/pptx-template-analyzer');
+const { getSlideIconDataUri, listIconNames } = require('../utils/slide-icons');
+
+// Optional: pptx-embed-fonts for custom font embedding
+let withPPTXEmbedFonts;
+try { withPPTXEmbedFonts = require('pptx-embed-fonts/pptxgenjs').withPPTXEmbedFonts; } catch(e) { /* optional */ }
 
 // ── Concurrency gate: max 2 concurrent PPTX builds per process ───────────────
 function createLimit(concurrency) {
@@ -30,6 +36,10 @@ const THEMES = {
     accent: 'FFC01C',
     subtle: '6B7280',
     divider: 'E5E7EB',
+    slideNum: '9CA3AF',
+    headingFont: 'Arial',
+    bodyFont: 'Arial',
+    logo: null,
   },
   dark: {
     bg: '0A0F2E',
@@ -38,6 +48,10 @@ const THEMES = {
     accent: 'FFC01C',
     subtle: '9CA3AF',
     divider: '1E2747',
+    slideNum: '6B7280',
+    headingFont: 'Arial',
+    bodyFont: 'Arial',
+    logo: null,
   },
   light: {
     bg: 'FFFFFF',
@@ -46,8 +60,66 @@ const THEMES = {
     accent: '3B82F6',
     subtle: '9CA3AF',
     divider: 'E5E7EB',
+    slideNum: '9CA3AF',
+    headingFont: 'Arial',
+    bodyFont: 'Arial',
+    logo: null,
   },
 };
+
+/**
+ * Build a theme object from a brand profile.
+ * Falls back to 'corporate' for any missing values.
+ */
+function buildBrandTheme(brandProfile) {
+  const fallback = THEMES.corporate;
+  const colors = brandProfile.colors || {};
+  const fonts = brandProfile.fonts || {};
+  const logo = brandProfile.logos && brandProfile.logos.length > 0 ? brandProfile.logos[0] : null;
+
+  // Derive bg/title/body from brand colors with intelligent defaults
+  const primary = stripHash(colors.primary) || fallback.accent;
+  const secondary = stripHash(colors.secondary) || fallback.title;
+  const accent = stripHash(colors.accent) || primary;
+  const bg = stripHash(colors.background) || fallback.bg;
+  const text = stripHash(colors.text) || fallback.title;
+
+  return {
+    bg,
+    title: text,
+    body: lightenColor(text, 20) || fallback.body,
+    accent,
+    subtle: fallback.subtle,
+    divider: fallback.divider,
+    slideNum: fallback.slideNum,
+    headingFont: fonts.heading || fallback.headingFont,
+    bodyFont: fonts.body || fallback.bodyFont,
+    logo: logo ? { url: logo.url, w: logo.width || 1.0, h: logo.height || 0.4 } : null,
+  };
+}
+
+function stripHash(color) {
+  if (!color) return null;
+  return color.replace(/^#/, '');
+}
+
+/**
+ * Attempt to lighten a hex color by a percentage (simple approach).
+ */
+function lightenColor(hex, percent) {
+  if (!hex || hex.length < 6) return null;
+  try {
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    const nr = Math.min(255, Math.floor(r + (255 - r) * (percent / 100)));
+    const ng = Math.min(255, Math.floor(g + (255 - g) * (percent / 100)));
+    const nb = Math.min(255, Math.floor(b + (255 - b) * (percent / 100)));
+    return nr.toString(16).padStart(2, '0') + ng.toString(16).padStart(2, '0') + nb.toString(16).padStart(2, '0');
+  } catch (e) {
+    return null;
+  }
+}
 
 // ── Margins and sizing constants (inches) ──────────────────────────────────────
 
@@ -56,6 +128,61 @@ const SLIDE_W = 10; // 16:9 at 10x5.625
 const SLIDE_H = 5.625;
 const CONTENT_W = SLIDE_W - MARGIN * 2;
 const CONTENT_H = SLIDE_H - MARGIN * 2;
+
+// ── Slide Masters ─────────────────────────────────────────────────────────────
+
+/**
+ * Define slide masters on the pptx instance based on the active theme.
+ */
+function defineSlideMasters(pptx, theme) {
+  const logoObjects = theme.logo
+    ? [{ image: { path: theme.logo.url, x: 8.5, y: 0.3, w: theme.logo.w, h: theme.logo.h } }]
+    : [];
+
+  // Title Master -- centered title, logo top-right, accent bar bottom
+  pptx.defineSlideMaster({
+    title: 'TITLE_MASTER',
+    background: { color: theme.bg },
+    objects: [
+      ...logoObjects,
+      // Bottom accent bar
+      { rect: { x: 0, y: 5.2, w: 10, h: 0.05, fill: { color: theme.accent } } },
+    ],
+    slideNumber: { x: '95%', y: '95%', color: theme.slideNum, fontSize: 9 },
+  });
+
+  // Content Master -- title bar top, logo corner, content area
+  pptx.defineSlideMaster({
+    title: 'CONTENT_MASTER',
+    background: { color: theme.bg },
+    objects: [
+      ...logoObjects,
+      // Top accent line
+      { rect: { x: 0, y: 0, w: 10, h: 0.03, fill: { color: theme.accent } } },
+    ],
+    slideNumber: { x: '95%', y: '95%', color: theme.slideNum, fontSize: 9 },
+  });
+
+  // Two-Column Master -- split layout
+  pptx.defineSlideMaster({
+    title: 'TWO_COLUMN_MASTER',
+    background: { color: theme.bg },
+    objects: [
+      ...logoObjects,
+      // Top accent line
+      { rect: { x: 0, y: 0, w: 10, h: 0.03, fill: { color: theme.accent } } },
+    ],
+    slideNumber: { x: '95%', y: '95%', color: theme.slideNum, fontSize: 9 },
+  });
+
+  // Section Break Master -- full-color background, centered text
+  pptx.defineSlideMaster({
+    title: 'SECTION_MASTER',
+    background: { color: theme.accent },
+    objects: [],
+    slideNumber: { x: '95%', y: '95%', color: theme.bg, fontSize: 9 },
+  });
+}
 
 // ── Content parsing ────────────────────────────────────────────────────────────
 
@@ -93,23 +220,25 @@ function segmentsToTextObjects(segments, theme) {
       items.push({
         text: seg.text,
         options: {
-          fontSize: 14,
+          fontSize: 15,
+          fontFace: theme.bodyFont,
           color: theme.body,
           bullet: { code: '2022', color: theme.accent },
-          paraSpaceBefore: 4,
-          paraSpaceAfter: 2,
-          lineSpacingMultiple: 1.3,
+          paraSpaceBefore: 6,
+          paraSpaceAfter: 3,
+          lineSpacingMultiple: 1.35,
         },
       });
     } else {
       items.push({
         text: seg.text,
         options: {
-          fontSize: 14,
+          fontSize: 15,
+          fontFace: theme.bodyFont,
           color: theme.body,
           paraSpaceBefore: 4,
-          paraSpaceAfter: 4,
-          lineSpacingMultiple: 1.4,
+          paraSpaceAfter: 6,
+          lineSpacingMultiple: 1.45,
         },
       });
     }
@@ -118,20 +247,57 @@ function segmentsToTextObjects(segments, theme) {
   return items;
 }
 
+// ── Icon helper ────────────────────────────────────────────────────────────────
+
+/**
+ * Add an icon next to the slide title if specified.
+ * Returns the x-offset adjustment for the title text.
+ */
+function addIconToSlide(slide, iconName, theme, x, y) {
+  if (!iconName) return 0;
+  const iconDataUri = getSlideIconDataUri(iconName, theme.accent);
+  if (!iconDataUri) return 0;
+
+  slide.addImage({
+    data: iconDataUri,
+    x,
+    y,
+    w: 0.35,
+    h: 0.35,
+  });
+
+  return 0.45; // offset for title text
+}
+
 // ── Slide builders ─────────────────────────────────────────────────────────────
 
-function addTitleSlide(pptx, title, subtitle, theme, slideNum, totalSlides) {
-  const slide = pptx.addSlide();
-  slide.background = { fill: theme.bg };
+function addTitleSlide(pptx, title, subtitle, theme, slideNum, totalSlides, iconName) {
+  const slide = pptx.addSlide({ masterName: 'TITLE_MASTER' });
+
+  // Icon centered above title
+  if (iconName) {
+    const iconDataUri = getSlideIconDataUri(iconName, theme.accent);
+    if (iconDataUri) {
+      slide.addImage({
+        data: iconDataUri,
+        x: (SLIDE_W - 0.5) / 2,
+        y: 1.0,
+        w: 0.5,
+        h: 0.5,
+      });
+    }
+  }
+
+  const titleY = iconName ? 1.6 : 1.4;
 
   // Main title -- centered vertically, slightly above center
   slide.addText(title || '', {
     x: MARGIN,
-    y: 1.4,
+    y: titleY,
     w: CONTENT_W,
     h: 1.2,
-    fontSize: 28,
-    fontFace: 'Arial',
+    fontSize: 32,
+    fontFace: theme.headingFont,
     bold: true,
     color: theme.title,
     align: 'center',
@@ -142,21 +308,21 @@ function addTitleSlide(pptx, title, subtitle, theme, slideNum, totalSlides) {
   if (subtitle) {
     slide.addText(subtitle, {
       x: MARGIN + 1.5,
-      y: 2.8,
+      y: titleY + 1.4,
       w: CONTENT_W - 3,
       h: 0.8,
       fontSize: 18,
-      fontFace: 'Arial',
+      fontFace: theme.bodyFont,
       color: theme.subtle,
       align: 'center',
       valign: 'top',
     });
   }
 
-  // Gold accent bar at bottom
+  // Accent bar
   slide.addShape(pptx.ShapeType.rect, {
     x: MARGIN + 3,
-    y: 4.2,
+    y: iconName ? 4.4 : 4.2,
     w: CONTENT_W - 6,
     h: 0.06,
     fill: { color: theme.accent },
@@ -167,18 +333,21 @@ function addTitleSlide(pptx, title, subtitle, theme, slideNum, totalSlides) {
 }
 
 function addContentSlide(pptx, slideData, theme, slideNum, totalSlides) {
-  const slide = pptx.addSlide();
-  slide.background = { fill: theme.bg };
+  const slide = pptx.addSlide({ masterName: 'CONTENT_MASTER' });
 
-  // Slide title
+  let titleXOffset = 0;
+
+  // Slide title with optional icon
   if (slideData.title) {
+    titleXOffset = addIconToSlide(slide, slideData.icon, theme, MARGIN, MARGIN + 0.05);
+
     slide.addText(slideData.title, {
-      x: MARGIN,
+      x: MARGIN + titleXOffset,
       y: MARGIN,
-      w: CONTENT_W,
+      w: CONTENT_W - titleXOffset,
       h: 0.6,
-      fontSize: 24,
-      fontFace: 'Arial',
+      fontSize: 28,
+      fontFace: theme.headingFont,
       bold: true,
       color: theme.title,
       valign: 'top',
@@ -186,7 +355,7 @@ function addContentSlide(pptx, slideData, theme, slideNum, totalSlides) {
 
     // Thin accent underline beneath title
     slide.addShape(pptx.ShapeType.rect, {
-      x: MARGIN,
+      x: MARGIN + titleXOffset,
       y: MARGIN + 0.65,
       w: 1.5,
       h: 0.04,
@@ -218,25 +387,28 @@ function addContentSlide(pptx, slideData, theme, slideNum, totalSlides) {
 }
 
 function addTwoColumnSlide(pptx, slideData, theme, slideNum, totalSlides) {
-  const slide = pptx.addSlide();
-  slide.background = { fill: theme.bg };
+  const slide = pptx.addSlide({ masterName: 'TWO_COLUMN_MASTER' });
 
-  // Slide title
+  let titleXOffset = 0;
+
+  // Slide title with optional icon
   if (slideData.title) {
+    titleXOffset = addIconToSlide(slide, slideData.icon, theme, MARGIN, MARGIN + 0.05);
+
     slide.addText(slideData.title, {
-      x: MARGIN,
+      x: MARGIN + titleXOffset,
       y: MARGIN,
-      w: CONTENT_W,
+      w: CONTENT_W - titleXOffset,
       h: 0.6,
-      fontSize: 24,
-      fontFace: 'Arial',
+      fontSize: 28,
+      fontFace: theme.headingFont,
       bold: true,
       color: theme.title,
       valign: 'top',
     });
 
     slide.addShape(pptx.ShapeType.rect, {
-      x: MARGIN,
+      x: MARGIN + titleXOffset,
       y: MARGIN + 0.65,
       w: 1.5,
       h: 0.04,
@@ -297,30 +469,49 @@ function addTwoColumnSlide(pptx, slideData, theme, slideNum, totalSlides) {
 }
 
 function addSectionBreakSlide(pptx, slideData, theme, slideNum, totalSlides) {
-  const slide = pptx.addSlide();
-  slide.background = { fill: theme.bg };
+  const slide = pptx.addSlide({ masterName: 'SECTION_MASTER' });
+
+  // For section breaks, text is light on accent background
+  const sectionTextColor = theme.bg;
+  const sectionSubtleColor = lightenColor(theme.bg, 30) || theme.bg;
+
+  // Icon centered above title
+  if (slideData.icon) {
+    const iconDataUri = getSlideIconDataUri(slideData.icon, theme.bg);
+    if (iconDataUri) {
+      slide.addImage({
+        data: iconDataUri,
+        x: (SLIDE_W - 0.5) / 2,
+        y: 1.1,
+        w: 0.5,
+        h: 0.5,
+      });
+    }
+  }
+
+  const titleY = slideData.icon ? 1.8 : 1.5;
 
   // Large centered section title
   slide.addText(slideData.title || slideData.content || '', {
     x: MARGIN,
-    y: 1.5,
+    y: titleY,
     w: CONTENT_W,
     h: 1.5,
     fontSize: 32,
-    fontFace: 'Arial',
+    fontFace: theme.headingFont,
     bold: true,
-    color: theme.title,
+    color: sectionTextColor,
     align: 'center',
     valign: 'middle',
   });
 
-  // Accent bar centered beneath
+  // Accent bar centered beneath (using bg color for contrast)
   slide.addShape(pptx.ShapeType.rect, {
     x: MARGIN + 3.5,
-    y: 3.2,
+    y: titleY + 1.6,
     w: CONTENT_W - 7,
     h: 0.06,
-    fill: { color: theme.accent },
+    fill: { color: sectionTextColor },
   });
 
   // Optional subtitle-like content beneath the bar
@@ -330,12 +521,12 @@ function addSectionBreakSlide(pptx, slideData, theme, slideNum, totalSlides) {
       const plainText = segments.map(s => s.text).join('\n');
       slide.addText(plainText, {
         x: MARGIN + 1.5,
-        y: 3.5,
+        y: titleY + 1.9,
         w: CONTENT_W - 3,
         h: 0.8,
         fontSize: 16,
-        fontFace: 'Arial',
-        color: theme.subtle,
+        fontFace: theme.bodyFont,
+        color: sectionSubtleColor,
         align: 'center',
         valign: 'top',
       });
@@ -359,8 +550,8 @@ function addSlideNumber(slide, slideNum, totalSlides, theme) {
     w: 0.9,
     h: 0.3,
     fontSize: 9,
-    color: theme.subtle,
-    fontFace: 'Arial',
+    color: theme.slideNum || theme.subtle,
+    fontFace: theme.bodyFont,
     align: 'right',
     valign: 'bottom',
   });
@@ -385,21 +576,50 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
   try {
     const title = (config.title || '').trim();
     const slides = Array.isArray(config.slides) ? config.slides : [];
-    const themeName = THEMES[config.theme] ? config.theme : 'corporate';
-    const theme = THEMES[themeName];
+    let themeName = config.theme || 'corporate';
+    let theme;
 
     // Mark task as running
     await pool.query('UPDATE ob_background_tasks SET status = $1, last_heartbeat_at = NOW() WHERE id = $2', ['running', taskId]);
 
+    // ── Resolve theme ────────────────────────────────────────────────────────
+    if (themeName === 'brand') {
+      let brandProfile = null;
+      try {
+        brandProfile = await getBrandProfile(context.brandId);
+      } catch (e) {
+        console.warn('[generate_pptx] Failed to fetch brand profile, falling back to corporate:', e.message);
+      }
+
+      if (brandProfile) {
+        theme = buildBrandTheme(brandProfile);
+      } else {
+        // Fall back to corporate if no brand profile exists
+        theme = THEMES.corporate;
+        themeName = 'corporate';
+      }
+    } else {
+      theme = THEMES[themeName] || THEMES.corporate;
+    }
+
     const pptx = new PptxGenJS();
+
+    // Apply font embedding if available
+    if (withPPTXEmbedFonts) {
+      try { withPPTXEmbedFonts(pptx); } catch(e) { /* non-critical */ }
+    }
+
     pptx.layout = 'LAYOUT_16x9';
     pptx.author = 'Lucy AI';
     pptx.title = title;
 
+    // Define slide masters based on the resolved theme
+    defineSlideMasters(pptx, theme);
+
     const totalSlides = slides.length + 1; // +1 for the cover
 
     // Cover slide (always first)
-    addTitleSlide(pptx, title, null, theme, 1, totalSlides);
+    addTitleSlide(pptx, title, null, theme, 1, totalSlides, null);
 
     // Content slides
     for (let i = 0; i < slides.length; i++) {
@@ -409,7 +629,7 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
 
       switch (slideType) {
         case 'title':
-          addTitleSlide(pptx, slideData.title || '', slideData.content || '', theme, slideNum, totalSlides);
+          addTitleSlide(pptx, slideData.title || '', slideData.content || '', theme, slideNum, totalSlides, slideData.icon);
           break;
         case 'two-column':
           addTwoColumnSlide(pptx, slideData, theme, slideNum, totalSlides);
@@ -426,21 +646,22 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
       // Progress updates every 5 slides
       if (i % 5 === 0) {
         pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
-          [JSON.stringify({ step: `Building slide ${i + 1}/${slides.length}`, pct: Math.round((i / slides.length) * 80) }), taskId]).catch(() => {});
+          [JSON.stringify({ current_slide: i + 1, total_slides: slides.length, phase: 'building' }), taskId]).catch(() => {});
       }
     }
 
     // Export to buffer
     const buffer = await pptx.write({ outputType: 'nodebuffer' });
 
-    // Idempotent R2 key
-    const safeName = sanitizeFilename(title);
-    const filename = `${safeName}.pptx`;
-    const r2Key = `pptx/${taskId}.pptx`;
+    // Human-readable R2 key and filename
+    const sanitizedTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50).toLowerCase();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `${title} - ${dateStr}.pptx`;
+    const r2Key = `pptx/${sanitizedTitle}_${dateStr}_${String(taskId).slice(0, 8)}.pptx`;
 
     // Update progress: uploading
     await pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
-      [JSON.stringify({ step: 'Uploading presentation...', pct: 90 }), taskId]);
+      [JSON.stringify({ current_slide: slides.length, total_slides: slides.length, phase: 'uploading' }), taskId]);
 
     // Upload to R2 with one retry
     let url;
@@ -487,7 +708,7 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
       ['completed', JSON.stringify({
         summary: `Presentation "${config.title}" generated (${slides.length} slides)`,
         artifacts: [{ type: 'presentation', url, filename }],
-        slideCount: slides.length
+        url, filename, slideCount: slides.length
       }), taskId]
     );
 
@@ -524,6 +745,8 @@ module.exports = {
   description:
     'Generate a professional PowerPoint (PPTX) presentation from structured slide data. ' +
     'Supports title slides, content slides with bullet points, two-column layouts, and section breaks. ' +
+    'Use theme "brand" to automatically apply the brand\'s colors, fonts, and logo. ' +
+    'Each slide can optionally include an icon name for visual emphasis. ' +
     'Returns a download URL for the generated file.',
   tier: 'direct',
   costTier: 'medium',
@@ -539,6 +762,7 @@ module.exports = {
       description:
         'Array of slide objects. Each slide has: title (string), content (string, lines starting with "- " become bullets), ' +
         'type (optional: "title", "content", "two-column", "section-break"; default "content"), ' +
+        'icon (optional: icon name for visual emphasis -- e.g. "chart-bar", "target", "rocket", "lightbulb", "users", "shield"), ' +
         'notes (optional: speaker notes). For two-column slides, separate left/right content with "|||".',
       items: {
         type: 'object',
@@ -546,6 +770,11 @@ module.exports = {
           title: { type: 'string', description: 'Slide title' },
           content: { type: 'string', description: 'Slide body. Lines starting with "- " become bullets. For two-column, separate with "|||".' },
           type: { type: 'string', enum: ['title', 'content', 'two-column', 'section-break'], description: 'Slide layout type. Default: content' },
+          icon: {
+            type: 'string',
+            description: 'Optional icon name to display next to the title. Available: ' + listIconNames().join(', '),
+            enum: listIconNames(),
+          },
           notes: { type: 'string', description: 'Speaker notes (optional)' },
         },
         required: ['title', 'content'],
@@ -554,8 +783,8 @@ module.exports = {
     theme: {
       type: 'string',
       required: false,
-      description: 'Presentation theme: "corporate" (white bg, navy text, gold accents), "dark" (navy bg, white text, gold accents), or "light" (white bg, gray text, blue accents). Default: "corporate".',
-      enum: ['corporate', 'dark', 'light'],
+      description: 'Presentation theme: "corporate" (white bg, navy text, gold accents), "dark" (navy bg, white text, gold accents), "light" (white bg, gray text, blue accents), or "brand" (uses brand profile colors, fonts, and logo). Default: "corporate".',
+      enum: ['corporate', 'dark', 'light', 'brand'],
     },
   },
 
@@ -639,7 +868,7 @@ module.exports = {
       return {
         success: true,
         data: { taskId, status: 'pending', taskType: 'pptx_generation', description: `Generating presentation: ${config.title}` },
-        summary: `Presentation "${config.title}" is being generated in the background. You will be notified when it is ready.`
+        summary: `Presentation "${config.title}" has been queued for generation. The user can already see a live progress card in the UI — do NOT repeat the status or say "building presentation." Instead, briefly confirm what you're creating (topic, slide count) and mention they'll be able to download it when ready.`
       };
     } catch (err) {
       console.error('[generate_pptx] Failed to enqueue task:', err);

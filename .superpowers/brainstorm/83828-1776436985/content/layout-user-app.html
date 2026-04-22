@@ -1,0 +1,120 @@
+<h2>User App Layout</h2>
+<p class="subtitle">The core experience — chat, tasks, vault, settings. Which layout feels right for a mobile-first chat app?</p>
+
+<div class="cards" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px;">
+
+  <!-- Option A: Rail sidebar like current -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)" style="padding:0;overflow:hidden;">
+    <div class="card-body" style="padding:12px 16px 8px;">
+      <h3 style="margin:0 0 4px;">A. Icon Rail + Slide Panel</h3>
+      <p style="margin:0;font-size:13px;opacity:0.6;">Like current Lucy. Narrow icon rail on left, panel slides out for history/nav.</p>
+    </div>
+    <div style="background:#111;padding:16px;margin:0 12px 12px;border-radius:8px;font-family:monospace;font-size:11px;line-height:1.6;">
+      <div style="display:flex;height:280px;">
+        <!-- Rail -->
+        <div style="width:48px;background:#1a1a1a;border-radius:6px;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:16px;flex-shrink:0;">
+          <div style="width:28px;height:28px;background:#FFC01C;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#000;font-weight:bold;">L</div>
+          <div style="width:24px;height:24px;border:1.5px solid #555;border-radius:4px;"></div>
+          <div style="width:24px;height:24px;border:1.5px solid #555;border-radius:4px;"></div>
+          <div style="width:24px;height:24px;border:1.5px solid #555;border-radius:4px;"></div>
+          <div style="flex:1;"></div>
+          <div style="width:28px;height:28px;background:#333;border-radius:50%;"></div>
+        </div>
+        <!-- Main chat area -->
+        <div style="flex:1;display:flex;flex-direction:column;padding:0 16px;">
+          <div style="text-align:center;padding:24px 0;">
+            <div style="font-size:18px;color:#FFC01C;">&#10022;</div>
+            <div style="color:#888;font-size:11px;margin-top:4px;">What can I help with?</div>
+          </div>
+          <div style="flex:1;"></div>
+          <!-- Messages -->
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+            <div style="background:#2a2a2a;padding:6px 10px;border-radius:12px;font-size:10px;color:#ccc;max-width:60%;">Generate a report</div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <div style="color:#FFC01C;font-size:8px;margin-bottom:2px;">&#10022; Lucy</div>
+            <div style="font-size:10px;color:#ccc;font-family:serif;max-width:80%;">Here's your analysis...</div>
+          </div>
+          <div style="flex:1;"></div>
+          <!-- Input -->
+          <div style="background:#1a1a1a;border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:8px;">
+            <div style="width:20px;height:20px;border:1px solid #444;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">+</div>
+            <div style="flex:1;color:#555;font-size:11px;">Talk to Lucy...</div>
+            <div style="width:24px;height:24px;background:linear-gradient(135deg,#FFC01C,#F59E0B);border-radius:6px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Bottom tab bar (mobile-native) -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)" style="padding:0;overflow:hidden;">
+    <div class="card-body" style="padding:12px 16px 8px;">
+      <h3 style="margin:0 0 4px;">B. Bottom Tab Bar (Mobile-Native)</h3>
+      <p style="margin:0;font-size:13px;opacity:0.6;">Like WhatsApp/Telegram. Tabs at bottom, chat is home. Feels native on mobile.</p>
+    </div>
+    <div style="background:#111;padding:16px;margin:0 12px 12px;border-radius:8px;font-family:monospace;font-size:11px;line-height:1.6;">
+      <div style="display:flex;flex-direction:column;height:280px;">
+        <!-- Top bar -->
+        <div style="display:flex;align-items:center;padding:8px 12px;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:28px;height:28px;background:#FFC01C;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#000;font-weight:bold;">L</div>
+            <span style="color:#fff;font-size:13px;font-weight:600;">Lucy</span>
+          </div>
+          <div style="width:28px;height:28px;background:#333;border-radius:50%;"></div>
+        </div>
+        <!-- Chat area -->
+        <div style="flex:1;padding:0 12px;">
+          <div style="text-align:center;padding:20px 0;">
+            <div style="font-size:18px;color:#FFC01C;">&#10022;</div>
+            <div style="color:#888;font-size:11px;margin-top:4px;">What can I help with?</div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+            <div style="background:#2a2a2a;padding:6px 10px;border-radius:12px;font-size:10px;color:#ccc;">Generate a report</div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <div style="color:#FFC01C;font-size:8px;margin-bottom:2px;">&#10022; Lucy</div>
+            <div style="font-size:10px;color:#ccc;font-family:serif;">Here's your analysis...</div>
+          </div>
+        </div>
+        <!-- Input -->
+        <div style="padding:0 12px 8px;">
+          <div style="background:#1a1a1a;border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:8px;">
+            <div style="width:20px;height:20px;border:1px solid #444;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#666;">+</div>
+            <div style="flex:1;color:#555;font-size:11px;">Talk to Lucy...</div>
+            <div style="width:24px;height:24px;background:linear-gradient(135deg,#FFC01C,#F59E0B);border-radius:6px;"></div>
+          </div>
+        </div>
+        <!-- Bottom tabs -->
+        <div style="display:flex;border-top:1px solid #222;padding:8px 0 4px;">
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:16px;">&#128172;</div>
+            <div style="font-size:8px;color:#FFC01C;margin-top:2px;">Chat</div>
+          </div>
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:16px;">&#9881;</div>
+            <div style="font-size:8px;color:#666;margin-top:2px;">Tasks</div>
+          </div>
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:16px;">&#128193;</div>
+            <div style="font-size:8px;color:#666;margin-top:2px;">Vault</div>
+          </div>
+          <div style="flex:1;text-align:center;">
+            <div style="font-size:16px;">&#9881;</div>
+            <div style="font-size:8px;color:#666;margin-top:2px;">Settings</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:24px;padding:16px;background:rgba(255,192,28,0.08);border:1px solid rgba(255,192,28,0.2);border-radius:8px;">
+  <h3 style="margin:0 0 8px;color:#FFC01C;">Recommendation: B for mobile, A for desktop — responsive switch</h3>
+  <p style="margin:0;font-size:13px;opacity:0.8;">
+    On mobile/tablet: bottom tab bar (B) feels native and is thumb-reachable.<br>
+    On desktop/laptop: icon rail (A) uses horizontal space efficiently.<br>
+    Same components, different layout wrapper. The chat, input, and content stay identical.
+  </p>
+</div>

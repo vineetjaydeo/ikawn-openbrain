@@ -4,6 +4,7 @@ const { uploadToR2, getPresignedUploadUrl } = require('../utils/storage');
 const { extractText, extractStructured, isTabularMime } = require('../utils/doc-parser');
 const { captureMessage } = require('../utils/capture');
 const { pool } = require('../db');
+const { requireAuth } = require('../auth');
 
 function normalizeFileType(mime, filename) {
   if (!mime && !filename) return 'other';
@@ -152,6 +153,120 @@ router.post('/api/upload/direct', async (req, res, next) => {
     }
 
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Brand Asset Upload ──
+
+const BRAND_ASSET_EXTENSIONS = ['pptx', 'pdf', 'png', 'jpg', 'jpeg', 'svg', 'ttf', 'otf', 'woff'];
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'svg'];
+const FONT_EXTENSIONS = ['ttf', 'otf', 'woff'];
+
+router.post('/api/upload/brand-asset', requireAuth, async (req, res, next) => {
+  try {
+    const { data, filename, contentType, metadata } = req.body;
+
+    if (!data || !filename) {
+      return res.status(400).json({ error: 'data and filename are required' });
+    }
+
+    const ext = (filename || '').split('.').pop().toLowerCase();
+    if (!BRAND_ASSET_EXTENSIONS.includes(ext)) {
+      return res.status(400).json({
+        error: `Unsupported file type. Allowed: ${BRAND_ASSET_EXTENSIONS.join(', ')}`,
+      });
+    }
+
+    const estimatedBytes = data.length * 0.75;
+    if (estimatedBytes > MAX_UPLOAD_SIZE) {
+      return res.status(413).json({ error: 'File exceeds 10MB limit' });
+    }
+
+    const buffer = Buffer.from(data, 'base64');
+    const brandId = req.brand_id || 'ikawn';
+    const sanitized = sanitizeFilename(filename);
+    const key = `brand-assets/${brandId}/${Date.now()}_${sanitized}`;
+
+    const url = await uploadToR2(key, buffer, contentType || 'application/octet-stream', brandId);
+
+    // Determine tags based on file type and metadata
+    let tags = ['brand-asset'];
+    if (IMAGE_EXTENSIONS.includes(ext) && metadata?.usage === 'logo') {
+      tags = ['brand-asset', 'logo'];
+    } else if (FONT_EXTENSIONS.includes(ext)) {
+      tags = ['brand-asset', 'font'];
+    }
+
+    const fileType = normalizeFileType(contentType, filename);
+
+    // Insert into vault_items
+    const insertResult = await pool.query(
+      `INSERT INTO vault_items (brand_id, user_id, filename, file_url, file_key, file_type, mime_type, file_size, source, folder, tags, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'brand_upload', 'Brand Assets', $9, $10)
+       ON CONFLICT (file_url) WHERE deleted_at IS NULL DO NOTHING
+       RETURNING id`,
+      [brandId, req.session.user.id, filename, url, key, fileType, contentType || 'application/octet-stream', buffer.length, tags, JSON.stringify(metadata || {})]
+    );
+
+    const vaultItemId = insertResult.rows[0]?.id || null;
+
+    // If PPTX, trigger background template analysis
+    if (ext === 'pptx') {
+      // Fire-and-forget — don't block the response
+      (async () => {
+        try {
+          const { analyzeTemplate, saveBrandProfile } = require('../services/pptx-template-analyzer');
+          const profile = await analyzeTemplate(buffer, filename);
+          if (profile) {
+            await saveBrandProfile(brandId, profile);
+            console.log(`[BrandAsset] PPTX template analysis complete for brand ${brandId}`);
+          }
+        } catch (err) {
+          console.error('[BrandAsset] PPTX template analysis failed:', err.message);
+        }
+      })();
+
+      return res.json({ success: true, vaultItemId, url, analyzing: true });
+    }
+
+    res.json({ success: true, vaultItemId, url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Brand Profile ──
+
+router.get('/api/brand/profile', requireAuth, async (req, res, next) => {
+  try {
+    const { getBrandProfile } = require('../services/pptx-template-analyzer');
+    const brandId = req.brand_id || 'ikawn';
+    const profile = await getBrandProfile(brandId);
+    res.json({ profile: profile || null });
+  } catch (err) {
+    // If the service module doesn't exist yet, return null gracefully
+    if (err.code === 'MODULE_NOT_FOUND') {
+      return res.json({ profile: null });
+    }
+    next(err);
+  }
+});
+
+// ── Brand Assets List ──
+
+router.get('/api/brand/assets', requireAuth, async (req, res, next) => {
+  try {
+    const brandId = req.brand_id || 'ikawn';
+    const result = await pool.query(
+      `SELECT id, filename, file_url, file_type, tags, metadata, created_at
+       FROM vault_items
+       WHERE brand_id = $1 AND folder = 'Brand Assets' AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+      [brandId]
+    );
+    res.json({ assets: result.rows });
   } catch (err) {
     next(err);
   }

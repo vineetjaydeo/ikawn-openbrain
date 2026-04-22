@@ -450,7 +450,7 @@ async function handleChatSend(req, res) {
             { brandId: req.brand_id, userId: req.session.user.id, pool }
           );
 
-          const summary = result?.summary || JSON.stringify(result?.data || result, null, 2);
+          const summary = result?.summary || (result?.data?.taskId ? `Task started (ID: ${result.data.taskId}).` : JSON.stringify(result?.data || result, null, 2));
           const formatted = `**/${toolName}** result:\n\n${summary}`;
 
           // Stream as chunk
@@ -572,7 +572,15 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
 9. You earn trust progressively. Start helpful. Become indispensable.
 10. You have LIVE memory feeds from GitHub (commits, PRs, issues), Telegram conversations, and past decisions. This data is automatically synced — you DO have access. Never say "I don't have access to GitHub" or ask the user to paste links. If the memory feed contains relevant data, USE it confidently. If a specific piece of info isn't in your memory, say "I don't have that specific detail in my recent memory" — not "I can't access GitHub."
 11. When referencing memory data, be specific: cite commit messages, dates, authors. Don't hedge or disclaim.
-12. TOOL USE DISCIPLINE: When you decide to search the web or use any tool, CALL IT DIRECTLY in the same response. Do NOT write "Let me research this" or "I'll look into that" as a standalone message without actually calling the tool. Never promise research you don't deliver. The user sees a "searching..." indicator when you call web_search — just call it, don't narrate your intent.`
+12. TOOL USE DISCIPLINE: When you decide to search the web or use any tool, CALL IT DIRECTLY in the same response. Do NOT write "Let me research this" or "I'll look into that" as a standalone message without actually calling the tool. Never promise research you don't deliver. The user sees a "searching..." indicator when you call web_search — just call it, don't narrate your intent.
+
+=== MANDATORY TOOL INVOCATIONS ===
+These are NON-NEGOTIABLE. When the user's intent matches, you MUST call the tool. Do NOT just describe doing it.
+CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple versions or themes. Use 'corporate' theme unless the user explicitly requests a different theme. If a brand profile exists, default to 'brand' theme.
+- PRESENTATIONS: When asked to create/generate/make a presentation, deck, slides, or PPTX — ALWAYS call the generate_pptx tool. Never say "Building your deck..." without actually invoking generate_pptx in the same response. The user expects a real file, not a description.
+- DOCUMENTS: When asked to create/write/draft a document, report, or PDF — ALWAYS call generate_document or generate_pdf. Never describe writing it without invoking the tool.
+- IMAGES: When asked to create/generate an image, visual, or graphic — ALWAYS call the appropriate image generation tool. Never describe creating it without invoking the tool.
+- GENERAL RULE: If you have a tool that does what the user asked for, CALL IT. Describing the action without calling the tool is a failure mode. The user wants the artifact, not a narration of your intent to create it.`
       };
     }
 
@@ -704,6 +712,28 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 3 });
     }
 
+    // Detect intent that MUST invoke a specific tool — force via tool_choice
+    let toolChoice;
+    const lc = (content || '').toLowerCase();
+    if (/\b(create|make|generate|build|prepare)\b.{0,30}\b(presentation|pptx|deck|slides|ppt)\b/i.test(lc)) {
+      toolChoice = { type: 'tool', name: 'generate_pptx' };
+    } else if (/\b(create|make|generate|write|draft)\b.{0,30}\b(document|docx|word doc)\b/i.test(lc)) {
+      toolChoice = { type: 'tool', name: 'generate_document' };
+    } else if (/\b(create|make|generate|write)\b.{0,30}\b(pdf)\b/i.test(lc)) {
+      toolChoice = { type: 'tool', name: 'generate_pdf' };
+    } else if (/\b(create|make|generate|write)\b.{0,30}\b(spreadsheet|xlsx|excel)\b/i.test(lc)) {
+      toolChoice = { type: 'tool', name: 'generate_spreadsheet' };
+    }
+    if (toolChoice) {
+      const exists = toolSchemas.find(t => t.name === toolChoice.name);
+      if (!exists) {
+        console.error(`[Harness] tool_choice ${toolChoice.name} not in tool registry — clearing`);
+        toolChoice = undefined;
+      } else {
+        console.log(`[Harness] Intent detected -> forcing tool_choice: ${toolChoice.name} for: "${lc.slice(0, 80)}"`);
+      }
+    }
+
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -737,6 +767,201 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
       const tierLabels = { regular: 'Quick response', expert: 'Deep thinking' };
       res.write(`data: ${JSON.stringify({ type: 'tier_switch', tier, label: tierLabels[tier] })}\n\n`);
     }
+
+    // ── Direct PPTX path: bypass reasoning loop entirely ──────────────────────
+    if (toolChoice && toolChoice.name === 'generate_pptx') {
+      console.log('[DirectPPTX] Bypassing reasoning loop — direct content generation + tool execution');
+
+      // 1. Stream an immediate progress indicator
+      res.write(`data: ${JSON.stringify({ type: 'chunk', text: 'Building your presentation...\n\n' })}\n\n`);
+      fullResponse += 'Building your presentation...\n\n';
+
+      // 2. Call Claude (single turn, no tools) to generate slide content as JSON
+      const slideGenPrompt = `You are a presentation content generator. Given the user's request, create structured slide content.
+Return ONLY a valid JSON object with this exact structure:
+{
+  "title": "Presentation Title",
+  "theme": "corporate",
+  "slides": [
+    { "title": "Slide Title", "content": "- Bullet point 1\\n- Bullet point 2\\n- Bullet point 3", "type": "content", "notes": "Speaker notes" }
+  ]
+}
+
+Slide types: "title" (for title/intro slides), "content" (standard), "two-column" (use ||| to separate left and right content), "section-break" (divider slides).
+Generate exactly the number of slides requested, or 8-12 if not specified.
+Content must be substantive and specific -- no generic filler.
+Theme options: "corporate", "dark", "light", "brand". Default to "corporate" unless the user specifies otherwise.`;
+
+      let slideJson = null;
+      let contentGenCost = null;
+      let fallbackToLoop = false;
+
+      try {
+        let rawJsonText = '';
+        await streamChatAnthropic(
+          [
+            { role: 'system', content: slideGenPrompt },
+            { role: 'user', content: content }
+          ],
+          {
+            model: model,
+            maxTokens: 4096,
+            onChunk: (chunk) => { rawJsonText += chunk; },
+          }
+        );
+
+        // Parse JSON from Claude's response (handle markdown code block wrapping)
+        let jsonStr = rawJsonText.trim();
+        const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (codeBlockMatch) {
+          jsonStr = codeBlockMatch[1].trim();
+        }
+        slideJson = JSON.parse(jsonStr);
+
+        // Validate required fields
+        if (!slideJson.title || !Array.isArray(slideJson.slides) || slideJson.slides.length === 0) {
+          throw new Error('Invalid slide JSON structure: missing title or slides');
+        }
+
+        console.log(`[DirectPPTX] Content generated: "${slideJson.title}", ${slideJson.slides.length} slides, theme: ${slideJson.theme || 'corporate'}`);
+      } catch (parseErr) {
+        console.error(`[DirectPPTX] JSON parse/generation failed, falling back to reasoning loop:`, parseErr.message);
+        fallbackToLoop = true;
+      }
+
+      if (!fallbackToLoop) {
+        try {
+          // 3. Call generate_pptx.execute() directly
+          const pptxTool = getTool('generate_pptx');
+          if (!pptxTool) throw new Error('generate_pptx tool not found in registry');
+
+          const toolConfig = {
+            title: slideJson.title,
+            slides: slideJson.slides,
+            theme: slideJson.theme || 'corporate',
+          };
+          const toolContext = {
+            brandId: req.brand_id,
+            userId: req.session?.user?.id,
+            conversationId: convInternalId,
+            sessionId: convInternalId,
+            pool,
+          };
+
+          // Emit tool_start SSE
+          res.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'generate_pptx', detail: `Generating: ${slideJson.title}` })}\n\n`);
+
+          const execResult = await pptxTool.execute(toolConfig, toolContext);
+
+          // Emit tool_done SSE
+          res.write(`data: ${JSON.stringify({ type: 'tool_done', tool: 'generate_pptx', success: !!execResult?.success })}\n\n`);
+
+          if (execResult?.success && execResult?.data?.taskId) {
+            // 4. Emit task_started for frontend polling
+            res.write(`data: ${JSON.stringify({
+              type: 'task_started',
+              taskId: execResult.data.taskId,
+              taskType: execResult.data.taskType || 'pptx_generation',
+              status: execResult.data.status || 'pending',
+            })}\n\n`);
+
+            // 5. Stream slide outline so user knows what's being built
+            const outlineLines = slideJson.slides.map((s, i) => `${i + 1}. **${s.title}** (${s.type || 'content'})`).join('\n');
+            const outlineText = `I'm generating a **${slideJson.slides.length}-slide** presentation: **${slideJson.title}**\n\nSlide outline:\n${outlineLines}\n\nYour presentation is being built and will be ready in a few seconds.`;
+            fullResponse += outlineText;
+            res.write(`data: ${JSON.stringify({ type: 'chunk', text: outlineText })}\n\n`);
+          } else if (execResult?.success && execResult?.data?.url) {
+            // Immediate result (unlikely for PPTX but handle it)
+            res.write(`data: ${JSON.stringify({ type: 'artifact_ready', tool: 'generate_pptx', ...execResult.data })}\n\n`);
+            const readyText = `Your presentation **${slideJson.title}** is ready! [Download here](${execResult.data.url})`;
+            fullResponse += readyText;
+            res.write(`data: ${JSON.stringify({ type: 'chunk', text: readyText })}\n\n`);
+          } else {
+            const failMsg = execResult?.summary || 'Presentation generation failed. Please try again.';
+            fullResponse += failMsg;
+            res.write(`data: ${JSON.stringify({ type: 'chunk', text: failMsg })}\n\n`);
+          }
+
+          // Track cost (content generation call only - tool execution is async)
+          if (contentGenCost) {
+            console.log(`[DirectPPTX] Content gen cost: $${contentGenCost.costUsd?.toFixed(6) || '0.000000'}`);
+          }
+
+          // Create session for cost tracking
+          let chatSession = null;
+          try {
+            const TIER_TO_ENGINE = { regular: 'fast', pro: 'balanced', expert: 'deep' };
+            const engineTier = TIER_TO_ENGINE[tier] || 'balanced';
+            chatSession = await sessionManager.create({
+              brandId: req.brand_id,
+              userId: req.session.user.id,
+              channel: 'web',
+              modelTier: engineTier,
+              systemPrompt: slideGenPrompt.slice(0, 500),
+              dollarCap: 2.00,
+            });
+            if (chatSession) {
+              sessionManager.complete(chatSession.id, `DirectPPTX: 1 turn, 1 tool, content gen`)
+                .catch(err => console.warn('[DirectPPTX] Session complete failed:', err.message));
+            }
+          } catch (sessErr) {
+            console.warn('[DirectPPTX] Session tracking failed:', sessErr.message);
+          }
+
+          // Save assistant message to DB
+          const { rows: assistantMsgRows } = await pool.query(
+            'INSERT INTO messages (conversation_id, role, content, model, tier, stop_reason, completed_at, is_complete) VALUES ($1, $2, $3, $4, $5, $6, NOW(), true) RETURNING *',
+            [convInternalId, 'assistant', fullResponse, model, tier, 'end_turn']
+          );
+
+          // Fetch latest context_summary
+          const { rows: latestConv } = await pool.query(
+            'SELECT context_summary FROM conversations WHERE id = $1', [convInternalId]
+          );
+          const latestSummary = latestConv[0]?.context_summary || null;
+
+          // Send done event
+          res.write(`data: ${JSON.stringify({ type: 'done', message_id: assistantMsgRows[0].id, conversation_id: conversation_id, context_summary: latestSummary })}\n\n`);
+
+          // Capture to memories (fire-and-forget)
+          const brandId = req.brand_id;
+          const msgId = assistantMsgRows[0].id;
+          captureMessage({
+            brand_id: brandId,
+            session_id: String(conversation_id),
+            channel: 'web',
+            direction: 'inbound',
+            content: content || '[Presentation request]',
+            source_ref: `web_in_${conversation_id}_${userMsgRows[0].id}`,
+            user_id: req.session.user.id
+          });
+          captureMessage({
+            brand_id: brandId,
+            session_id: String(conversation_id),
+            channel: 'web',
+            direction: 'outbound',
+            content: fullResponse,
+            source_ref: `web_out_${conversation_id}_${msgId}`,
+            user_id: req.session.user.id
+          });
+
+          // Clean up and return
+          clearInterval(heartbeatInterval);
+          if (!res.writableEnded) res.end();
+          return;
+        } catch (toolErr) {
+          console.error(`[DirectPPTX] Tool execution failed, falling back to reasoning loop:`, toolErr.message);
+          // Reset fullResponse for loop fallback (keep the initial "Building..." message)
+          const errText = '\n\nSwitching to standard generation mode...\n\n';
+          fullResponse += errText;
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text: errText })}\n\n`);
+          // Fall through to reasoning loop below
+        }
+      }
+      // If we reach here, fallback to reasoning loop (toolChoice is still set)
+      console.log('[DirectPPTX] Falling back to reasoning loop');
+    }
+    // ── End direct PPTX path ────────────────────────────────────────────────────
 
     const pendingGenerations = [];
     const TOOL_TIMEOUT_MS = 30000;
@@ -783,11 +1008,10 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
           pendingGenerations.push({ generationId: execResult.data.generationId, agent, prompt: toolInput?.prompt, batchSize });
         }
 
-        // Emit artifact_ready for generation tools (legacy path)
+        // Vault capture for generation tools (SSE emission removed — onEvent handler emits these)
         const ARTIFACT_TOOLS = ['generate_pdf','generate_pptx','generate_chart','generate_document','generate_spreadsheet'];
         if (ARTIFACT_TOOLS.includes(toolName) && execResult?.success && execResult?.data?.url) {
-          res.write(`data: ${JSON.stringify({ type: 'artifact_ready', tool: toolName, ...execResult.data })}\n\n`);
-          // Auto-capture artifact to vault
+          // Auto-capture artifact to vault (keep this, but don't emit SSE — onEvent handles it)
           pool.query(
             `INSERT INTO vault_items (brand_id, user_id, filename, file_url, file_type, source, source_ref, metadata)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -797,12 +1021,13 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
              JSON.stringify(execResult.data)]
           ).catch(err => console.warn('[Vault] Artifact capture failed:', err.message));
         }
-        // Emit task_started for background tasks (legacy path)
-        if (['start_background_task', 'generate_pptx'].includes(toolName) && execResult?.success && execResult?.data?.taskId) {
-          res.write(`data: ${JSON.stringify({ type: 'task_started', ...execResult.data })}\n\n`);
-        }
 
-        return execResult?.summary || JSON.stringify(execResult?.data || execResult);
+        // Always prefer human-readable summary; never leak raw JSON to the LLM
+        if (execResult?.summary) return execResult.summary;
+        const data = execResult?.data || execResult;
+        if (data?.taskId) return `Task queued (ID: ${data.taskId}). The user can see a live progress card — do not repeat status details.`;
+        if (data?.url) return `File ready: ${data.url}`;
+        return typeof data === 'string' ? data : JSON.stringify(data);
       } catch (err) {
         toolFailureCounts[toolName] = (toolFailureCounts[toolName] || 0) + 1;
         console.error(`[Chat] Tool ${toolName} failed (${toolFailureCounts[toolName]}/${MAX_TOOL_FAILURES}):`, err.message);
@@ -871,6 +1096,7 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         brandId: req.brand_id,
         modelTier: engineTier,
         tools: toolSchemas,
+        toolChoice,
         systemPrompt: systemPromptText,
         dollarCap: chatSession ? 2.00 : undefined,
         messages: loopMessages,
@@ -1161,6 +1387,7 @@ router.get('/api/tasks/active/:conversationId', async (req, res) => {
     );
     for (const row of rows) {
       if (typeof row.progress === 'string') { try { row.progress = JSON.parse(row.progress); } catch (_) {} }
+      if (typeof row.result === 'string') { try { row.result = JSON.parse(row.result); } catch (_) {} }
     }
     res.json(rows);
   } catch (err) {
@@ -1179,6 +1406,7 @@ router.get('/api/tasks/:taskId/status', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Task not found' });
     const row = rows[0];
     if (typeof row.progress === 'string') { try { row.progress = JSON.parse(row.progress); } catch (_) {} }
+    if (typeof row.result === 'string') { try { row.result = JSON.parse(row.result); } catch (_) {} }
     res.json(row);
   } catch (err) {
     console.error('GET /api/tasks/:taskId/status error:', err);

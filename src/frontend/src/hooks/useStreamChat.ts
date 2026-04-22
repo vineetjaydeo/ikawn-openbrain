@@ -120,6 +120,12 @@ export function useStreamChat() {
               } else if (parsed.type === 'text' || parsed.content) {
                 fullContent += parsed.content ?? parsed.text ?? '';
                 updateStreamingMessage(fullContent);
+              } else if (parsed.type === 'artifact_ready' && (parsed as any).url) {
+                const artifact = parsed as any;
+                const label = artifact.filename || artifact.tool || 'Download';
+                const downloadLine = `\n\n[${label}](${artifact.url})`;
+                fullContent += downloadLine;
+                updateStreamingMessage(fullContent);
               } else if (parsed.type === 'task_started' && parsed.taskId) {
                 const { addActiveTask } = useChatStore.getState();
                 addActiveTask({

@@ -965,7 +965,7 @@ function chatPage(user, isDirectChat = false) {
 
     /* ==================== NEW UI: TOOL INDICATOR (Claude-style) ==================== */
     .tool-indicator {
-      margin: 8px 0 8px 40px; max-width: 420px;
+      margin: 8px 0 8px 0;
     }
     .tool-indicator-current {
       display: flex; align-items: center; gap: 8px; padding: 8px 12px;

@@ -918,19 +918,20 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
         sessionManager.fail(chatSession.id, loopErr.message).catch(() => {});
       }
 
-      // Gemini fallback if no text streamed yet
+      // Claude fallback if no text streamed yet
       if (!fullResponse.trim()) {
-        console.log('[chat] Attempting Gemini fallback...');
+        console.log('[chat] Attempting Claude fallback (simple stream)...');
         try {
-          await streamChat(openaiMessages, {
-            model: 'gemini-2.5-flash',
+          await streamChatAnthropic(openaiMessages, {
+            model: 'claude-sonnet-4-6',
+            maxTokens: 4096,
             onChunk: (chunk) => {
               fullResponse += chunk;
               res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk })}\n\n`);
             }
           });
         } catch (fallbackErr) {
-          console.error('[chat] Gemini fallback also failed:', fallbackErr.message);
+          console.error('[chat] Claude fallback also failed:', fallbackErr.message);
           const errMsg = '\n\n*[An error occurred while processing. Please try again.]*';
           fullResponse += errMsg;
           res.write(`data: ${JSON.stringify({ type: 'chunk', text: errMsg })}\n\n`);
@@ -993,14 +994,14 @@ For these topics: valuation, revenue, funding, customer count, team size, team r
     // Auto-generate title for first user message
     if (isFirstUserMessage) {
       try {
-        const titleResult = await chatCompletion(
+        const titleResult = await streamChatAnthropic(
           [
             { role: 'user', content: `Generate a 3-5 word title for this conversation. Respond with only the title, no quotes or punctuation.\n\nUser message: ${content || '[User shared an image]'}` }
           ],
-          { model: 'gemini-2.5-flash' }
+          { model: 'claude-haiku-4-5-20251001', maxTokens: 50 }
         );
 
-        const title = (titleResult.content || titleResult).toString().trim().slice(0, 100);
+        const title = (titleResult.text || '').trim().slice(0, 100);
         const hashtags = (title.match(/#\w+/g) || []).map(t => t.toLowerCase());
 
         await pool.query(
@@ -1151,12 +1152,16 @@ router.get('/api/tasks/active/:conversationId', async (req, res) => {
     );
     if (!convRows.length) return res.json([]);
     const { rows } = await pool.query(
-      `SELECT id, task_type, status, progress, task_description, created_at
+      `SELECT id, task_type, status, progress, result, error_message, task_description, created_at
        FROM ob_background_tasks
-       WHERE conversation_id = $1 AND brand_id = $2 AND status IN ('pending', 'running')
-       ORDER BY created_at DESC LIMIT 5`,
+       WHERE conversation_id = $1 AND brand_id = $2
+         AND (status IN ('pending', 'running') OR (status IN ('completed', 'failed') AND completed_at > NOW() - INTERVAL '30 days'))
+       ORDER BY created_at DESC LIMIT 10`,
       [convRows[0].id, req.brand_id]
     );
+    for (const row of rows) {
+      if (typeof row.progress === 'string') { try { row.progress = JSON.parse(row.progress); } catch (_) {} }
+    }
     res.json(rows);
   } catch (err) {
     console.error('GET /api/tasks/active error:', err);
@@ -1172,7 +1177,9 @@ router.get('/api/tasks/:taskId/status', async (req, res) => {
       [req.params.taskId, req.brand_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Task not found' });
-    res.json(rows[0]);
+    const row = rows[0];
+    if (typeof row.progress === 'string') { try { row.progress = JSON.parse(row.progress); } catch (_) {} }
+    res.json(row);
   } catch (err) {
     console.error('GET /api/tasks/:taskId/status error:', err);
     res.status(500).json({ error: 'Internal server error' });

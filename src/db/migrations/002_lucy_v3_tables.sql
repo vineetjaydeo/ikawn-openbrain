@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS cost_events (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   brand_id        TEXT NOT NULL,
   session_id      UUID REFERENCES sessions(id),
-  execution_id    UUID REFERENCES task_executions(id),
+  execution_id    UUID,  -- correlation ID, no FK (reasoning loop uses random UUIDs)
   event_type      TEXT CHECK (event_type IN ('llm_call','tool_call','embedding','external_api')),
   model           TEXT,
   tokens_in       INTEGER DEFAULT 0,

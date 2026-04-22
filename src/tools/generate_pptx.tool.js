@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { uploadToR2 } = require('../utils/storage');
 const { pool } = require('../db');
 const { captureMessage } = require('../utils/capture');
+const { sendTelegramMessage } = require('../utils/telegram');
 
 // ── Concurrency gate: max 2 concurrent PPTX builds per process ───────────────
 function createLimit(concurrency) {
@@ -425,7 +426,7 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
       // Progress updates every 5 slides
       if (i % 5 === 0) {
         pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
-          [JSON.stringify({ current_slide: i, total_slides: slides.length, phase: 'building' }), taskId]).catch(() => {});
+          [JSON.stringify({ step: `Building slide ${i + 1}/${slides.length}`, pct: Math.round((i / slides.length) * 80) }), taskId]).catch(() => {});
       }
     }
 
@@ -439,7 +440,7 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
 
     // Update progress: uploading
     await pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
-      [JSON.stringify({ current_slide: slides.length, total_slides: slides.length, phase: 'uploading' }), taskId]);
+      [JSON.stringify({ step: 'Uploading presentation...', pct: 90 }), taskId]);
 
     // Upload to R2 with one retry
     let url;
@@ -483,8 +484,17 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
     // Mark task complete
     await pool.query(
       'UPDATE ob_background_tasks SET status = $1, result = $2, completed_at = NOW(), last_heartbeat_at = NOW() WHERE id = $3',
-      ['completed', JSON.stringify({ url, filename, slideCount: slides.length }), taskId]
+      ['completed', JSON.stringify({
+        summary: `Presentation "${config.title}" generated (${slides.length} slides)`,
+        artifacts: [{ type: 'presentation', url, filename }],
+        slideCount: slides.length
+      }), taskId]
     );
+
+    // Telegram notification (fire-and-forget)
+    sendTelegramMessage(
+      `<b>Task Complete</b>: Presentation "${config.title}" (${slides.length} slides)\n<a href="${url}">Download</a>`
+    ).catch(() => {});
   } catch (err) {
     console.error(`[generate_pptx] Background task ${taskId} failed:`, err);
     await pool.query(
@@ -497,6 +507,11 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
         [`Failed to generate presentation: ${err.message}`, JSON.stringify({ type: 'artifact_failed', error: err.message, taskId }), placeholderMessageId]
       ).catch(() => {});
     }
+
+    // Telegram failure notification (fire-and-forget)
+    sendTelegramMessage(
+      `<b>Task Failed</b>: Presentation "${config.title}"\nError: ${err.message}`
+    ).catch(() => {});
   } finally {
     clearInterval(hb);
   }
@@ -623,7 +638,7 @@ module.exports = {
       // Return immediately
       return {
         success: true,
-        data: { taskId, status: 'pending', taskType: 'pptx_generation' },
+        data: { taskId, status: 'pending', taskType: 'pptx_generation', description: `Generating presentation: ${config.title}` },
         summary: `Presentation "${config.title}" is being generated in the background. You will be notified when it is ready.`
       };
     } catch (err) {

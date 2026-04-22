@@ -3961,7 +3961,31 @@ function chatPage(user, isDirectChat = false) {
         var tasks = await res.json();
         for (var i = 0; i < tasks.length; i++) {
           var t = tasks[i];
-          if (!document.getElementById('task-card-' + t.id)) {
+          if (t.status === 'completed' && t.result) {
+            // Render artifact cards for completed tasks
+            if (t.result.artifacts && t.result.artifacts.length) {
+              for (var j = 0; j < t.result.artifacts.length; j++) {
+                var a = t.result.artifacts[j];
+                renderArtifactCard({ tool: 'generate_' + (a.type || 'document'), url: a.url, filename: a.filename, size: a.size, slideCount: a.slideCount });
+              }
+            } else if (t.result.url) {
+              // Flat result format (legacy tasks)
+              var ext = (t.result.filename || '').split('.').pop() || 'document';
+              renderArtifactCard({ tool: 'generate_' + ext, url: t.result.url, filename: t.result.filename, slideCount: t.result.slideCount });
+            }
+          } else if (t.status === 'failed') {
+            // Show static failed task card
+            if (!document.getElementById('task-card-' + t.id)) {
+              showBackgroundTaskCard(t.id, t.task_type, t.task_description || 'Background task');
+              var statusEl = document.getElementById('task-status-' + t.id);
+              var loaderEl = document.getElementById('task-loader-' + t.id);
+              var stepEl = document.getElementById('task-step-' + t.id);
+              if (statusEl) { statusEl.textContent = 'Failed'; statusEl.style.color = 'var(--danger, #ef4444)'; }
+              if (loaderEl) loaderEl.style.display = 'none';
+              if (stepEl) stepEl.textContent = t.error_message || 'Task failed';
+            }
+          } else if (!document.getElementById('task-card-' + t.id)) {
+            // Still in progress — show card with poller
             showBackgroundTaskCard(t.id, t.task_type, t.task_description || 'Background task');
           }
         }
@@ -4003,10 +4027,14 @@ function chatPage(user, isDirectChat = false) {
             if (statusEl) { statusEl.textContent = 'Complete'; statusEl.style.color = 'var(--success, #22c55e)'; }
             if (barEl) barEl.style.width = '100%';
             if (stepEl) stepEl.textContent = data.result?.summary || 'Task completed';
-            if (data.result?.artifacts) {
+            if (data.result?.artifacts && data.result.artifacts.length) {
               data.result.artifacts.forEach(function(a) {
                 renderArtifactCard({ tool: 'generate_' + (a.type || 'document'), url: a.url, filename: a.filename, size: a.size });
               });
+            } else if (data.result?.url) {
+              // Flat result format (legacy tasks)
+              var ext = (data.result.filename || '').split('.').pop() || 'document';
+              renderArtifactCard({ tool: 'generate_' + ext, url: data.result.url, filename: data.result.filename, slideCount: data.result.slideCount });
             }
             var card = document.getElementById('task-card-' + taskId);
             if (card) {

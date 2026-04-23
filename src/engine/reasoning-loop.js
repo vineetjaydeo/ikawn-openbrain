@@ -401,7 +401,7 @@ async function executeReasoningLoop({
             if (ARTIFACT_TOOLS.includes(block.name) && typeof envelope.data !== 'string') {
               artifactData = envelope.data;
             }
-            if (block.name === 'start_background_task' && typeof envelope.data !== 'string') {
+            if (envelope.data?.taskId && typeof envelope.data !== 'string') {
               taskData = envelope.data;
             }
             toolCallCount++;

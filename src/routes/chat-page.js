@@ -2649,6 +2649,10 @@ function chatPage(user, isDirectChat = false) {
       setGreeting();
       currentShareToken = null;
       updateShareUI();
+      // Clean up leaked state from previous conversation
+      resetToolStack();
+      Object.keys(activeTaskPollers).forEach(function(id) { clearInterval(activeTaskPollers[id]); delete activeTaskPollers[id]; });
+      Object.keys(activeGenPollers).forEach(function(id) { clearTimeout(activeGenPollers[id]); delete activeGenPollers[id]; });
     }
 
     function renderContextCard(summary) {
@@ -3103,7 +3107,7 @@ function chatPage(user, isDirectChat = false) {
               const evt = JSON.parse(data);
               if (evt.type === 'agent_identity') {
                 const typing = document.getElementById('typing');
-                if (typing) {
+                if (typing && evt.name) {
                   const av = typing.querySelector('.assistant-avatar');
                   if (av) av.textContent = evt.name[0].toUpperCase();
                   const label = typing.querySelector('.typing-label');
@@ -3182,7 +3186,7 @@ function chatPage(user, isDirectChat = false) {
                 }
               } else if (evt.type === 'artifact_ready') {
                 renderArtifactCard(evt);
-              } else if (evt.type === 'task_started') {
+              } else if (evt.type === 'task_started' && evt.taskId) {
                 // Clear streaming bubble text so only the task card shows
                 if (bubble) { bubble.textContent = ''; fullText = ''; }
                 if (assistantRow && !assistantRow.querySelector('.msg-bubble')?.textContent?.trim()) {
@@ -3240,7 +3244,7 @@ function chatPage(user, isDirectChat = false) {
                 const tierDiv = document.createElement('div');
                 tierDiv.className = 'tier-divider tier-' + evt.tier;
                 tierDiv.textContent = evt.label || evt.tier;
-                document.getElementById('messages').appendChild(tierDiv);
+                (document.getElementById('messages-inner') || document.getElementById('messages')).appendChild(tierDiv);
                 scrollToBottom(false);
               } else if (evt.type === 'done') {
                 receivedDone = true;
@@ -3248,7 +3252,7 @@ function chatPage(user, isDirectChat = false) {
               } else if (evt.type === 'error') {
                 showToast(evt.error || evt.message || 'An error occurred', 'error');
               }
-            } catch {}
+            } catch (parseErr) { console.warn('[SSE] Event handler error:', parseErr); }
           }
         }
 
@@ -3293,7 +3297,10 @@ function chatPage(user, isDirectChat = false) {
     }
 
     /* ==================== GENERATION CARD ==================== */
+    var activeGenPollers = {};
+
     function showGenerationCard(generationId, agent, prompt, batchSize) {
+      if (!generationId) return;
       const container = document.getElementById('messages-inner');
       if (!container) return;
 
@@ -3353,18 +3360,26 @@ function chatPage(user, isDirectChat = false) {
       const maxAttempts = 60;
       let attempts = 0;
 
+      function scheduleNext(delay) {
+        activeGenPollers[generationId] = setTimeout(poll, delay);
+      }
+      function cleanup() {
+        delete activeGenPollers[generationId];
+      }
+
       const poll = async () => {
         attempts++;
         if (attempts > maxAttempts) {
           updateGenCard(cardId, 'error', null, 'Generation timed out');
+          cleanup();
           return;
         }
 
         try {
           const res = await fetch('/api/actions/status/' + generationId);
           if (!res.ok) {
-            if (attempts > 5) { updateGenCard(cardId, 'error', null, 'Failed to check status'); return; }
-            setTimeout(poll, 3000);
+            if (attempts > 5) { updateGenCard(cardId, 'error', null, 'Failed to check status'); cleanup(); return; }
+            scheduleNext(3000);
             return;
           }
 
@@ -3372,7 +3387,7 @@ function chatPage(user, isDirectChat = false) {
           const imageUrls = data.resultUrls || data.urls || [];
           if ((data.status === 'complete' || data.status === 'completed') && imageUrls.length > 0) {
             updateGenCard(cardId, 'completed', imageUrls, null, generationId);
-            // Persist generation results so they survive page reload
+            cleanup();
             if (activeConvId) {
               fetch('/api/conversations/' + activeConvId + '/generation', {
                 method: 'POST',
@@ -3382,16 +3397,17 @@ function chatPage(user, isDirectChat = false) {
             }
           } else if (data.status === 'failed' || data.status === 'error') {
             updateGenCard(cardId, 'error', null, data.error || 'Generation failed');
+            cleanup();
           } else {
-            setTimeout(poll, 2000);
+            scheduleNext(2000);
           }
         } catch (err) {
-          if (attempts > 5) { updateGenCard(cardId, 'error', null, 'Connection lost'); return; }
-          setTimeout(poll, 3000);
+          if (attempts > 5) { updateGenCard(cardId, 'error', null, 'Connection lost'); cleanup(); return; }
+          scheduleNext(3000);
         }
       };
 
-      setTimeout(poll, 3000);
+      scheduleNext(3000);
     }
 
     function updateGenCard(cardId, status, urls, errorMsg, generationId) {
@@ -3666,6 +3682,7 @@ function chatPage(user, isDirectChat = false) {
       var toolTypeMap = {
         generate_pdf: 'pdf', generate_pptx: 'pptx', generate_presentation: 'pptx',
         generate_document: 'docx', generate_spreadsheet: 'xlsx', generate_chart: 'chart',
+        generate_html: 'html',
       };
       var fileType = toolTypeMap[evt.tool] || (evt.filename || '').split('.').pop().toLowerCase() || 'file';
       var isChart = evt.tool === 'generate_chart';
@@ -3701,16 +3718,20 @@ function chatPage(user, isDirectChat = false) {
       if (evt.slideCount) metaParts.push(evt.slideCount + ' slides');
       if (evt.sheetCount) metaParts.push(evt.sheetCount + ' sheets');
       if (evt.totalRows) metaParts.push(evt.totalRows + ' rows');
-      if (evt.chartType) metaParts.push(evt.chartType + ' chart');
+      if (evt.chartType || evt.type) metaParts.push((evt.chartType || evt.type) + ' chart');
       meta.textContent = metaParts.join(' / ') || fileType.toUpperCase() + ' document';
       info.appendChild(nameEl);
       info.appendChild(meta);
 
       var dl = document.createElement('a');
       dl.className = 'artifact-card-download';
-      dl.href = evt.url;
-      dl.download = evt.filename || '';
-      dl.target = '_blank';
+      if (evt.url) {
+        dl.href = evt.url;
+        dl.download = evt.filename || '';
+        dl.target = '_blank';
+      } else {
+        dl.style.display = 'none';
+      }
       dl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 
       ac.appendChild(icon);
@@ -3889,6 +3910,7 @@ function chatPage(user, isDirectChat = false) {
     }
 
     function resetToolStack() {
+      if (toolIndicatorEl && toolIndicatorEl.parentNode) toolIndicatorEl.remove();
       toolIndicatorEl = null;
       toolLogEntries = [];
       toolActiveCount = 0;

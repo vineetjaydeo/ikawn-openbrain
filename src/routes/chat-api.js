@@ -876,10 +876,11 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
           if (event.taskData?.taskId) {
             res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: event.taskData.taskId, taskType: event.taskData.taskType, description: event.taskData.description, status: event.taskData.status })}\n\n`);
           }
-          // Send generation_started events after tool results
+          // Send generation_started events after tool results, then clear to prevent duplicates
           for (const gen of pendingGenerations) {
             res.write(`data: ${JSON.stringify({ type: 'generation_started', generationId: gen.generationId, agent: gen.agent, prompt: gen.prompt, batchSize: gen.batchSize })}\n\n`);
           }
+          pendingGenerations.length = 0;
           break;
       }
     };

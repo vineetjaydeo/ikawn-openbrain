@@ -168,7 +168,10 @@ async function executeReasoningLoop({
   const assistantTurnTexts = [];
 
   // Max output token escalation (LCC pattern)
-  let currentMaxTokens = 2048;
+  // Generation tools (HTML, PDF, DOCX, spreadsheet, PPTX) produce large output — start higher
+  const GENERATION_TOOLS = ['generate_html', 'generate_pdf', 'generate_document', 'generate_spreadsheet', 'generate_pptx'];
+  const isGenerationForced = toolChoice?.type === 'tool' && GENERATION_TOOLS.includes(toolChoice.name);
+  let currentMaxTokens = isGenerationForced ? 16384 : 2048;
   let maxTokenRetries = 0;
 
   // Cross-session continuity (best-effort, once at start)
@@ -281,10 +284,18 @@ async function executeReasoningLoop({
 
     // ── Max output token escalation (LCC pattern) ──
     // If Claude was truncated, retry with doubled maxTokens (up to 64k, max 2 retries)
-    if (stopReason === 'max_tokens' && toolUseBlocks.length === 0 && maxTokenRetries < 2) {
-      currentMaxTokens = Math.min(currentMaxTokens * 2, 65536);
+    // Also escalate when a tool call was truncated mid-JSON (toolUseBlocks exist but stop_reason is max_tokens)
+    if (stopReason === 'max_tokens' && maxTokenRetries < 2) {
+      // Check if a generation tool is being attempted (forced or voluntary)
+      const hasGenerationTool = toolUseBlocks.some(b => GENERATION_TOOLS.includes(b.name));
+      // Aggressive escalation for generation tools: jump straight to 16384, then 65536
+      if (hasGenerationTool && currentMaxTokens < 16384) {
+        currentMaxTokens = 16384;
+      } else {
+        currentMaxTokens = Math.min(currentMaxTokens * 2, 65536);
+      }
       maxTokenRetries++;
-      console.log(`[ReasoningLoop] max_tokens hit — escalating to ${currentMaxTokens} (retry ${maxTokenRetries}/2)`);
+      console.log(`[ReasoningLoop] max_tokens hit — escalating to ${currentMaxTokens} (retry ${maxTokenRetries}/2)${hasGenerationTool ? ' [generation tool detected]' : ''}`);
       // Don't increment i — retry this turn with more room
       i--;
       continue;

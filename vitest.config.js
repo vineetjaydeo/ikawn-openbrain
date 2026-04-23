@@ -6,5 +6,7 @@ export default defineConfig({
     setupFiles: ['./tests/helpers/setup.js'],
     testTimeout: 10000,
     hookTimeout: 10000,
+    include: ['tests/**/*.test.{js,ts}'],
+    exclude: ['references/**', 'node_modules/**'],
   },
 });

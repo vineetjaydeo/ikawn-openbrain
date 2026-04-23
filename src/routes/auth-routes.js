@@ -18,8 +18,9 @@ function getResend() {
 router.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !email.endsWith('@ikawn.com')) {
-      return res.status(403).json({ error: 'Only @ikawn.com emails allowed' });
+    const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS || '@ikawn.com').split(',');
+    if (!email || !allowedDomains.some(d => email.endsWith(d.trim()))) {
+      return res.status(403).json({ error: 'Email domain not allowed' });
     }
     if (!password) {
       return res.status(400).json({ error: 'Password required' });

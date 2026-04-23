@@ -1109,20 +1109,38 @@ function chatPage(user, isDirectChat = false) {
     }
     .task-card-sticky-wrap > * { pointer-events: auto; }
     .task-card {
-      background: rgba(20,20,30,0.92); border: 1px solid rgba(255,192,28,0.25);
-      border-radius: 12px; padding: 12px 16px; margin: 0 auto;
+      background: rgba(20,20,30,0.95); border: 1px solid rgba(255,192,28,0.25);
+      border-radius: 12px; padding: 14px 16px; margin: 0 auto;
       max-width: 768px; backdrop-filter: blur(12px);
       animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
-    .task-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .task-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .task-card-pulse {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+      animation: taskPulse 1.5s ease-in-out infinite; flex-shrink: 0;
+    }
+    .task-card-pulse.done { animation: none; background: var(--success, #22c55e); }
+    .task-card-pulse.failed { animation: none; background: var(--danger, #ef4444); }
+    @keyframes taskPulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255,192,28,0.4); }
+      50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(255,192,28,0); }
+    }
     .task-card-title { font-size: 0.82rem; font-weight: 500; color: var(--text); flex: 1; font-family: 'Google Sans', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-card-elapsed { font-size: 0.68rem; color: var(--text-muted); font-family: 'Google Sans', sans-serif; flex-shrink: 0; font-variant-numeric: tabular-nums; }
     .task-card-status { font-size: 0.68rem; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
-    .task-card-progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .task-card-progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; position: relative; }
     .task-card-progress-bar {
       height: 100%; background: linear-gradient(90deg, var(--accent), #F59E0B); border-radius: 2px;
       transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); width: 0%;
     }
-    .task-card-step { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
+    .task-card-progress-bar.indeterminate {
+      width: 30% !important; animation: indeterminateSlide 1.5s ease-in-out infinite;
+    }
+    @keyframes indeterminateSlide {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+    .task-card-step { font-size: 0.75rem; color: var(--text-dim); margin-top: 6px; font-family: 'Google Sans', sans-serif; }
     .task-card-artifacts { margin-top: 8px; }
     .task-card-dismiss {
       font-size: 0.72rem; color: var(--text-muted); cursor: pointer;
@@ -2375,6 +2393,7 @@ function chatPage(user, isDirectChat = false) {
       saveDraftLocal(); // save current conv draft before switching
       activeConvId = null;
       clearMessages();
+      document.getElementById('header-title').textContent = '';
       history.pushState(null, '', '/');
       renderConversationList();
       closeSidebar();
@@ -2578,6 +2597,7 @@ function chatPage(user, isDirectChat = false) {
         if (activeConvId === id) {
           activeConvId = null;
           clearMessages();
+          document.getElementById('header-title').textContent = '';
           history.pushState(null, '', '/');
         }
         await loadConversations();
@@ -3942,20 +3962,38 @@ function chatPage(user, isDirectChat = false) {
 
       var header = document.createElement('div');
       header.className = 'task-card-header';
+      var pulse = document.createElement('div');
+      pulse.className = 'task-card-pulse';
+      pulse.id = 'task-pulse-' + taskId;
       var title = document.createElement('div');
       title.className = 'task-card-title';
       title.textContent = description || ('Background ' + (taskType || 'task').replace(/_/g, ' '));
+      var elapsed = document.createElement('div');
+      elapsed.className = 'task-card-elapsed';
+      elapsed.id = 'task-elapsed-' + taskId;
+      elapsed.textContent = '0s';
       var status = document.createElement('div');
       status.className = 'task-card-status';
       status.id = 'task-status-' + taskId;
       status.textContent = 'In progress';
+      header.appendChild(pulse);
       header.appendChild(title);
+      header.appendChild(elapsed);
       header.appendChild(status);
+
+      // Elapsed timer
+      var taskStart = Date.now();
+      var elapsedTimer = setInterval(function() {
+        var secs = Math.floor((Date.now() - taskStart) / 1000);
+        var el = document.getElementById('task-elapsed-' + taskId);
+        if (el) el.textContent = secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's';
+      }, 1000);
+      card.dataset.elapsedTimer = elapsedTimer;
 
       var progress = document.createElement('div');
       progress.className = 'task-card-progress';
       var bar = document.createElement('div');
-      bar.className = 'task-card-progress-bar';
+      bar.className = 'task-card-progress-bar indeterminate';
       bar.id = 'task-bar-' + taskId;
       progress.appendChild(bar);
 
@@ -4066,18 +4104,27 @@ function chatPage(user, isDirectChat = false) {
                 stepText = data.progress.phase.charAt(0).toUpperCase() + data.progress.phase.slice(1) + '...';
               }
             }
-            if (barEl && pct) barEl.style.width = pct + '%';
+            if (barEl && pct) {
+              barEl.classList.remove('indeterminate');
+              barEl.style.width = pct + '%';
+            }
             if (stepEl && stepText) stepEl.textContent = stepText;
-            // Update blob label too
-            var blobLabel = document.querySelector('#task-loader-' + taskId + ' .blob-label');
-            if (blobLabel && stepText) blobLabel.textContent = stepText;
+          }
+
+          // Helper: stop elapsed timer and update pulse dot
+          function finalizeCard(state) {
+            var card = document.getElementById('task-card-' + taskId);
+            if (card && card.dataset.elapsedTimer) { clearInterval(Number(card.dataset.elapsedTimer)); }
+            var pulseEl = document.getElementById('task-pulse-' + taskId);
+            if (pulseEl) pulseEl.className = 'task-card-pulse ' + state;
           }
 
           if (data.status === 'completed') {
             clearInterval(activeTaskPollers[taskId]);
             delete activeTaskPollers[taskId];
+            finalizeCard('done');
             if (statusEl) { statusEl.textContent = 'Complete'; statusEl.style.color = 'var(--success, #22c55e)'; }
-            if (barEl) barEl.style.width = '100%';
+            if (barEl) { barEl.classList.remove('indeterminate'); barEl.style.width = '100%'; }
             if (stepEl) stepEl.textContent = data.result?.summary || 'Task completed';
             // Render artifact cards INSIDE the task card's artifacts area (not at bottom of page)
             var artifactsContainer = document.getElementById('task-artifacts-' + taskId);
@@ -4106,7 +4153,9 @@ function chatPage(user, isDirectChat = false) {
           } else if (data.status === 'failed') {
             clearInterval(activeTaskPollers[taskId]);
             delete activeTaskPollers[taskId];
+            finalizeCard('failed');
             if (statusEl) { statusEl.textContent = 'Failed'; statusEl.style.color = 'var(--danger, #ef4444)'; }
+            if (barEl) { barEl.classList.remove('indeterminate'); barEl.style.width = '0%'; barEl.style.background = 'var(--danger, #ef4444)'; }
             if (stepEl) stepEl.textContent = data.error_message || 'Task failed';
           }
         } catch(e) {}

@@ -100,8 +100,9 @@ router.get('/admin/api/users', async (req, res) => {
 router.post('/admin/api/users', async (req, res) => {
   try {
     const { email, name, role, password } = req.body;
-    if (!email || !email.endsWith('@ikawn.com')) {
-      return res.status(400).json({ error: 'Email must be @ikawn.com' });
+    const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS || '@ikawn.com').split(',');
+    if (!email || !allowedDomains.some(d => email.endsWith(d.trim()))) {
+      return res.status(400).json({ error: 'Email domain not allowed' });
     }
     if (!password || password.length < 6) {
       return res.status(400).json({ error: 'Password required (min 6 characters)' });

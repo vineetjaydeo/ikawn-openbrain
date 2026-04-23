@@ -37,8 +37,8 @@ const THEMES = {
     subtle: '6B7280',
     divider: 'E5E7EB',
     slideNum: '9CA3AF',
-    headingFont: 'Arial',
-    bodyFont: 'Arial',
+    headingFont: 'Calibri',
+    bodyFont: 'Calibri',
     logo: null,
   },
   dark: {
@@ -49,8 +49,8 @@ const THEMES = {
     subtle: '9CA3AF',
     divider: '1E2747',
     slideNum: '6B7280',
-    headingFont: 'Arial',
-    bodyFont: 'Arial',
+    headingFont: 'Calibri',
+    bodyFont: 'Calibri',
     logo: null,
   },
   light: {
@@ -61,8 +61,8 @@ const THEMES = {
     subtle: '9CA3AF',
     divider: 'E5E7EB',
     slideNum: '9CA3AF',
-    headingFont: 'Arial',
-    bodyFont: 'Arial',
+    headingFont: 'Calibri',
+    bodyFont: 'Calibri',
     logo: null,
   },
 };
@@ -190,6 +190,25 @@ function defineSlideMasters(pptx, theme) {
  * Parse content string into structured text segments.
  * Lines starting with "- " become bullet points; everything else is body text.
  */
+/**
+ * Strip markdown syntax from text, returning clean plain text.
+ */
+function stripMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')     // **bold**
+    .replace(/\*(.+?)\*/g, '$1')          // *italic*
+    .replace(/__(.+?)__/g, '$1')          // __bold__
+    .replace(/_(.+?)_/g, '$1')            // _italic_
+    .replace(/`(.+?)`/g, '$1')            // `code`
+    .replace(/^#{1,6}\s+/gm, '')          // ## headings
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [links](url)
+    .replace(/^>\s?/gm, '')               // > blockquotes
+    .replace(/^\d+\.\s+/gm, '')           // 1. numbered lists (prefix only)
+    .replace(/^---+$/gm, '')              // horizontal rules
+    .trim();
+}
+
 function parseContent(content) {
   if (!content) return [];
   const lines = content.split('\n').filter(l => l.trim());
@@ -197,12 +216,17 @@ function parseContent(content) {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.startsWith('- ')) {
-      segments.push({ type: 'bullet', text: trimmed.slice(2).trim() });
-    } else if (trimmed.startsWith('* ')) {
-      segments.push({ type: 'bullet', text: trimmed.slice(2).trim() });
+    // Skip horizontal rules and empty markdown artifacts
+    if (/^---+$/.test(trimmed) || /^#{1,6}\s*$/.test(trimmed)) continue;
+    // Heading lines become body text (stripped)
+    if (/^#{1,6}\s+/.test(trimmed)) {
+      segments.push({ type: 'body', text: stripMarkdown(trimmed) });
+    } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      segments.push({ type: 'bullet', text: stripMarkdown(trimmed.replace(/^[-*]\s+/, '')) });
+    } else if (/^\d+\.\s+/.test(trimmed)) {
+      segments.push({ type: 'bullet', text: stripMarkdown(trimmed.replace(/^\d+\.\s+/, '')) });
     } else {
-      segments.push({ type: 'body', text: trimmed });
+      segments.push({ type: 'body', text: stripMarkdown(trimmed) });
     }
   }
 
@@ -291,7 +315,7 @@ function addTitleSlide(pptx, title, subtitle, theme, slideNum, totalSlides, icon
   const titleY = iconName ? 1.6 : 1.4;
 
   // Main title -- centered vertically, slightly above center
-  slide.addText(title || '', {
+  slide.addText(stripMarkdown(title) || '', {
     x: MARGIN,
     y: titleY,
     w: CONTENT_W,
@@ -306,7 +330,7 @@ function addTitleSlide(pptx, title, subtitle, theme, slideNum, totalSlides, icon
 
   // Subtitle
   if (subtitle) {
-    slide.addText(subtitle, {
+    slide.addText(stripMarkdown(subtitle), {
       x: MARGIN + 1.5,
       y: titleY + 1.4,
       w: CONTENT_W - 3,
@@ -341,7 +365,7 @@ function addContentSlide(pptx, slideData, theme, slideNum, totalSlides) {
   if (slideData.title) {
     titleXOffset = addIconToSlide(slide, slideData.icon, theme, MARGIN, MARGIN + 0.05);
 
-    slide.addText(slideData.title, {
+    slide.addText(stripMarkdown(slideData.title), {
       x: MARGIN + titleXOffset,
       y: MARGIN,
       w: CONTENT_W - titleXOffset,
@@ -395,7 +419,7 @@ function addTwoColumnSlide(pptx, slideData, theme, slideNum, totalSlides) {
   if (slideData.title) {
     titleXOffset = addIconToSlide(slide, slideData.icon, theme, MARGIN, MARGIN + 0.05);
 
-    slide.addText(slideData.title, {
+    slide.addText(stripMarkdown(slideData.title), {
       x: MARGIN + titleXOffset,
       y: MARGIN,
       w: CONTENT_W - titleXOffset,
@@ -492,7 +516,7 @@ function addSectionBreakSlide(pptx, slideData, theme, slideNum, totalSlides) {
   const titleY = slideData.icon ? 1.8 : 1.5;
 
   // Large centered section title
-  slide.addText(slideData.title || slideData.content || '', {
+  slide.addText(stripMarkdown(slideData.title || slideData.content || ''), {
     x: MARGIN,
     y: titleY,
     w: CONTENT_W,

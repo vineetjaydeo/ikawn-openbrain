@@ -643,11 +643,9 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
           break;
       }
 
-      // Progress updates every 5 slides
-      if (i % 5 === 0) {
-        pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
-          [JSON.stringify({ current_slide: i + 1, total_slides: slides.length, phase: 'building' }), taskId]).catch(() => {});
-      }
+      // Progress update every slide
+      pool.query('UPDATE ob_background_tasks SET progress = $1, last_heartbeat_at = NOW() WHERE id = $2',
+        [JSON.stringify({ current_slide: i + 1, total_slides: slides.length, phase: 'building' }), taskId]).catch(() => {});
     }
 
     // Export to buffer

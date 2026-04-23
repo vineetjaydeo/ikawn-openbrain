@@ -1101,25 +1101,32 @@ function chatPage(user, isDirectChat = false) {
     }
     .artifact-chart-img:hover { opacity: 0.9; }
 
-    /* ==================== NEW UI: BACKGROUND TASK CARD ==================== */
+    /* ==================== NEW UI: BACKGROUND TASK CARD (sticky above input) ==================== */
+    .task-card-sticky-wrap {
+      position: sticky; bottom: 0; z-index: 10;
+      padding: 0 20px 8px;
+      pointer-events: none;
+    }
+    .task-card-sticky-wrap > * { pointer-events: auto; }
     .task-card {
-      background: rgba(255,192,28,0.06); border: 1px solid rgba(255,192,28,0.2);
-      border-radius: 12px; padding: 16px 20px; margin: 8px 0;
+      background: rgba(20,20,30,0.92); border: 1px solid rgba(255,192,28,0.25);
+      border-radius: 12px; padding: 12px 16px; margin: 0 auto;
+      max-width: 768px; backdrop-filter: blur(12px);
       animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
-    .task-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .task-card-title { font-size: 0.88rem; font-weight: 500; color: var(--text); flex: 1; font-family: 'Google Sans', sans-serif; }
-    .task-card-status { font-size: 0.72rem; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-    .task-card-progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+    .task-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .task-card-title { font-size: 0.82rem; font-weight: 500; color: var(--text); flex: 1; font-family: 'Google Sans', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-card-status { font-size: 0.68rem; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+    .task-card-progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
     .task-card-progress-bar {
-      height: 100%; background: var(--accent); border-radius: 2px;
+      height: 100%; background: linear-gradient(90deg, var(--accent), #F59E0B); border-radius: 2px;
       transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); width: 0%;
     }
-    .task-card-step { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; }
-    .task-card-artifacts { margin-top: 12px; }
+    .task-card-step { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
+    .task-card-artifacts { margin-top: 8px; }
     .task-card-dismiss {
       font-size: 0.72rem; color: var(--text-muted); cursor: pointer;
-      background: none; border: none; margin-top: 8px; padding: 4px 0;
+      background: none; border: none; margin-top: 6px; padding: 2px 0;
     }
     .task-card-dismiss:hover { color: var(--text-dim); }
 
@@ -3118,6 +3125,10 @@ function chatPage(user, isDirectChat = false) {
                 if (NEW_UI) {
                   // New UI: collapsible tool stack
                   addToolToStack(evt.tool, evt.detail);
+                  // Clear streaming bubble when a known tool starts (prevents duplicate indicator)
+                  if (bubble && TOOL_LABELS[evt.tool]) {
+                    bubble.textContent = ''; fullText = '';
+                  }
                   const typing = document.getElementById('typing');
                   if (typing) {
                     const label = typing.querySelector('.typing-label');
@@ -3957,31 +3968,22 @@ function chatPage(user, isDirectChat = false) {
       artifacts.className = 'task-card-artifacts';
       artifacts.id = 'task-artifacts-' + taskId;
 
-      var blobLoader = document.createElement('div');
-      blobLoader.className = 'task-blob-loader';
-      blobLoader.id = 'task-loader-' + taskId;
-      var blobContainer = document.createElement('div');
-      blobContainer.className = 'blob-container';
-      var b1 = document.createElement('div'); b1.className = 'blob';
-      var b2 = document.createElement('div'); b2.className = 'blob';
-      var b3 = document.createElement('div'); b3.className = 'blob';
-      blobContainer.appendChild(b1); blobContainer.appendChild(b2); blobContainer.appendChild(b3);
-      var blobLabel = document.createElement('span');
-      blobLabel.className = 'blob-label';
-      blobLabel.textContent = 'Working on it...';
-      blobLoader.appendChild(blobContainer);
-      blobLoader.appendChild(blobLabel);
-
       card.appendChild(header);
       card.appendChild(progress);
-      card.appendChild(blobLoader);
       card.appendChild(step);
       card.appendChild(artifacts);
 
-      var wrapper = document.createElement('div');
-      wrapper.style.cssText = 'margin-left:40px;';
-      wrapper.appendChild(card);
-      container.appendChild(wrapper);
+      // Place sticky above .input-area so it's always visible
+      var stickyWrap = document.createElement('div');
+      stickyWrap.className = 'task-card-sticky-wrap';
+      stickyWrap.id = 'task-sticky-' + taskId;
+      stickyWrap.appendChild(card);
+      var inputArea = document.querySelector('.input-area');
+      if (inputArea) {
+        inputArea.parentNode.insertBefore(stickyWrap, inputArea);
+      } else {
+        container.appendChild(stickyWrap);
+      }
       scrollToBottom(false);
 
       pollTaskStatus(taskId);
@@ -4013,10 +4015,8 @@ function chatPage(user, isDirectChat = false) {
             if (!document.getElementById('task-card-' + t.id)) {
               showBackgroundTaskCard(t.id, t.task_type, t.task_description || 'Background task');
               var statusEl = document.getElementById('task-status-' + t.id);
-              var loaderEl = document.getElementById('task-loader-' + t.id);
               var stepEl = document.getElementById('task-step-' + t.id);
               if (statusEl) { statusEl.textContent = 'Failed'; statusEl.style.color = 'var(--danger, #ef4444)'; }
-              if (loaderEl) loaderEl.style.display = 'none';
               if (stepEl) stepEl.textContent = t.error_message || 'Task failed';
             }
           } else if (!document.getElementById('task-card-' + t.id)) {
@@ -4051,15 +4051,31 @@ function chatPage(user, isDirectChat = false) {
           var stepEl = document.getElementById('task-step-' + taskId);
 
           if (data.progress) {
-            if (barEl && data.progress.pct) barEl.style.width = data.progress.pct + '%';
-            if (stepEl && data.progress.step) stepEl.textContent = data.progress.step;
+            // Compute pct/step from backend's raw progress fields
+            var pct = data.progress.pct;
+            var stepText = data.progress.step;
+            if (!pct && data.progress.current_slide && data.progress.total_slides) {
+              pct = Math.round((data.progress.current_slide / data.progress.total_slides) * 100);
+            }
+            if (!stepText && data.progress.phase) {
+              if (data.progress.phase === 'building' && data.progress.current_slide) {
+                stepText = 'Building slide ' + data.progress.current_slide + ' of ' + data.progress.total_slides;
+              } else if (data.progress.phase === 'uploading') {
+                stepText = 'Uploading presentation...';
+              } else {
+                stepText = data.progress.phase.charAt(0).toUpperCase() + data.progress.phase.slice(1) + '...';
+              }
+            }
+            if (barEl && pct) barEl.style.width = pct + '%';
+            if (stepEl && stepText) stepEl.textContent = stepText;
+            // Update blob label too
+            var blobLabel = document.querySelector('#task-loader-' + taskId + ' .blob-label');
+            if (blobLabel && stepText) blobLabel.textContent = stepText;
           }
 
           if (data.status === 'completed') {
             clearInterval(activeTaskPollers[taskId]);
             delete activeTaskPollers[taskId];
-            var loaderEl = document.getElementById('task-loader-' + taskId);
-            if (loaderEl) loaderEl.style.display = 'none';
             if (statusEl) { statusEl.textContent = 'Complete'; statusEl.style.color = 'var(--success, #22c55e)'; }
             if (barEl) barEl.style.width = '100%';
             if (stepEl) stepEl.textContent = data.result?.summary || 'Task completed';
@@ -4084,23 +4100,21 @@ function chatPage(user, isDirectChat = false) {
               var dismiss = document.createElement('button');
               dismiss.className = 'task-card-dismiss';
               dismiss.textContent = 'Dismiss';
-              dismiss.onclick = function() { card.parentNode.remove(); };
+              dismiss.onclick = function() { var sw = document.getElementById('task-sticky-' + taskId); if (sw) sw.remove(); else card.remove(); };
               card.appendChild(dismiss);
             }
           } else if (data.status === 'failed') {
             clearInterval(activeTaskPollers[taskId]);
             delete activeTaskPollers[taskId];
-            var loaderElFail = document.getElementById('task-loader-' + taskId);
-            if (loaderElFail) loaderElFail.style.display = 'none';
             if (statusEl) { statusEl.textContent = 'Failed'; statusEl.style.color = 'var(--danger, #ef4444)'; }
             if (stepEl) stepEl.textContent = data.error_message || 'Task failed';
           }
         } catch(e) {}
       }
 
-      // Fire immediate first check, then poll every 5s (was 10s — too slow for quick tasks)
+      // Fire immediate first check, then poll every 2s for real-time progress feel
       checkTaskStatus();
-      activeTaskPollers[taskId] = setInterval(checkTaskStatus, 5000);
+      activeTaskPollers[taskId] = setInterval(checkTaskStatus, 2000);
     }
 
     // ── Connected Services Indicator (Phase 6) ──

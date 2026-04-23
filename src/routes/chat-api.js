@@ -834,7 +834,6 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
         // Emit task_started SSE directly for background tasks (reasoning loop uses executeToolFn path, not toolRegistry)
         const data = execResult?.data || execResult;
         if (data?.taskId && !clientDisconnected && !res.writableEnded) {
-          console.log('[executeToolFn] Emitting task_started for', toolName, 'taskId:', data.taskId);
           res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: data.taskId, taskType: data.taskType, description: data.description, status: data.status })}\n\n`);
         }
         // Emit artifact_ready SSE directly for sync artifact tools
@@ -882,13 +881,9 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
                JSON.stringify(event.artifactData)]
             ).catch(err => console.warn('[Vault] Artifact capture failed:', err.message));
           }
-          // Emit task_started for background tasks
-          console.log('[SSE-DEBUG] tool_result event:', event.name, 'taskData:', JSON.stringify(event.taskData), 'artifactData keys:', event.artifactData ? Object.keys(event.artifactData) : null);
+          // Emit task_started for background tasks (via toolRegistry path — currently unused, kept for future)
           if (event.taskData?.taskId) {
-            console.log('[SSE-DEBUG] EMITTING task_started for taskId:', event.taskData.taskId);
             res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: event.taskData.taskId, taskType: event.taskData.taskType, description: event.taskData.description, status: event.taskData.status })}\n\n`);
-          } else {
-            console.log('[SSE-DEBUG] taskData missing or no taskId — task_started NOT emitted');
           }
           // Send generation_started events after tool results, then clear to prevent duplicates
           for (const gen of pendingGenerations) {

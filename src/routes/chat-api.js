@@ -873,8 +873,12 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
             ).catch(err => console.warn('[Vault] Artifact capture failed:', err.message));
           }
           // Emit task_started for background tasks
+          console.log('[SSE-DEBUG] tool_result event:', event.name, 'taskData:', JSON.stringify(event.taskData), 'artifactData keys:', event.artifactData ? Object.keys(event.artifactData) : null);
           if (event.taskData?.taskId) {
+            console.log('[SSE-DEBUG] EMITTING task_started for taskId:', event.taskData.taskId);
             res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: event.taskData.taskId, taskType: event.taskData.taskType, description: event.taskData.description, status: event.taskData.status })}\n\n`);
+          } else {
+            console.log('[SSE-DEBUG] taskData missing or no taskId — task_started NOT emitted');
           }
           // Send generation_started events after tool results, then clear to prevent duplicates
           for (const gen of pendingGenerations) {

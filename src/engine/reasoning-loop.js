@@ -403,6 +403,9 @@ async function executeReasoningLoop({
             }
             if (envelope.data?.taskId && typeof envelope.data !== 'string') {
               taskData = envelope.data;
+              console.log('[ReasoningLoop] taskData SET for tool:', block.name, 'taskId:', envelope.data.taskId);
+            } else {
+              console.log('[ReasoningLoop] taskData NOT set for tool:', block.name, 'envelope.data?.taskId:', envelope.data?.taskId, 'typeof:', typeof envelope.data);
             }
             toolCallCount++;
           }

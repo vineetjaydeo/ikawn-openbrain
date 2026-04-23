@@ -397,7 +397,7 @@ async function executeReasoningLoop({
             } else {
               resultContent = JSON.stringify(envelope.data);
             }
-            const ARTIFACT_TOOLS = ['generate_pdf', 'generate_pptx', 'generate_chart', 'generate_document', 'generate_spreadsheet'];
+            const ARTIFACT_TOOLS = ['generate_pdf', 'generate_pptx', 'generate_chart', 'generate_document', 'generate_spreadsheet', 'generate_html'];
             if (ARTIFACT_TOOLS.includes(block.name) && typeof envelope.data !== 'string') {
               artifactData = envelope.data;
             }

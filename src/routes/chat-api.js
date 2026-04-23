@@ -723,6 +723,8 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
       toolChoice = { type: 'tool', name: 'generate_pdf' };
     } else if (/\b(create|make|generate|write)\b.{0,30}\b(spreadsheet|xlsx|excel)\b/i.test(lc)) {
       toolChoice = { type: 'tool', name: 'generate_spreadsheet' };
+    } else if (/\b(create|make|generate|build|design)\b.{0,30}\b(html|webpage|web page|landing page|prototype|mockup|website)\b/i.test(lc)) {
+      toolChoice = { type: 'tool', name: 'generate_html' };
     }
     if (toolChoice) {
       const exists = toolSchemas.find(t => t.name === toolChoice.name);
@@ -816,7 +818,7 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
         }
 
         // Vault capture for generation tools (SSE emission removed — onEvent handler emits these)
-        const ARTIFACT_TOOLS = ['generate_pdf','generate_pptx','generate_chart','generate_document','generate_spreadsheet'];
+        const ARTIFACT_TOOLS = ['generate_pdf','generate_pptx','generate_chart','generate_document','generate_spreadsheet','generate_html'];
         if (ARTIFACT_TOOLS.includes(toolName) && execResult?.success && execResult?.data?.url) {
           // Auto-capture artifact to vault (keep this, but don't emit SSE — onEvent handles it)
           pool.query(

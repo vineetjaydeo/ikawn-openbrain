@@ -3674,9 +3674,9 @@ function chatPage(user, isDirectChat = false) {
     /* ==================== NEW UI FUNCTIONS ==================== */
 
     // ── Artifact Download Cards (Phase 3) ──
-    function renderArtifactCard(evt) {
+    function renderArtifactCard(evt, targetContainer) {
       if (!NEW_UI) return;
-      var container = document.getElementById('messages-inner');
+      var container = targetContainer || document.getElementById('messages-inner');
       if (!container) return;
 
       var toolTypeMap = {
@@ -4063,13 +4063,21 @@ function chatPage(user, isDirectChat = false) {
             if (statusEl) { statusEl.textContent = 'Complete'; statusEl.style.color = 'var(--success, #22c55e)'; }
             if (barEl) barEl.style.width = '100%';
             if (stepEl) stepEl.textContent = data.result?.summary || 'Task completed';
-            if (data.result?.artifacts && data.result.artifacts.length) {
-              data.result.artifacts.forEach(function(a) {
-                renderArtifactCard({ tool: 'generate_' + (a.type || 'document'), url: a.url, filename: a.filename, size: a.size, slideCount: data.result.slideCount });
+            // Render artifact cards INSIDE the task card's artifacts area (not at bottom of page)
+            var artifactsContainer = document.getElementById('task-artifacts-' + taskId);
+            if (artifactsContainer && !artifactsContainer.hasChildNodes()) {
+              var artifacts = [];
+              if (data.result?.artifacts && data.result.artifacts.length) {
+                data.result.artifacts.forEach(function(a) {
+                  artifacts.push({ tool: 'generate_' + (a.type || 'document'), url: a.url, filename: a.filename, size: a.size, slideCount: data.result.slideCount });
+                });
+              } else if (data.result?.url) {
+                var ext = (data.result.filename || '').split('.').pop() || 'document';
+                artifacts.push({ tool: 'generate_' + ext, url: data.result.url, filename: data.result.filename, slideCount: data.result.slideCount });
+              }
+              artifacts.forEach(function(art) {
+                renderArtifactCard(art, artifactsContainer);
               });
-            } else if (data.result?.url) {
-              var ext = (data.result.filename || '').split('.').pop() || 'document';
-              renderArtifactCard({ tool: 'generate_' + ext, url: data.result.url, filename: data.result.filename, slideCount: data.result.slideCount });
             }
             var card = document.getElementById('task-card-' + taskId);
             if (card) {

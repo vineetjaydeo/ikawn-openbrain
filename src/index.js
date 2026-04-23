@@ -41,6 +41,8 @@ const flowConfigRoute = require('./routes/flow-config');
 const connectorRoutes = require('./routes/connector-routes');
 const vaultApiRoute = require('./routes/vault-api');
 const vaultPage = require('./routes/vault-page');
+const designApi = require('./routes/design-api');
+const designPage = require('./routes/design-page');
 const { startScheduler, triggerSync } = require('./scheduler');
 const { seedAgents } = require('./agents/seed-all');
 const { loadTools } = require('./tools/registry');
@@ -193,6 +195,10 @@ if (!feature('REACT_UI')) {
 
 // Reports page + API — requires auth (handled inside route)
 app.use(reportsRoute);
+
+// Design Studio — page + API (auth handled inside routes)
+app.use(designApi);
+app.use(designPage);
 
 // Mission Control API — requires auth + brand access
 app.use(requireBrandAccess, missionControlRoute);

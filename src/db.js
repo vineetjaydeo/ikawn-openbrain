@@ -1463,7 +1463,46 @@ async function initSchema() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_items_task_id ON vault_items(task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL;
     `);
 
-    console.log('Database schema initialized (v23 — async pptx)');
+    // ── v24: Design Studio tables ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS designs (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT NOT NULL,
+        brand_id TEXT NOT NULL DEFAULT 'ikawn',
+        name TEXT NOT NULL DEFAULT 'Untitled',
+        thumbnail_text TEXT,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS design_snapshots (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        design_id TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+        parent_id TEXT REFERENCES design_snapshots(id),
+        type TEXT NOT NULL DEFAULT 'initial',
+        prompt TEXT,
+        artifact_type TEXT NOT NULL DEFAULT 'html',
+        artifact_source TEXT,
+        message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS design_chat (
+        seq SERIAL PRIMARY KEY,
+        design_id TEXT NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        payload JSONB NOT NULL DEFAULT '{}',
+        snapshot_id TEXT REFERENCES design_snapshots(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_designs_user ON designs(user_id) WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_snapshots_design ON design_snapshots(design_id);
+      CREATE INDEX IF NOT EXISTS idx_design_chat_design ON design_chat(design_id);
+    `);
+
+    console.log('Database schema initialized (v24 — design studio)');
   } finally {
     client.release();
   }

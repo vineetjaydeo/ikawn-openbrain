@@ -3,3 +3,5 @@ node_modules/
 lcc/
 tasks/*.png
 src/frontend/node_modules/
+src/design-app/node_modules/
+src/design-app-dist/

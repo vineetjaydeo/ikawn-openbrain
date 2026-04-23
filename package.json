@@ -14,7 +14,8 @@
     "pre-deploy": "bash scripts/pre-deploy.sh",
     "backfill": "node scripts/backfill-supabase.js",
     "reconcile": "node scripts/reconcile-counts.js",
-    "reembed": "node scripts/reembed-supabase.js"
+    "reembed": "node scripts/reembed-supabase.js",
+    "build:design": "cd src/design-app && npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

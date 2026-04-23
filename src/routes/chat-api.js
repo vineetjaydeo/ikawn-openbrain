@@ -831,9 +831,19 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
           ).catch(err => console.warn('[Vault] Artifact capture failed:', err.message));
         }
 
+        // Emit task_started SSE directly for background tasks (reasoning loop uses executeToolFn path, not toolRegistry)
+        const data = execResult?.data || execResult;
+        if (data?.taskId && !clientDisconnected && !res.writableEnded) {
+          console.log('[executeToolFn] Emitting task_started for', toolName, 'taskId:', data.taskId);
+          res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: data.taskId, taskType: data.taskType, description: data.description, status: data.status })}\n\n`);
+        }
+        // Emit artifact_ready SSE directly for sync artifact tools
+        if (ARTIFACT_TOOLS.includes(toolName) && data?.url && !clientDisconnected && !res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'artifact_ready', tool: toolName, ...data })}\n\n`);
+        }
+
         // Always prefer human-readable summary; never leak raw JSON to the LLM
         if (execResult?.summary) return execResult.summary;
-        const data = execResult?.data || execResult;
         if (data?.taskId) return `Task queued (ID: ${data.taskId}). The user can see a live progress card — do not repeat status details.`;
         if (data?.url) return `File ready: ${data.url}`;
         return typeof data === 'string' ? data : JSON.stringify(data);

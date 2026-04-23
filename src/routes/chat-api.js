@@ -874,7 +874,7 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
           }
           // Emit task_started for background tasks
           if (event.taskData?.taskId) {
-            res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: event.taskData.taskId, taskType: event.taskData.taskType, status: event.taskData.status })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'task_started', taskId: event.taskData.taskId, taskType: event.taskData.taskType, description: event.taskData.description, status: event.taskData.status })}\n\n`);
           }
           // Send generation_started events after tool results
           for (const gen of pendingGenerations) {

@@ -3183,6 +3183,19 @@ function chatPage(user, isDirectChat = false) {
               } else if (evt.type === 'artifact_ready') {
                 renderArtifactCard(evt);
               } else if (evt.type === 'task_started') {
+                // Clear streaming bubble text so only the task card shows
+                if (bubble) { bubble.textContent = ''; fullText = ''; }
+                if (assistantRow && !assistantRow.querySelector('.msg-bubble')?.textContent?.trim()) {
+                  assistantRow.remove(); assistantRow = null; bubble = null;
+                }
+                // Remove tool-stack indicator (NEW_UI)
+                if (toolIndicatorEl && toolIndicatorEl.parentNode) {
+                  toolIndicatorEl.remove(); toolIndicatorEl = null;
+                  toolLogEntries = []; toolActiveCount = 0; toolStartTime = null;
+                }
+                // Remove typing indicator
+                var typingEl = document.getElementById('typing');
+                if (typingEl) typingEl.remove();
                 showBackgroundTaskCard(evt.taskId, evt.taskType, evt.description);
               } else if (evt.type === 'chunk' && evt.text) {
                 if (firstChunk) {
@@ -3651,8 +3664,8 @@ function chatPage(user, isDirectChat = false) {
       if (!container) return;
 
       var toolTypeMap = {
-        generate_pdf: 'pdf', generate_pptx: 'pptx', generate_document: 'docx',
-        generate_spreadsheet: 'xlsx', generate_chart: 'chart',
+        generate_pdf: 'pdf', generate_pptx: 'pptx', generate_presentation: 'pptx',
+        generate_document: 'docx', generate_spreadsheet: 'xlsx', generate_chart: 'chart',
       };
       var fileType = toolTypeMap[evt.tool] || (evt.filename || '').split('.').pop().toLowerCase() || 'file';
       var isChart = evt.tool === 'generate_chart';
@@ -3996,7 +4009,8 @@ function chatPage(user, isDirectChat = false) {
       if (activeTaskPollers[taskId]) return;
       var attempts = 0;
       var maxAttempts = 120;
-      activeTaskPollers[taskId] = setInterval(async function() {
+
+      async function checkTaskStatus() {
         attempts++;
         if (attempts > maxAttempts) {
           clearInterval(activeTaskPollers[taskId]);
@@ -4029,10 +4043,9 @@ function chatPage(user, isDirectChat = false) {
             if (stepEl) stepEl.textContent = data.result?.summary || 'Task completed';
             if (data.result?.artifacts && data.result.artifacts.length) {
               data.result.artifacts.forEach(function(a) {
-                renderArtifactCard({ tool: 'generate_' + (a.type || 'document'), url: a.url, filename: a.filename, size: a.size });
+                renderArtifactCard({ tool: 'generate_' + (a.type || 'document'), url: a.url, filename: a.filename, size: a.size, slideCount: data.result.slideCount });
               });
             } else if (data.result?.url) {
-              // Flat result format (legacy tasks)
               var ext = (data.result.filename || '').split('.').pop() || 'document';
               renderArtifactCard({ tool: 'generate_' + ext, url: data.result.url, filename: data.result.filename, slideCount: data.result.slideCount });
             }
@@ -4053,7 +4066,11 @@ function chatPage(user, isDirectChat = false) {
             if (stepEl) stepEl.textContent = data.error_message || 'Task failed';
           }
         } catch(e) {}
-      }, 10000);
+      }
+
+      // Fire immediate first check, then poll every 5s (was 10s — too slow for quick tasks)
+      checkTaskStatus();
+      activeTaskPollers[taskId] = setInterval(checkTaskStatus, 5000);
     }
 
     // ── Connected Services Indicator (Phase 6) ──

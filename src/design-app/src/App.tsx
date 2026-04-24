@@ -1,93 +1,235 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { useStore } from './store';
+import { useCallback, useEffect, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { PreviewPane } from './components/PreviewPane';
 import { TopBar } from './components/TopBar';
-import { Toast } from './components/Toast';
+import { ToastViewport } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { useDesignStore } from './store';
 
 export function App() {
-  const { view, loadDesigns, toasts, dismissToast } = useStore();
-  const [sidebarWidth, setSidebarWidth] = useState(400);
-  const isDragging = useRef(false);
+  const loadDesigns = useDesignStore((s) => s.loadDesigns);
+  const switchDesign = useDesignStore((s) => s.switchDesign);
+  const sendPrompt = useDesignStore((s) => s.sendPrompt);
+  const isGenerating = useDesignStore(
+    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+  );
+  const setView = useDesignStore((s) => s.setView);
+  const view = useDesignStore((s) => s.view);
+  const designsViewOpen = useDesignStore((s) => s.designsViewOpen);
+  const closeDesignsView = useDesignStore((s) => s.closeDesignsView);
+  const createNewDesign = useDesignStore((s) => s.createNewDesign);
+  const designToDelete = useDesignStore((s) => s.designToDelete);
+  const designToRename = useDesignStore((s) => s.designToRename);
+  const requestDeleteDesign = useDesignStore((s) => s.requestDeleteDesign);
+  const requestRenameDesign = useDesignStore((s) => s.requestRenameDesign);
 
-  useEffect(() => { loadDesigns(); }, [loadDesigns]);
+  const [prompt, setPrompt] = useState('');
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    Math.max(320, Math.round(window.innerWidth * 0.25)),
+  );
+  const [isResizing, setIsResizing] = useState(false);
 
-  const handleMouseDown = useCallback(() => { isDragging.current = true; }, []);
-  const handleMouseUp = useCallback(() => { isDragging.current = false; }, []);
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging.current) return;
-    const newWidth = Math.max(320, Math.min(600, e.clientX));
-    setSidebarWidth(newWidth);
+  // Once the user has visited Hub we keep HubView mounted (toggled via
+  // `hidden`) so going Workspace -> Hub doesn't tear down the design-card
+  // iframes and pay the srcDoc parse cost again.
+  const [hubMounted, setHubMounted] = useState(view === 'hub');
+  useEffect(() => {
+    if (view === 'hub') setHubMounted(true);
+  }, [view]);
+
+  // Same trick for workspace -- once visited, keep PreviewPane mounted so the
+  // iframe pool survives Workspace <-> Hub round trips.
+  const [workspaceMounted, setWorkspaceMounted] = useState(view === 'workspace');
+  useEffect(() => {
+    if (view === 'workspace') setWorkspaceMounted(true);
+  }, [view]);
+
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+
+    const onMove = (ev: MouseEvent) => {
+      const maxW = Math.round(window.innerWidth * 0.55);
+      const clamped = Math.min(Math.max(ev.clientX, 280), maxW);
+      setSidebarWidth(clamped);
+    };
+    const onUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, []);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
-        e.preventDefault();
-        useStore.getState().createDesign();
+    async function bootstrap(): Promise<void> {
+      await loadDesigns();
+      const state = useDesignStore.getState();
+      if (state.currentDesignId === null && state.designs.length > 0) {
+        const first = state.designs[0];
+        if (first) await switchDesign(first.id);
       }
-    };
+    }
+    void bootstrap();
+  }, [loadDesigns, switchDesign]);
+
+  function submit(): void {
+    const trimmed = prompt.trim();
+    if (!trimmed || isGenerating) return;
+    void sendPrompt({ prompt: trimmed });
+    setPrompt('');
+  }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handler(e: KeyboardEvent): void {
+      const mod = e.metaKey || e.ctrlKey;
+
+      // Cmd+N -- new design
+      if (mod && e.key === 'n') {
+        e.preventDefault();
+        void createNewDesign();
+        return;
+      }
+
+      // Escape -- close dialogs / return to hub
+      if (e.key === 'Escape') {
+        if (designToDelete) {
+          requestDeleteDesign(null);
+          return;
+        }
+        if (designToRename) {
+          requestRenameDesign(null);
+          return;
+        }
+        if (designsViewOpen) {
+          closeDesignsView();
+          return;
+        }
+      }
+    }
+
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [
+    createNewDesign,
+    designToDelete,
+    designToRename,
+    designsViewOpen,
+    closeDesignsView,
+    requestDeleteDesign,
+    requestRenameDesign,
+  ]);
 
   return (
-    <div
-      className="flex flex-col h-full"
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
-      <TopBar />
-      <div className="flex flex-1 overflow-hidden">
-        <div style={{ width: sidebarWidth, flexShrink: 0 }} className="flex flex-col border-r border-[var(--border)]">
-          <Sidebar />
+    <ErrorBoundary scope="app">
+      <div className="h-full flex flex-col bg-[var(--color-background)]">
+        <TopBar />
+        <div className="flex-1 min-h-0 relative">
+          {hubMounted ? (
+            <div hidden={view !== 'hub'} className="h-full">
+              <HubView
+                onUseExamplePrompt={async (p) => {
+                  const created = await createNewDesign();
+                  if (!created) return;
+                  setPrompt(p);
+                  setView('workspace');
+                }}
+              />
+            </div>
+          ) : null}
+          {workspaceMounted ? (
+            <div hidden={view !== 'workspace'} className="h-full flex flex-col">
+              <div className="flex-1 min-h-0 flex relative">
+                {isResizing && <div className="absolute inset-0 z-20 cursor-col-resize" />}
+                <div className="relative shrink-0" style={{ width: sidebarWidth }}>
+                  <ErrorBoundary scope="sidebar">
+                    <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
+                  </ErrorBoundary>
+                  <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    onMouseDown={onResizeStart}
+                    className="absolute top-0 right-0 w-[5px] h-full cursor-col-resize z-10 hover:bg-[var(--accent)]/15 active:bg-[var(--accent)]/25 transition-colors duration-100"
+                    style={{ transform: 'translateX(50%)' }}
+                  />
+                </div>
+                <main className="flex flex-col min-h-0 flex-1 min-w-0">
+                  <ErrorBoundary scope="preview">
+                    <PreviewPane onPickStarter={(p) => setPrompt(p)} />
+                  </ErrorBoundary>
+                </main>
+              </div>
+            </div>
+          ) : null}
         </div>
-        <div className="resize-handle" onMouseDown={handleMouseDown} />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {view === 'workspace' ? (
-            <PreviewPane />
-          ) : (
-            <HubPlaceholder />
-          )}
-        </div>
+        <ToastViewport />
       </div>
-      <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
-        {toasts.map((t) => (
-          <Toast key={t.id} message={t.message} type={t.type} onDismiss={() => dismissToast(t.id)} />
-        ))}
-      </div>
-    </div>
+    </ErrorBoundary>
   );
 }
 
-function HubPlaceholder() {
-  const { designs, switchDesign, createDesign } = useStore();
+/* ── Inline Hub View ──────────────────────────────────────────────────── */
+
+function HubView({ onUseExamplePrompt }: { onUseExamplePrompt: (prompt: string) => void }) {
+  const designs = useDesignStore((s) => s.designs);
+  const switchDesign = useDesignStore((s) => s.switchDesign);
+  const createNewDesign = useDesignStore((s) => s.createNewDesign);
+  const setView = useDesignStore((s) => s.setView);
+
   return (
-    <div className="flex-1 flex items-center justify-center p-8">
+    <div className="h-full flex items-center justify-center p-8">
       <div className="max-w-lg w-full text-center">
-        <div className="text-4xl mb-4">&#10022;</div>
-        <h1 className="text-2xl font-semibold mb-2" style={{ fontFamily: 'var(--font-serif)' }}>Design Studio</h1>
-        <p className="text-[var(--text-muted)] mb-8">Create production-quality web designs with AI</p>
+        <div
+          className="text-4xl mb-4"
+          style={{ color: 'var(--accent)' }}
+          aria-hidden
+        >
+          &#10022;
+        </div>
+        <h1
+          className="text-2xl font-semibold mb-2"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          Design Studio
+        </h1>
+        <p className="text-[var(--color-text-muted)] mb-8">
+          Create production-quality web designs with AI
+        </p>
         <button
-          onClick={() => createDesign()}
-          className="px-6 py-3 rounded-lg font-medium text-black"
+          onClick={async () => {
+            const d = await createNewDesign();
+            if (d) setView('workspace');
+          }}
+          className="px-6 py-3 rounded-lg font-medium text-[var(--color-on-accent)]"
           style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))' }}
         >
           New Design
         </button>
         {designs.length > 0 && (
           <div className="mt-8 text-left">
-            <h3 className="text-sm font-medium text-[var(--text-muted)] mb-3">Recent Designs</h3>
+            <h3 className="text-sm font-medium text-[var(--color-text-muted)] mb-3">
+              Recent Designs
+            </h3>
             <div className="space-y-2">
               {designs.slice(0, 5).map((d) => (
                 <button
                   key={d.id}
-                  onClick={() => switchDesign(d.id)}
-                  className="w-full text-left px-4 py-3 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors border border-[var(--border-subtle)]"
+                  onClick={async () => {
+                    await switchDesign(d.id);
+                    setView('workspace');
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] transition-colors border border-[var(--color-border-subtle)]"
                 >
-                  <div className="font-medium">{d.name}</div>
-                  <div className="text-xs text-[var(--text-muted)]">{new Date(d.updated_at).toLocaleDateString()}</div>
+                  <div className="font-medium text-[var(--color-text-primary)]">{d.name}</div>
+                  <div className="text-xs text-[var(--color-text-muted)]">
+                    {new Date(d.updated_at).toLocaleDateString()}
+                  </div>
                 </button>
               ))}
             </div>

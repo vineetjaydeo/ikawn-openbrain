@@ -352,4 +352,97 @@ describe('reasoning-loop-streaming', () => {
     expect(serverDone).toBeTruthy();
     expect(serverDone.success).toBe(true);
   });
+
+  it('detects timeout when streaming ends silently after abort (no error thrown)', async () => {
+    // Simulate the Anthropic SDK's silent-abort behavior: the async iterator
+    // ends normally (done: true) instead of throwing when abort fires between
+    // event deliveries. The reasoning loop must still detect the abort.
+    //
+    // The generator watches the signal and exits normally once aborted,
+    // mimicking the SDK's MessageStream behavior (line 719-720).
+    mockCallClaudeStreaming.mockImplementation((_params, opts) => {
+      const signal = opts?.signal;
+      async function* slowEvents() {
+        yield { type: 'text_delta', text: 'Partial' };
+        // Poll until abort fires (simulates SDK waiting for next event)
+        await new Promise(resolve => {
+          if (signal?.aborted) return resolve();
+          const check = setInterval(() => {
+            if (signal?.aborted) { clearInterval(check); resolve(); }
+          }, 10);
+        });
+        // SDK returns done:true (no throw) when abort fires between events
+      }
+      return {
+        events: slowEvents(),
+        buildResult: () => ({
+          response: { content: [{ type: 'text', text: 'Partial' }], stop_reason: 'end_turn' },
+          cost: { model: 'claude-sonnet-4-6', inputTokens: 100, outputTokens: 50, costUsd: 0.001 },
+        }),
+      };
+    });
+
+    const events = [];
+    const onEvent = (e) => events.push(e);
+
+    const result = await executeReasoningLoop({
+      systemPrompt: 'You are helpful.',
+      messages: [{ role: 'user', content: 'Generate something' }],
+      executeToolFn: vi.fn(),
+      onEvent,
+      timeoutMs: 1200,  // Above 1s floor so per-call abort fires at ~1200ms
+    });
+
+    expect(result.timedOut).toBe(true);
+    // accumulatedText is empty because buildResult() is skipped on abort;
+    // partial text was only emitted via onEvent text_delta
+    expect(result.response).toBe('[Response time limit reached]');
+    const types = events.map(e => e.type);
+    expect(types).toContain('timeout');
+    expect(types).toContain('done');
+    // Verify text_delta was emitted before abort
+    expect(types).toContain('text_delta');
+  }, 10000);
+
+  it('detects timeout when streaming throws on abort (error path)', async () => {
+    // Simulate the Anthropic SDK throwing APIUserAbortError on abort
+    mockCallClaudeStreaming.mockImplementation((_params, opts) => {
+      const signal = opts?.signal;
+      async function* abortingEvents() {
+        yield { type: 'text_delta', text: 'Start' };
+        // Wait for abort signal
+        await new Promise(resolve => {
+          if (signal?.aborted) return resolve();
+          const check = setInterval(() => {
+            if (signal?.aborted) { clearInterval(check); resolve(); }
+          }, 10);
+        });
+        // SDK throws APIUserAbortError (name='Error', not 'AbortError')
+        const err = new Error('Request was aborted.');
+        throw err;
+      }
+      return {
+        events: abortingEvents(),
+        buildResult: () => ({
+          response: { content: [{ type: 'text', text: 'Start' }], stop_reason: 'end_turn' },
+          cost: { model: 'claude-sonnet-4-6', inputTokens: 100, outputTokens: 50, costUsd: 0.001 },
+        }),
+      };
+    });
+
+    const events = [];
+    const onEvent = (e) => events.push(e);
+
+    const result = await executeReasoningLoop({
+      systemPrompt: 'You are helpful.',
+      messages: [{ role: 'user', content: 'Generate something' }],
+      executeToolFn: vi.fn(),
+      onEvent,
+      timeoutMs: 1200,
+    });
+
+    expect(result.timedOut).toBe(true);
+    // Same as above: accumulatedText is empty on first-turn abort
+    expect(result.response).toBe('[Response time limit reached]');
+  }, 10000);
 });

@@ -165,7 +165,7 @@ async function callWithFallback(params) {
  *
  * @returns {{ stream: AsyncIterable, getResult: () => Promise<{ response, cost }> }}
  */
-function callClaudeStreaming(params) {
+function callClaudeStreaming(params, requestOptions = {}) {
   const { system, messages, tools = [], serverTools = [], maxTokens = 2048, model: modelOverride, toolChoice } = params;
   const model = modelOverride || 'claude-sonnet-4-6';
   const client = getAnthropic();
@@ -186,7 +186,7 @@ function callClaudeStreaming(params) {
     console.log(`[LLM] tool_choice forced: ${JSON.stringify(toolChoice)}, tools: ${allTools.map(t => t.name).join(',')}`);
   }
 
-  const anthropicStream = client.messages.stream(apiParams);
+  const anthropicStream = client.messages.stream(apiParams, requestOptions);
 
   // Collect content blocks as they complete
   const contentBlocks = [];

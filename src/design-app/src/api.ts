@@ -55,6 +55,7 @@ export function streamGeneration(
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let currentEventType = 'message';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -65,11 +66,15 @@ export function streamGeneration(
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          if (line.startsWith('event: ')) {
+            currentEventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
             try {
               const parsed = JSON.parse(line.slice(6));
+              parsed.type = currentEventType;
               onEvent(parsed);
             } catch { /* ignore parse errors */ }
+            currentEventType = 'message';
           }
         }
       }

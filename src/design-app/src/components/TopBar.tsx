@@ -30,7 +30,7 @@ export function TopBar() {
       <div className="flex items-center gap-6 min-w-0 h-full">
         {/* Gold sparkle + brand */}
         <a
-          href="/chat"
+          href="/"
           className="flex items-center gap-2 no-underline"
           title="Back to Lucy"
         >

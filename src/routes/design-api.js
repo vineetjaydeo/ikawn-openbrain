@@ -22,13 +22,13 @@ router.get('/api/designs', requireAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
     const { rows } = await pool.query(
-      `SELECT id, title, preview_html, created_at, updated_at
-       FROM design_projects
+      `SELECT id, user_id, brand_id, name, thumbnail_text, deleted_at, created_at, updated_at
+       FROM designs
        WHERE user_id = $1 AND deleted_at IS NULL
        ORDER BY updated_at DESC`,
       [userId]
     );
-    res.json({ designs: rows });
+    res.json(rows);
   } catch (err) {
     console.error('[DesignAPI] list designs error:', err.message);
     res.status(500).json({ error: 'Failed to list designs' });
@@ -39,15 +39,15 @@ router.get('/api/designs', requireAuth, async (req, res) => {
 router.post('/api/designs', requireAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
-    const { title } = req.body || {};
+    const { name } = req.body || {};
     const id = randomUUID();
     const { rows } = await pool.query(
-      `INSERT INTO design_projects (id, user_id, title)
+      `INSERT INTO designs (id, user_id, name)
        VALUES ($1, $2, $3)
-       RETURNING id, title, created_at, updated_at`,
-      [id, userId, title || 'Untitled Design']
+       RETURNING id, user_id, brand_id, name, thumbnail_text, deleted_at, created_at, updated_at`,
+      [id, userId, name || 'Untitled Design']
     );
-    res.status(201).json({ design: rows[0] });
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[DesignAPI] create design error:', err.message);
     res.status(500).json({ error: 'Failed to create design' });
@@ -58,16 +58,16 @@ router.post('/api/designs', requireAuth, async (req, res) => {
 router.patch('/api/designs/:id', requireAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
-    const { title } = req.body || {};
-    if (!title) return res.status(400).json({ error: 'title is required' });
+    const { name } = req.body || {};
+    if (!name) return res.status(400).json({ error: 'name is required' });
     const { rows } = await pool.query(
-      `UPDATE design_projects SET title = $1, updated_at = NOW()
+      `UPDATE designs SET name = $1, updated_at = NOW()
        WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL
-       RETURNING id, title, updated_at`,
-      [title, req.params.id, userId]
+       RETURNING id, user_id, brand_id, name, thumbnail_text, deleted_at, created_at, updated_at`,
+      [name, req.params.id, userId]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Design not found' });
-    res.json({ design: rows[0] });
+    res.json(rows[0]);
   } catch (err) {
     console.error('[DesignAPI] rename design error:', err.message);
     res.status(500).json({ error: 'Failed to rename design' });
@@ -79,7 +79,7 @@ router.delete('/api/designs/:id', requireAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
     const { rowCount } = await pool.query(
-      `UPDATE design_projects SET deleted_at = NOW()
+      `UPDATE designs SET deleted_at = NOW()
        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [req.params.id, userId]
     );
@@ -100,7 +100,7 @@ router.post('/api/designs/:id/duplicate', requireAuth, async (req, res) => {
 
     // Verify ownership
     const { rows: origRows } = await client.query(
-      `SELECT id, title FROM design_projects
+      `SELECT id, name FROM designs
        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [req.params.id, userId]
     );
@@ -110,21 +110,21 @@ router.post('/api/designs/:id/duplicate', requireAuth, async (req, res) => {
     }
 
     const newId = randomUUID();
-    const newTitle = `${origRows[0].title} (copy)`;
+    const newName = `${origRows[0].name} (copy)`;
 
-    // Duplicate project
+    // Duplicate design
     await client.query(
-      `INSERT INTO design_projects (id, user_id, title, preview_html)
-       SELECT $1, user_id, $2, preview_html
-       FROM design_projects WHERE id = $3`,
-      [newId, newTitle, req.params.id]
+      `INSERT INTO designs (id, user_id, brand_id, name, thumbnail_text)
+       SELECT $1, user_id, brand_id, $2, thumbnail_text
+       FROM designs WHERE id = $3`,
+      [newId, newName, req.params.id]
     );
 
     // Duplicate snapshots
     await client.query(
-      `INSERT INTO design_snapshots (id, project_id, label, files, created_at)
-       SELECT gen_random_uuid(), $1, label, files, created_at
-       FROM design_snapshots WHERE project_id = $2
+      `INSERT INTO design_snapshots (id, design_id, parent_id, type, prompt, artifact_type, artifact_source, message, created_at)
+       SELECT gen_random_uuid()::text, $1, NULL, type, prompt, artifact_type, artifact_source, message, created_at
+       FROM design_snapshots WHERE design_id = $2
        ORDER BY created_at`,
       [newId, req.params.id]
     );
@@ -132,11 +132,11 @@ router.post('/api/designs/:id/duplicate', requireAuth, async (req, res) => {
     await client.query('COMMIT');
 
     const { rows } = await client.query(
-      `SELECT id, title, preview_html, created_at, updated_at
-       FROM design_projects WHERE id = $1`,
+      `SELECT id, user_id, brand_id, name, thumbnail_text, deleted_at, created_at, updated_at
+       FROM designs WHERE id = $1`,
       [newId]
     );
-    res.status(201).json({ design: rows[0] });
+    res.status(201).json(rows[0]);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[DesignAPI] duplicate design error:', err.message);
@@ -156,20 +156,20 @@ router.get('/api/designs/:designId/snapshots', requireAuth, async (req, res) => 
     const userId = req.session.user.id;
     // Verify ownership
     const { rows: proj } = await pool.query(
-      `SELECT id FROM design_projects
+      `SELECT id FROM designs
        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [req.params.designId, userId]
     );
     if (proj.length === 0) return res.status(404).json({ error: 'Design not found' });
 
     const { rows } = await pool.query(
-      `SELECT id, label, files, created_at
+      `SELECT id, design_id, parent_id, type, prompt, artifact_type, artifact_source, message, created_at
        FROM design_snapshots
-       WHERE project_id = $1
+       WHERE design_id = $1
        ORDER BY created_at DESC`,
       [req.params.designId]
     );
-    res.json({ snapshots: rows });
+    res.json(rows);
   } catch (err) {
     console.error('[DesignAPI] list snapshots error:', err.message);
     res.status(500).json({ error: 'Failed to list snapshots' });
@@ -180,14 +180,11 @@ router.get('/api/designs/:designId/snapshots', requireAuth, async (req, res) => 
 router.post('/api/designs/:designId/snapshots', requireAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
-    const { label, files } = req.body || {};
-    if (!files || typeof files !== 'object') {
-      return res.status(400).json({ error: 'files (object) is required' });
-    }
+    const { type, prompt, artifact_type, artifact_source, message } = req.body || {};
 
     // Verify ownership
     const { rows: proj } = await pool.query(
-      `SELECT id FROM design_projects
+      `SELECT id FROM designs
        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [req.params.designId, userId]
     );
@@ -195,12 +192,12 @@ router.post('/api/designs/:designId/snapshots', requireAuth, async (req, res) =>
 
     const id = randomUUID();
     const { rows } = await pool.query(
-      `INSERT INTO design_snapshots (id, project_id, label, files)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, label, files, created_at`,
-      [id, req.params.designId, label || null, JSON.stringify(files)]
+      `INSERT INTO design_snapshots (id, design_id, type, prompt, artifact_type, artifact_source, message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, design_id, parent_id, type, prompt, artifact_type, artifact_source, message, created_at`,
+      [id, req.params.designId, type || 'edit', prompt || null, artifact_type || 'html', artifact_source || null, message || null]
     );
-    res.status(201).json({ snapshot: rows[0] });
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[DesignAPI] create snapshot error:', err.message);
     res.status(500).json({ error: 'Failed to create snapshot' });
@@ -217,20 +214,20 @@ router.get('/api/designs/:designId/chat', requireAuth, async (req, res) => {
     const userId = req.session.user.id;
     // Verify ownership
     const { rows: proj } = await pool.query(
-      `SELECT id FROM design_projects
+      `SELECT id FROM designs
        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [req.params.designId, userId]
     );
     if (proj.length === 0) return res.status(404).json({ error: 'Design not found' });
 
     const { rows } = await pool.query(
-      `SELECT id, role, content, created_at
-       FROM design_chat_messages
-       WHERE project_id = $1
-       ORDER BY created_at ASC`,
+      `SELECT seq, design_id, kind, payload, snapshot_id, created_at
+       FROM design_chat
+       WHERE design_id = $1
+       ORDER BY seq ASC`,
       [req.params.designId]
     );
-    res.json({ messages: rows });
+    res.json(rows);
   } catch (err) {
     console.error('[DesignAPI] list chat error:', err.message);
     res.status(500).json({ error: 'Failed to list chat messages' });
@@ -241,27 +238,26 @@ router.get('/api/designs/:designId/chat', requireAuth, async (req, res) => {
 router.post('/api/designs/:designId/chat', requireAuth, async (req, res) => {
   try {
     const userId = req.session.user.id;
-    const { role, content } = req.body || {};
-    if (!role || !content) {
-      return res.status(400).json({ error: 'role and content are required' });
+    const { kind, payload, snapshot_id } = req.body || {};
+    if (!kind) {
+      return res.status(400).json({ error: 'kind is required' });
     }
 
     // Verify ownership
     const { rows: proj } = await pool.query(
-      `SELECT id FROM design_projects
+      `SELECT id FROM designs
        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [req.params.designId, userId]
     );
     if (proj.length === 0) return res.status(404).json({ error: 'Design not found' });
 
-    const id = randomUUID();
     const { rows } = await pool.query(
-      `INSERT INTO design_chat_messages (id, project_id, role, content)
+      `INSERT INTO design_chat (design_id, kind, payload, snapshot_id)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, role, content, created_at`,
-      [id, req.params.designId, role, content]
+       RETURNING seq, design_id, kind, payload, snapshot_id, created_at`,
+      [req.params.designId, kind, JSON.stringify(payload || {}), snapshot_id || null]
     );
-    res.status(201).json({ message: rows[0] });
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[DesignAPI] append chat error:', err.message);
     res.status(500).json({ error: 'Failed to append chat message' });
@@ -275,13 +271,13 @@ router.post('/api/designs/:designId/chat', requireAuth, async (req, res) => {
 // Helper: send SSE event
 function sendSSE(res, event, data) {
   if (res.writableEnded) return;
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  res.write(`event: ${event}\ndata: ${JSON.stringify({ type: event, ...data })}\n\n`);
 }
 
 // POST /api/design/generate — SSE stream for design generation
 router.post('/api/design/generate', requireAuth, async (req, res) => {
   const userId = req.session.user.id;
-  const { prompt, designId, currentFiles, chatHistory } = req.body || {};
+  const { prompt, designId, currentFiles, chatHistory, history } = req.body || {};
 
   if (!prompt) {
     return res.status(400).json({ error: 'prompt is required' });
@@ -327,7 +323,6 @@ router.post('/api/design/generate', requireAuth, async (req, res) => {
     // ── Seed virtual FS with current files if provided ──
     if (currentFiles && typeof currentFiles === 'object') {
       for (const [path, content] of Object.entries(currentFiles)) {
-        // Execute a create command to seed files into the virtual FS
         executors.str_replace_based_edit_tool({ command: 'create', path, file_text: content });
       }
     }
@@ -338,9 +333,10 @@ router.post('/api/design/generate', requireAuth, async (req, res) => {
     // ── Build messages array ──
     const messages = [];
 
-    // Include prior chat history for context if available
-    if (chatHistory && Array.isArray(chatHistory)) {
-      for (const msg of chatHistory.slice(-10)) {
+    // Include prior chat history for context if available (support both field names)
+    const chatHist = chatHistory || history;
+    if (chatHist && Array.isArray(chatHist)) {
+      for (const msg of chatHist.slice(-10)) {
         if (msg.role === 'user' || msg.role === 'assistant') {
           messages.push({ role: msg.role, content: msg.content });
         }
@@ -394,17 +390,13 @@ router.post('/api/design/generate', requireAuth, async (req, res) => {
           sendSSE(res, 'text_delta', { text: event.text });
           break;
         case 'tool_start':
-          // Already handled via executeToolFn — but emit for tools handled by the loop itself
           sendSSE(res, 'tool_call_start', { tool: event.name, detail: event.detail });
           break;
         case 'tool_result':
-          // Already handled via executeToolFn — but emit for loop-level tool results
           break;
         case 'done':
-          // Handled below after the loop returns
           break;
         case 'thinking':
-          // No SSE event for thinking state
           break;
       }
     }
@@ -419,7 +411,7 @@ router.post('/api/design/generate', requireAuth, async (req, res) => {
       executeToolFn,
       maxIterations: 12,
       onEvent,
-      timeoutMs: 120000, // 2 min timeout
+      timeoutMs: 120000,
       userId,
     });
 
@@ -429,17 +421,17 @@ router.post('/api/design/generate', requireAuth, async (req, res) => {
       try {
         const snapshotId = randomUUID();
         await pool.query(
-          `INSERT INTO design_snapshots (id, project_id, label, files)
-           VALUES ($1, $2, $3, $4)`,
-          [snapshotId, designId, 'Auto-save', JSON.stringify(finalFs)]
+          `INSERT INTO design_snapshots (id, design_id, type, artifact_type, artifact_source, message)
+           VALUES ($1, $2, 'edit', 'html', $3, 'Auto-save')`,
+          [snapshotId, designId, finalFs['index.html'] || JSON.stringify(finalFs)]
         );
 
-        // Update preview_html on the project
+        // Update thumbnail_text on the design
         if (finalFs['index.html']) {
           await pool.query(
-            `UPDATE design_projects SET preview_html = $1, updated_at = NOW()
+            `UPDATE designs SET thumbnail_text = $1, updated_at = NOW()
              WHERE id = $2`,
-            [finalFs['index.html'], designId]
+            [finalFs['index.html'].slice(0, 500), designId]
           );
         }
       } catch (dbErr) {

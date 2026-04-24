@@ -238,18 +238,60 @@ async function executeReasoningLoop({
     if (onEvent) {
       // ── Streaming path ──
       onEvent({ type: 'thinking' });
-      const { events, buildResult } = getCallClaudeStreaming()(callParams);
 
-      for await (const event of events) {
-        if (event.type === 'text_delta') {
-          onEvent({ type: 'text_delta', text: event.text });
-        } else if (event.type === 'tool_use_start') {
-          onEvent({ type: 'tool_start', name: event.name });
-        } else if (event.type === 'server_tool_start') {
-          onEvent({ type: 'tool_start', name: event.name, detail: event.input?.query });
-        } else if (event.type === 'server_tool_done') {
-          onEvent({ type: 'tool_done', name: event.name, success: true });
+      // Per-call abort timeout to prevent indefinite hangs on the streaming API.
+      // Use the actual remaining time with a small floor (1s) to avoid negative timers.
+      const abortController = startTime ? new AbortController() : null;
+      const remainingMs = startTime ? Math.max(timeoutMs - (Date.now() - startTime), 1000) : null;
+      const abortTimer = abortController ? setTimeout(() => abortController.abort(), remainingMs) : null;
+
+      const streamOpts = abortController ? { signal: abortController.signal } : {};
+      const { events, buildResult } = getCallClaudeStreaming()(callParams, streamOpts);
+
+      let timedOut = false;
+      try {
+        for await (const event of events) {
+          if (event.type === 'text_delta') {
+            onEvent({ type: 'text_delta', text: event.text });
+          } else if (event.type === 'tool_use_start') {
+            onEvent({ type: 'tool_start', name: event.name });
+          } else if (event.type === 'server_tool_start') {
+            onEvent({ type: 'tool_start', name: event.name, detail: event.input?.query });
+          } else if (event.type === 'server_tool_done') {
+            onEvent({ type: 'tool_done', name: event.name, success: true });
+          }
         }
+      } catch (err) {
+        // Anthropic SDK throws APIUserAbortError (name='Error', not 'AbortError')
+        // on abort. Check both the error identity and the signal state.
+        if (abortController?.signal?.aborted) {
+          console.warn(`[ReasoningLoop] Streaming call aborted after ${remainingMs}ms timeout`);
+          timedOut = true;
+        } else {
+          throw err;
+        }
+      } finally {
+        if (abortTimer) clearTimeout(abortTimer);
+      }
+
+      // The Anthropic SDK's async iterator may end normally (done: true) instead
+      // of throwing when the abort fires between event deliveries. Catch that case.
+      if (!timedOut && abortController?.signal?.aborted) {
+        console.warn(`[ReasoningLoop] Streaming ended silently after abort — treating as timeout`);
+        timedOut = true;
+      }
+
+      if (timedOut) {
+        patchOrphans(messages, 'streaming timeout');
+        if (onEvent) {
+          onEvent({ type: 'timeout', partial: !!accumulatedText.trim() });
+          onEvent({ type: 'done', totalCostUsd, turnCount, toolCallCount });
+        }
+        return {
+          response: accumulatedText.trim() || '[Response time limit reached]',
+          messages, totalTokensIn, totalTokensOut, totalCostUsd, turnCount, toolCallCount,
+          timedOut: true,
+        };
       }
 
       const result = buildResult();

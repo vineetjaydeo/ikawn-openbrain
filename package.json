@@ -10,7 +10,7 @@
     "sync-github": "node scripts/sync-github.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src/",
+    "lint": "eslint src/ --ignore-pattern 'src/design-app*'",
     "pre-deploy": "bash scripts/pre-deploy.sh",
     "backfill": "node scripts/backfill-supabase.js",
     "reconcile": "node scripts/reconcile-counts.js",

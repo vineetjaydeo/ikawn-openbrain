@@ -1,4 +1,5 @@
 {
+  "ignorePatterns": ["src/design-app/", "src/design-app-dist/"],
   "env": {
     "node": true,
     "es2022": true

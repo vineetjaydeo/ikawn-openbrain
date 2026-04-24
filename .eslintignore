@@ -4,3 +4,5 @@ scripts/
 tests/
 src/frontend/
 **/dist/
+src/design-app/
+src/design-app-dist/

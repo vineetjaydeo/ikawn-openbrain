@@ -27,6 +27,7 @@ const gdprRoute = require('./routes/gdpr');
 const brainHealthRoute = require('./routes/brain-health');
 const adminCostsRoute = require('./routes/admin-costs');
 const adminApiKeysRoute = require('./routes/admin-api-keys');
+const adminBrandsRoute = require('./routes/admin-brands');
 const sharedRoute = require('./routes/shared');
 const recallRoute = require('./routes/recall');
 const governanceRoute = require('./routes/governance');
@@ -210,6 +211,7 @@ app.use(requireAuth, ruhiChatRoute);
 
 // Admin API
 app.use(adminApi);
+app.use(adminBrandsRoute);
 app.use(adminCostsRoute);
 app.use(adminApiKeysRoute);
 app.use(intelligenceRoute);

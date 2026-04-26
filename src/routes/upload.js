@@ -220,7 +220,7 @@ router.post('/api/upload/brand-asset', requireAuth, async (req, res, next) => {
           const { analyzeTemplate, saveBrandProfile } = require('../services/pptx-template-analyzer');
           const profile = await analyzeTemplate(buffer, filename);
           if (profile) {
-            await saveBrandProfile(brandId, profile);
+            await saveBrandProfile(brandId, profile, url);
             console.log(`[BrandAsset] PPTX template analysis complete for brand ${brandId}`);
           }
         } catch (err) {

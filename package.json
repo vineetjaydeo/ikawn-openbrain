@@ -1,6 +1,6 @@
 {
   "name": "ikawn-openbrain",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "iKawn's Enterprise AI Intelligence Layer — memory, RAG, chat, agent platform",
   "main": "src/index.js",
   "scripts": {

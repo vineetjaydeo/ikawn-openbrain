@@ -616,7 +616,12 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
   try {
     const title = (config.title || '').trim();
     const slides = Array.isArray(config.slides) ? config.slides : [];
-    let themeName = config.theme || 'corporate';
+    // If a brand_id is present in context, force theme to 'brand' regardless of
+    // what the LLM picked. The LLM no longer gets to render a Fedfina deck in
+    // iKawn corporate gold by accident.
+    let themeName = context && context.brandId
+      ? 'brand'
+      : (config.theme || 'corporate');
     let theme;
 
     // Mark task as running
@@ -624,19 +629,32 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
 
     // ── Resolve theme ────────────────────────────────────────────────────────
     if (themeName === 'brand') {
-      let brandProfile = null;
-      try {
-        brandProfile = await getBrandProfile(context.brandId);
-      } catch (e) {
-        console.warn('[generate_pptx] Failed to fetch brand profile, falling back to corporate:', e.message);
-      }
-
-      if (brandProfile) {
-        theme = buildBrandTheme(brandProfile);
-      } else {
-        // Fall back to corporate if no brand profile exists
+      // brand_id was expected — fetch the profile and loud-fail on any error.
+      // A silent fallback to corporate here is the exact bug we are fixing.
+      const brandIdForLog = (context && context.brandId) || null;
+      if (!brandIdForLog) {
+        // Defensive: themeName === 'brand' from config.theme without a brand_id.
+        // No brand was actually expected, so fall back to corporate.
         theme = THEMES.corporate;
         themeName = 'corporate';
+      } else {
+        let brandProfile;
+        try {
+          brandProfile = await getBrandProfile(brandIdForLog);
+        } catch (e) {
+          console.error(`[generate_pptx] BRAND PROFILE FAILED for brandId=${brandIdForLog} — refusing silent fallback: ${e.message}`);
+          throw new Error(`Brand profile fetch failed for brandId=${brandIdForLog}: ${e.message}`);
+        }
+        if (!brandProfile) {
+          console.error(`[generate_pptx] BRAND PROFILE FAILED for brandId=${brandIdForLog} — refusing silent fallback: profile not found`);
+          throw new Error(`Brand profile not found for brandId=${brandIdForLog}`);
+        }
+        theme = buildBrandTheme(brandProfile);
+        const primary = theme.accent ? `#${theme.accent}` : 'none';
+        const secondary = theme.title ? `#${theme.title}` : 'none';
+        const embeddedCount = Array.isArray(theme.embeddedFonts) ? theme.embeddedFonts.length : 0;
+        const hasLogo = !!theme.logo;
+        console.log(`[generate_pptx] Brand theme applied: brandId=${brandIdForLog}, primary=${primary}, secondary=${secondary}, headingFont=${theme.headingFont}, bodyFont=${theme.bodyFont}, embeddedFonts=${embeddedCount}, hasLogo=${hasLogo}`);
       }
     } else {
       theme = THEMES[themeName] || THEMES.corporate;
@@ -928,4 +946,7 @@ module.exports = {
       };
     }
   },
+  // Exposed for tests — do not call directly from product code; this is the
+  // background worker that powers the tool.
+  _buildAndUploadPptx: buildAndUploadPptx,
 };

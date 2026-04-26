@@ -453,4 +453,29 @@ async function saveBrandProfile(brandId, profile, sourceFileUrl) {
   return storableProfile;
 }
 
-module.exports = { analyzeTemplate, saveBrandProfile, getBrandProfile, extractEmbeddedFonts };
+/**
+ * Read the stored training PPTX URL for a brand, set on the brand-profile
+ * vault_items row at upload time (saveBrandProfile -> metadata.source_template).
+ * Returns null when the brand has no analyzed template yet — the caller decides
+ * whether to fall back to a fresh-render path.
+ */
+async function getBrandTemplateUrl(brandId) {
+  if (!brandId) return null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT metadata FROM vault_items
+         WHERE brand_id = $1 AND file_type = 'brand-profile'
+           AND source = 'template_analysis' AND deleted_at IS NULL
+         ORDER BY updated_at DESC LIMIT 1`,
+      [brandId]
+    );
+    if (!rows.length) return null;
+    const meta = typeof rows[0].metadata === 'string' ? JSON.parse(rows[0].metadata) : rows[0].metadata;
+    return meta && meta.source_template ? meta.source_template : null;
+  } catch (err) {
+    console.warn('[pptx-template-analyzer] getBrandTemplateUrl failed:', err.message);
+    return null;
+  }
+}
+
+module.exports = { analyzeTemplate, saveBrandProfile, getBrandProfile, extractEmbeddedFonts, getBrandTemplateUrl, inferLayoutType };

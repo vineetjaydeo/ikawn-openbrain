@@ -3,11 +3,12 @@
 
 const PptxGenJS = require('pptxgenjs');
 const crypto = require('crypto');
-const { uploadToR2 } = require('../utils/storage');
+const { uploadToR2, downloadFromUrl } = require('../utils/storage');
 const { pool } = require('../db');
 const { captureMessage } = require('../utils/capture');
 const { sendTelegramMessage } = require('../utils/telegram');
-const { getBrandProfile } = require('../services/pptx-template-analyzer');
+const { getBrandProfile, getBrandTemplateUrl } = require('../services/pptx-template-analyzer');
+const { injectSlidesIntoTemplate } = require('../services/pptx-template-injector');
 const { getSlideIconDataUri, listIconNames } = require('../utils/slide-icons');
 const { embedFonts, resolveWebSafeFont } = require('../services/pptx-font-embedder');
 
@@ -703,6 +704,34 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
 
     // Export to buffer
     let buffer = await pptx.write({ outputType: 'nodebuffer' });
+
+    // Stage 2: when a brand template exists, inject the freshly-rendered slides
+    // into that template so the output inherits its masters, theme, and fonts.
+    // Failures degrade gracefully to the fresh render + alert V (Q3 contract).
+    if (themeName === 'brand' && context && context.brandId) {
+      let templateBuffer = null;
+      const tmplUrl = await getBrandTemplateUrl(context.brandId);
+      if (!tmplUrl) {
+        console.log(`[generate_pptx] No brand template URL for brandId=${context.brandId} — using fresh render`);
+      } else {
+        try {
+          templateBuffer = await downloadFromUrl(tmplUrl);
+          console.log(`[generate_pptx] Loaded brand template ${tmplUrl} (${templateBuffer.length} bytes) for brandId=${context.brandId}`);
+        } catch (e) {
+          console.warn(`[generate_pptx] Template download failed (${e.message}); using fresh render.`);
+        }
+      }
+      if (templateBuffer) {
+        try {
+          const slideTypes = ['title', ...slides.map(s => (s.type || 'content').toLowerCase())];
+          buffer = await injectSlidesIntoTemplate(templateBuffer, buffer, { slideTypes });
+          console.log(`[generate_pptx] Injected ${slideTypes.length} slides into brand template for brandId=${context.brandId}`);
+        } catch (e) {
+          console.error(`[generate_pptx] Template injection FAILED for brandId=${context.brandId}: ${e.message}. Falling back to fresh render.`);
+          sendTelegramMessage(`[Stage2 Injector FAILED] brand=${context.brandId} reason=${e.message}`).catch(() => {});
+        }
+      }
+    }
 
     // Post-process: embed brand font binaries (TTF/OTF) into the PPTX so it
     // renders correctly on machines without those fonts installed. Degrades

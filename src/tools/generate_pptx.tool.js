@@ -9,10 +9,7 @@ const { captureMessage } = require('../utils/capture');
 const { sendTelegramMessage } = require('../utils/telegram');
 const { getBrandProfile } = require('../services/pptx-template-analyzer');
 const { getSlideIconDataUri, listIconNames } = require('../utils/slide-icons');
-
-// Optional: pptx-embed-fonts for custom font embedding
-let withPPTXEmbedFonts;
-try { withPPTXEmbedFonts = require('pptx-embed-fonts/pptxgenjs').withPPTXEmbedFonts; } catch(e) { /* optional */ }
+const { embedFonts, resolveWebSafeFont } = require('../services/pptx-font-embedder');
 
 // ── Concurrency gate: max 2 concurrent PPTX builds per process ───────────────
 function createLimit(concurrency) {
@@ -84,6 +81,24 @@ function buildBrandTheme(brandProfile) {
   const bg = stripHash(colors.background) || fallback.bg;
   const text = stripHash(colors.text) || fallback.title;
 
+  // Determine which typefaces have an embedded binary available. If a
+  // typeface is going to be embedded, use the brand name verbatim so the
+  // slide XML matches the embedded font. If not, map common web fonts to a
+  // close Office equivalent so renders stay near-correct on machines that
+  // do not have the brand font installed.
+  const embedded = Array.isArray(fonts.embedded) ? fonts.embedded : [];
+  const embeddedTypefaces = new Set(embedded.map(f => f.typeface));
+
+  const requestedHeading = fonts.heading || fallback.headingFont;
+  const requestedBody = fonts.body || fallback.bodyFont;
+
+  const headingFont = embeddedTypefaces.has(requestedHeading)
+    ? requestedHeading
+    : resolveWebSafeFont(requestedHeading) || fallback.headingFont;
+  const bodyFont = embeddedTypefaces.has(requestedBody)
+    ? requestedBody
+    : resolveWebSafeFont(requestedBody) || fallback.bodyFont;
+
   return {
     bg,
     title: text,
@@ -92,8 +107,9 @@ function buildBrandTheme(brandProfile) {
     subtle: fallback.subtle,
     divider: fallback.divider,
     slideNum: fallback.slideNum,
-    headingFont: fonts.heading || fallback.headingFont,
-    bodyFont: fonts.body || fallback.bodyFont,
+    headingFont,
+    bodyFont,
+    embeddedFonts: embedded,
     logo: logo ? { url: logo.url, w: logo.width || 1.0, h: logo.height || 0.4 } : null,
   };
 }
@@ -628,11 +644,6 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
 
     const pptx = new PptxGenJS();
 
-    // Apply font embedding if available
-    if (withPPTXEmbedFonts) {
-      try { withPPTXEmbedFonts(pptx); } catch(e) { /* non-critical */ }
-    }
-
     pptx.layout = 'LAYOUT_16x9';
     pptx.author = 'Lucy AI';
     pptx.title = title;
@@ -673,7 +684,20 @@ async function buildAndUploadPptx(config, context, taskId, placeholderMessageId)
     }
 
     // Export to buffer
-    const buffer = await pptx.write({ outputType: 'nodebuffer' });
+    let buffer = await pptx.write({ outputType: 'nodebuffer' });
+
+    // Post-process: embed brand font binaries (TTF/OTF) into the PPTX so it
+    // renders correctly on machines without those fonts installed. Degrades
+    // gracefully on failure (returns the original buffer).
+    if (theme.embeddedFonts && theme.embeddedFonts.length > 0) {
+      try {
+        const before = buffer.length;
+        buffer = await embedFonts(buffer, theme.embeddedFonts);
+        console.log(`[generate_pptx] Font embedding: ${before} -> ${buffer.length} bytes (${theme.embeddedFonts.length} face(s))`);
+      } catch (err) {
+        console.warn('[generate_pptx] Font embedding failed, using unembedded buffer:', err.message);
+      }
+    }
 
     // Human-readable R2 key and filename
     const sanitizedTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50).toLowerCase();
@@ -769,6 +793,9 @@ module.exports = {
     'Supports title slides, content slides with bullet points, two-column layouts, and section breaks. ' +
     'Use theme "brand" to automatically apply the brand\'s colors, fonts, and logo. ' +
     'Each slide can optionally include an icon name for visual emphasis. ' +
+    'BRAND VOICE: when a BRAND CONTEXT block is present in your system prompt, write every slide title and body in that brand voice. ' +
+    'Slide titles should reflect the brand\'s positioning. Body copy must match the specified tone and speak to the stated audience. ' +
+    'Lead with concrete numbers and outcomes, not adjectives. Do not use emojis or em-dashes. ' +
     'Returns a download URL for the generated file.',
   tier: 'direct',
   costTier: 'medium',

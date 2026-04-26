@@ -72,6 +72,68 @@ function extractAllFonts(allXmlContent) {
   return [...fonts];
 }
 
+/**
+ * Extract embedded font binaries from a PPTX zip.
+ * Returns array of { typeface, face, filename, data } where face is one of
+ * regular, bold, italic, boldItalic. Reads <p:embeddedFontLst> from
+ * ppt/presentation.xml and resolves the r:id to a binary in ppt/fonts/ via
+ * ppt/_rels/presentation.xml.rels.
+ */
+async function extractEmbeddedFonts(zip) {
+  const out = [];
+  try {
+    const presFile = zip.file('ppt/presentation.xml');
+    const relsFile = zip.file('ppt/_rels/presentation.xml.rels');
+    if (!presFile || !relsFile) return out;
+
+    const presXml = await presFile.async('string');
+    const relsXml = await relsFile.async('string');
+
+    const relMap = {};
+    const relRe = /<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*\/?>/gi;
+    let relMatch;
+    while ((relMatch = relRe.exec(relsXml)) !== null) {
+      relMap[relMatch[1]] = relMatch[2];
+    }
+
+    const lstMatch = presXml.match(/<p:embeddedFontLst>([\s\S]*?)<\/p:embeddedFontLst>/);
+    if (!lstMatch) return out;
+    const lstBlock = lstMatch[1];
+    const fontRe = /<p:embeddedFont>([\s\S]*?)<\/p:embeddedFont>/g;
+    let fontMatch;
+    while ((fontMatch = fontRe.exec(lstBlock)) !== null) {
+      const block = fontMatch[1];
+      const typefaceMatch = block.match(/<p:font[^>]*typeface="([^"]+)"/);
+      if (!typefaceMatch) continue;
+      const typeface = typefaceMatch[1];
+
+      for (const face of ['regular', 'bold', 'italic', 'boldItalic']) {
+        const faceRe = new RegExp(`<p:${face}[^>]*r:id="([^"]+)"`);
+        const faceMatch = block.match(faceRe);
+        if (!faceMatch) continue;
+        const rid = faceMatch[1];
+        const target = relMap[rid];
+        if (!target) continue;
+
+        const resolved = target.startsWith('/')
+          ? target.slice(1)
+          : target.startsWith('../')
+            ? target.replace(/^\.\.\//, '')
+            : `ppt/${target}`;
+
+        const fontFile = zip.file(resolved);
+        if (!fontFile) continue;
+        const data = await fontFile.async('nodebuffer');
+        const filename = resolved.split('/').pop();
+        out.push({ typeface, face, filename, data });
+      }
+    }
+  } catch (e) {
+    console.warn('[pptx-template-analyzer] extractEmbeddedFonts failed:', e.message);
+  }
+  return out;
+}
+
 // ── Slide Dimensions ────────────────────────────────────────────────────────────
 
 function parseDimensions(presentationXml) {
@@ -199,6 +261,7 @@ async function analyzeTemplate(fileBuffer) {
 
   const allFonts = extractAllFonts(allXmlContent);
   const logos = await detectLogos(zip, slideXmlContents);
+  const embeddedFonts = await extractEmbeddedFonts(zip);
 
   const palette = COLOR_ELEMENTS.map(el => (colorScheme || {})[el]).filter(Boolean);
   const lt1 = (colorScheme || {}).lt1 || '#FFFFFF';
@@ -207,6 +270,7 @@ async function analyzeTemplate(fileBuffer) {
   return {
     colors: { primary: (colorScheme || {}).accent1 || null, secondary: (colorScheme || {}).accent2 || null, background: lt1, text: dk1, accent: (colorScheme || {}).accent3 || null, palette },
     fonts: { heading: themeFonts.heading, body: themeFonts.body, all: allFonts },
+    embeddedFonts,
     logos,
     layouts: parseLayouts(layoutEntries),
     dimensions,
@@ -342,9 +406,31 @@ async function saveBrandProfile(brandId, profile, sourceFileUrl) {
     uploadedLogos.push({ filename: logo.filename, url, width: logo.width, height: logo.height });
   }
 
+  // Upload embedded font binaries (TTF/OTF/.fntdata) so the generator can later embed them
+  const uploadedFonts = [];
+  for (const font of (profile.embeddedFonts || [])) {
+    try {
+      const ext = (font.filename.split('.').pop() || 'fntdata').toLowerCase();
+      const mimeMap = { ttf: 'font/ttf', otf: 'font/otf', fntdata: 'application/octet-stream', woff: 'font/woff', woff2: 'font/woff2' };
+      const mime = mimeMap[ext] || 'application/octet-stream';
+      const safeTypeface = (font.typeface || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const r2Key = `brand-assets/fonts/${brandId}/${safeTypeface}_${font.face}_${font.filename}`;
+      const url = await uploadToR2(r2Key, font.data, mime, brandId);
+      uploadedFonts.push({
+        typeface: font.typeface,
+        face: font.face,
+        filename: font.filename,
+        url,
+        size: font.data.length,
+      });
+    } catch (err) {
+      console.warn('[pptx-template-analyzer] Failed to upload embedded font:', font.filename, err.message);
+    }
+  }
+
   const storableProfile = {
     colors: profile.colors,
-    fonts: profile.fonts,
+    fonts: { ...(profile.fonts || {}), embedded: uploadedFonts },
     logos: uploadedLogos,
     layouts: profile.layouts,
     dimensions: profile.dimensions,
@@ -367,4 +453,4 @@ async function saveBrandProfile(brandId, profile, sourceFileUrl) {
   return storableProfile;
 }
 
-module.exports = { analyzeTemplate, saveBrandProfile, getBrandProfile };
+module.exports = { analyzeTemplate, saveBrandProfile, getBrandProfile, extractEmbeddedFonts };

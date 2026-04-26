@@ -14,6 +14,7 @@ const { captureMessage } = require('../utils/capture');
 const { extractMemories } = require('../utils/memory-extractor');
 const { getTool, getTools } = require('../tools/registry');
 const { loadBrandKnowledge } = require('../ruhi/persona');
+const { getBrandContextForUser, buildBrandContextBlock } = require('../utils/brand-context');
 const { INSTANCE_NAME } = require('../utils/ruhi-assets');
 const { CHAT_CONTEXT_THRESHOLD } = require('../utils/similarity');
 const { compressContext, estimateMessagesTokens } = require('../utils/context-compressor');
@@ -535,6 +536,13 @@ RULES:
       };
     } else {
       const kb = await loadBrandKnowledge(req.brand_id);
+      let brandVoiceProfile = null;
+      try {
+        brandVoiceProfile = await getBrandContextForUser(req.session.user.id, req.brand_id, pool);
+      } catch (err) {
+        console.warn('[chat-api] getBrandContextForUser failed:', err.message);
+      }
+      const brandVoiceBlock = buildBrandContextBlock(brandVoiceProfile);
       systemPrompt = {
         role: 'system',
         content: `You ARE ${INSTANCE_NAME}. Not "an AI assistant called ${INSTANCE_NAME}" — you are ${INSTANCE_NAME}, iKawn's intelligent commerce copilot. Everything below defines who you are, how you think, what you know, and how you behave. Internalize it completely.
@@ -546,6 +554,7 @@ ${kb.soul || ''}
 ${kb.memory || ''}
 ${recentActivity}
 ${memoryContext}
+${brandVoiceBlock ? brandVoiceBlock + '\n' : ''}
 ${contextSummary ? `=== CONVERSATION CONTEXT (auto-generated summary) ===
 Topic: ${contextSummary.topic || 'General conversation'}
 ${contextSummary.bullets ? contextSummary.bullets.map(b => `- ${b.text}`).join('\n') : ''}

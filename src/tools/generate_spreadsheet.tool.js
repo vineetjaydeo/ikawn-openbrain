@@ -45,7 +45,11 @@ function isNumeric(val) {
 
 module.exports = {
   name: 'generate_spreadsheet',
-  description: 'Generate an Excel spreadsheet (.xlsx) with formatted headers, data rows, and optional financial styling. Returns a downloadable URL.',
+  description:
+    'Generate an Excel spreadsheet (.xlsx) with formatted headers, data rows, and optional financial styling. ' +
+    'BRAND VOICE: when a BRAND CONTEXT block is present in your system prompt, sheet names, column headers, and any narrative cells (executive summary, notes) must use the brand\'s voice. ' +
+    'Headers should be specific and decision-grade, not generic. Do not use emojis or em-dashes. ' +
+    'Returns a downloadable URL.',
   tier: 'direct',
   costTier: 'low',
   parameters: {

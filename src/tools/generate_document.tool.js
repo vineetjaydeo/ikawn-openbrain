@@ -307,7 +307,11 @@ function buildDocument(title, content, sections, style) {
 
 module.exports = {
   name: 'generate_document',
-  description: 'Generate a professional DOCX (Word) document from structured content. Use this when a user asks for a Word document, editable report, or downloadable document in DOCX format.',
+  description:
+    'Generate a professional DOCX (Word) document from structured content. ' +
+    'Use this when a user asks for a Word document, editable report, or downloadable document in DOCX format. ' +
+    'BRAND VOICE: when a BRAND CONTEXT block is present in your system prompt, write all prose as the brand\'s in-house writer. ' +
+    'Match the specified tone, address the stated audience, open with the conclusion, then evidence. Avoid filler. Do not use emojis or em-dashes.',
   tier: 'direct',
   parameters: {
     title: { type: 'string', required: true, description: 'Document title' },

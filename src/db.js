@@ -1528,6 +1528,20 @@ async function initSchema() {
         ON agent_run_states (updated_at) WHERE pending_approval_count > 0
     `);
 
+    // -- Plan 02: agent-api per-agent configuration -----------------------
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_configs (
+        agent_id TEXT NOT NULL,
+        brand_id TEXT NOT NULL,
+        input_token_budget INT NOT NULL,
+        tool_allowlist JSONB NOT NULL,
+        lesson_injection_weights JSONB NOT NULL,
+        max_retrieval INT NOT NULL DEFAULT 8,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (agent_id, brand_id)
+      )
+    `);
+
     console.log('Database schema initialized (v24 — design studio)');
   } finally {
     client.release();

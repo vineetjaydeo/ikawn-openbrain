@@ -1101,6 +1101,70 @@ function chatPage(user, isDirectChat = false) {
     }
     .artifact-chart-img:hover { opacity: 0.9; }
 
+    /* ==================== ARTIFACT PANE (right-side overlay) ==================== */
+    .artifact-card { cursor: pointer; }
+    .artifact-pane-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      z-index: 90; opacity: 0; pointer-events: none;
+      transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(2px);
+    }
+    .artifact-pane-backdrop.visible { opacity: 1; pointer-events: auto; }
+    .artifact-pane {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: min(720px, 92vw); z-index: 95;
+      background: #0E0F13; border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(105%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+    }
+    .artifact-pane.open { transform: translateX(0); }
+    .artifact-pane-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .artifact-pane-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .artifact-pane-badge {
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
+      padding: 3px 8px; border-radius: 6px;
+      background: rgba(255,192,28,0.15); color: var(--accent);
+    }
+    .artifact-pane-title {
+      font-size: 0.92rem; font-weight: 500; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .artifact-pane-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .artifact-pane-btn {
+      width: 32px; height: 32px; border-radius: 8px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-dim); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      text-decoration: none; font-size: 0.95rem;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .artifact-pane-btn:hover { color: var(--text); border-color: var(--accent); }
+    .artifact-pane-body { flex: 1; min-height: 0; background: #fff; }
+    .artifact-pane-iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .artifact-pane-feedback {
+      display: flex; gap: 8px; padding: 10px 14px;
+      border-top: 1px solid var(--border); background: rgba(255,255,255,0.02);
+    }
+    .artifact-pane-feedback textarea {
+      flex: 1; resize: none; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; color: var(--text); font: inherit; font-size: 0.85rem;
+    }
+    .artifact-pane-feedback textarea:focus { outline: none; border-color: var(--accent); }
+    .artifact-pane-feedback button {
+      background: var(--accent); color: #0a0a0a; border: 0;
+      padding: 0 16px; border-radius: 8px; font-weight: 600; cursor: pointer;
+      transition: filter 0.15s;
+    }
+    .artifact-pane-feedback button:hover { filter: brightness(1.1); }
+    @media (max-width: 720px) { .artifact-pane { width: 100vw; } }
+
     /* ==================== NEW UI: BACKGROUND TASK CARD (sticky above input) ==================== */
     .task-card-sticky-wrap {
       position: sticky; bottom: 0; z-index: 10;
@@ -2124,6 +2188,28 @@ function chatPage(user, isDirectChat = false) {
   <div class="lightbox" id="lightbox" onclick="closeLightbox()">
     <img id="lightbox-img" src="" alt="">
   </div>
+
+  <!-- Artifact Pane (Claude-style right overlay) -->
+  <div class="artifact-pane-backdrop" id="artifact-pane-backdrop" onclick="closeArtifactPane()"></div>
+  <aside class="artifact-pane" id="artifact-pane" aria-hidden="true">
+    <header class="artifact-pane-header">
+      <div class="artifact-pane-title-wrap">
+        <span class="artifact-pane-badge" id="artifact-pane-badge">HTML</span>
+        <span class="artifact-pane-title" id="artifact-pane-title">Untitled</span>
+      </div>
+      <div class="artifact-pane-actions">
+        <a class="artifact-pane-btn" id="artifact-pane-open" href="#" target="_blank" rel="noopener" title="Open in new tab">↗</a>
+        <button class="artifact-pane-btn" type="button" onclick="closeArtifactPane()" title="Close">✕</button>
+      </div>
+    </header>
+    <div class="artifact-pane-body">
+      <iframe class="artifact-pane-iframe" id="artifact-pane-iframe" sandbox="allow-same-origin allow-scripts allow-popups" referrerpolicy="no-referrer" loading="lazy"></iframe>
+    </div>
+    <footer class="artifact-pane-feedback">
+      <textarea id="artifact-feedback-input" placeholder="Send feedback on this report..." rows="2"></textarea>
+      <button type="button" id="artifact-feedback-send" onclick="sendArtifactFeedback()">Send</button>
+    </footer>
+  </aside>
 
   <!-- Toast -->
   <div class="toast" id="toast"></div>
@@ -3224,6 +3310,9 @@ function chatPage(user, isDirectChat = false) {
                 }
               } else if (evt.type === 'artifact_ready') {
                 renderArtifactCard(evt);
+                if (evt.tool === 'generate_html' && evt.url) {
+                  openArtifactPane({ url: evt.url, title: evt.title || evt.filename || 'Report', filename: evt.filename, brandDisplayName: evt.brandDisplayName });
+                }
               } else if (evt.type === 'task_started' && evt.taskId) {
                 // Clear streaming bubble text so only the task card shows
                 if (bubble) { bubble.textContent = ''; fullText = ''; }
@@ -3775,6 +3864,16 @@ function chatPage(user, isDirectChat = false) {
       ac.appendChild(icon);
       ac.appendChild(info);
       ac.appendChild(dl);
+      // Card click opens the right-pane viewer for HTML artifacts
+      if (evt.tool === 'generate_html' && evt.url) {
+        ac.dataset.artifactUrl = evt.url;
+        ac.dataset.artifactTitle = evt.title || evt.filename || 'Report';
+        ac.dataset.artifactFilename = evt.filename || '';
+        ac.addEventListener('click', function(ev) {
+          if (ev.target.closest('.artifact-card-download')) return;
+          openArtifactPane({ url: ac.dataset.artifactUrl, title: ac.dataset.artifactTitle, filename: ac.dataset.artifactFilename });
+        });
+      }
       wrapper.appendChild(ac);
       container.appendChild(wrapper);
       scrollToBottom(false);
@@ -4443,6 +4542,55 @@ function chatPage(user, isDirectChat = false) {
       if (!text) return;
       navigator.sendBeacon('/api/conversations/' + activeConvId + '/draft',
         new Blob([JSON.stringify({ text })], { type: 'application/json' }));
+    });
+
+    /* ==================== ARTIFACT PANE ==================== */
+    var _activeArtifact = null;
+    function openArtifactPane(payload) {
+      if (!payload || !payload.url) return;
+      _activeArtifact = payload;
+      var titleEl = document.getElementById('artifact-pane-title');
+      var iframeEl = document.getElementById('artifact-pane-iframe');
+      var openEl = document.getElementById('artifact-pane-open');
+      var paneEl = document.getElementById('artifact-pane');
+      var bdEl = document.getElementById('artifact-pane-backdrop');
+      if (titleEl) titleEl.textContent = payload.title || 'Report';
+      if (iframeEl) iframeEl.src = payload.url;
+      if (openEl) openEl.href = payload.url;
+      if (paneEl) { paneEl.classList.add('open'); paneEl.setAttribute('aria-hidden', 'false'); }
+      if (bdEl) bdEl.classList.add('visible');
+    }
+    function closeArtifactPane() {
+      var paneEl = document.getElementById('artifact-pane');
+      var bdEl = document.getElementById('artifact-pane-backdrop');
+      if (paneEl) { paneEl.classList.remove('open'); paneEl.setAttribute('aria-hidden', 'true'); }
+      if (bdEl) bdEl.classList.remove('visible');
+      setTimeout(function() {
+        if (paneEl && !paneEl.classList.contains('open')) {
+          var iframeEl = document.getElementById('artifact-pane-iframe');
+          if (iframeEl) iframeEl.src = 'about:blank';
+        }
+      }, 350);
+    }
+    function sendArtifactFeedback() {
+      var ta = document.getElementById('artifact-feedback-input');
+      if (!ta) return;
+      var text = (ta.value || '').trim();
+      if (!text || !_activeArtifact) return;
+      var prefix = 'Re: ' + (_activeArtifact.title || 'report') + ' — ';
+      var input = document.getElementById('msg-input');
+      if (input) {
+        input.value = prefix + text + '\n\n[artifact: ' + _activeArtifact.url + ']';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        if (typeof sendMessage === 'function') sendMessage();
+      }
+      ta.value = '';
+    }
+    document.addEventListener('keydown', function(e) {
+      var paneEl = document.getElementById('artifact-pane');
+      if (e.key === 'Escape' && paneEl && paneEl.classList.contains('open')) {
+        closeArtifactPane();
+      }
     });
 
     /* ==================== LIGHTBOX ==================== */

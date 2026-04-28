@@ -745,6 +745,40 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
       }
     }
 
+    // ── Natural-language brand routing ──
+    // If the user's message names a brand they have access to, override req.brand_id
+    // for this request so downstream tools (PPTX template injector, brand_context,
+    // brand_knowledge) pick up the correct brand. Falls back silently on any error.
+    try {
+      const { detectBrand } = require('../utils/brand-detector');
+      const detected = await detectBrand(content, pool);
+      if (detected && detected.brandId && detected.brandId !== req.brand_id) {
+        const candidateBrandId = detected.brandId;
+        const userId = req.session?.user?.id;
+        let allowed = false;
+        if (req.session?.user?.role === 'admin') {
+          allowed = true;
+        } else if (candidateBrandId === 'ikawn') {
+          // Default brand 'ikawn' is accessible to all authenticated users (backward compat) — mirrors auth.js requireBrandAccess
+          allowed = !!userId;
+        } else if (userId) {
+          const membership = await pool.query(
+            'SELECT 1 FROM brand_users WHERE brand_id = $1 AND user_id = $2 LIMIT 1',
+            [candidateBrandId, userId]
+          );
+          allowed = membership.rows.length > 0;
+        }
+        if (allowed) {
+          console.log(`[BrandRouting] User-message brand detected: ${candidateBrandId} (alias: "${detected.matchedAlias}")`);
+          req.brand_id = candidateBrandId;
+        } else {
+          console.warn(`[BrandRouting] Detected brand ${candidateBrandId} but user lacks access; keeping ${req.brand_id}`);
+        }
+      }
+    } catch (brandErr) {
+      console.error('[BrandRouting] detector error:', brandErr.message);
+    }
+
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');

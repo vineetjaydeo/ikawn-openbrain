@@ -1,0 +1,17 @@
+{
+  "name": "@ikawn/agent-api",
+  "version": "0.1.0",
+  "description": "OpenBrain agent runtime: TurnEngine, ToolRegistry, ContextAssembler, RunState",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.23.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
+  }
+}

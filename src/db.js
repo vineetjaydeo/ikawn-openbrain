@@ -1502,6 +1502,32 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_design_chat_design ON design_chat(design_id);
     `);
 
+    // -- Plan 02: agent-api engine state ----------------------------------
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_run_states (
+        conversation_id TEXT PRIMARY KEY,
+        brand TEXT NOT NULL,
+        current_step TEXT NOT NULL,
+        pending_approval_count INT NOT NULL DEFAULT 0,
+        pending_job_count INT NOT NULL DEFAULT 0,
+        state JSONB NOT NULL,
+        schema_version TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS agent_run_states_brand_step_idx
+        ON agent_run_states (brand, current_step) WHERE current_step != 'idle'
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS agent_run_states_pending_jobs_idx
+        ON agent_run_states (updated_at) WHERE pending_job_count > 0
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS agent_run_states_pending_approvals_idx
+        ON agent_run_states (updated_at) WHERE pending_approval_count > 0
+    `);
+
     console.log('Database schema initialized (v24 — design studio)');
   } finally {
     client.release();

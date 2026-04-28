@@ -3,6 +3,7 @@
 const { ContextAssembler } = require('../src/engine/ContextAssembler.js');
 const { MemoryLearningSink } = require('../src/engine/learningSink.js');
 const { createRunState, appendItem } = require('../src/engine/runState.js');
+const { BudgetExceededError } = require('../src/errors.js');
 
 function fakeBrandReader() {
   return async (brand) => `brand context for ${brand}`;
@@ -126,5 +127,73 @@ describe('ContextAssembler composition', () => {
     expect(json).toContain('older messages summarized');
     expect(json).not.toContain('"old1"');
     expect(json).toContain('"recent"');
+  });
+});
+
+describe('ContextAssembler budget gating', () => {
+  function smallBudgetCtx() {
+    return baseCtx();
+  }
+
+  it('passes when under budget', async () => {
+    const assembler = new ContextAssembler({
+      learningSink: new MemoryLearningSink(),
+      brandReader: fakeBrandReader(),
+      agentConfig: () => ({
+        inputTokenBudget: 100,
+        maxRetrieval: 8,
+        lessonInjectionWeights: { similarity: 0.5, recency: 0.3, quality_score: 0.2 },
+        toolAllowlist: [],
+      }),
+      estimateTokens: () => 5,
+    });
+    const out = await assembler.compose({
+      ctx: smallBudgetCtx(), state: baseState(), turnInput: [{ type: 'text', text: 'q' }],
+    });
+    expect(out.budget.estimatedInputTokens).toBeLessThanOrEqual(100);
+  });
+
+  it('drops lowest-scoring lessons when over budget', async () => {
+    const sink = new MemoryLearningSink();
+    for (let i = 0; i < 5; i++) {
+      await sink.writeLesson({ brand: 'ikawn' }, {
+        id: `l${i}`, agent: 'ruhi', topic: 't', text: `lesson ${i} ${'x'.repeat(50)}`,
+        embedding: [], quality_score: i / 10, created_at: i,
+      });
+    }
+    let callCount = 0;
+    const assembler = new ContextAssembler({
+      learningSink: sink,
+      brandReader: fakeBrandReader(),
+      agentConfig: () => ({
+        inputTokenBudget: 60, // forces drops
+        maxRetrieval: 8,
+        lessonInjectionWeights: { similarity: 0, recency: 0, quality_score: 1 }, // pure quality
+        toolAllowlist: [],
+      }),
+      estimateTokens: () => { callCount++; return 10; },
+    });
+    const out = await assembler.compose({
+      ctx: smallBudgetCtx(), state: baseState(), turnInput: [{ type: 'text', text: 'q' }],
+    });
+    // Should have dropped some lessons
+    expect(out.lessonsApplied.length).toBeLessThan(5);
+  });
+
+  it('throws BudgetExceededError when no lessons can be dropped further', async () => {
+    const assembler = new ContextAssembler({
+      learningSink: new MemoryLearningSink(),
+      brandReader: fakeBrandReader(),
+      agentConfig: () => ({
+        inputTokenBudget: 5, // impossibly small
+        maxRetrieval: 0,
+        lessonInjectionWeights: { similarity: 0.5, recency: 0.3, quality_score: 0.2 },
+        toolAllowlist: [],
+      }),
+      estimateTokens: () => 100,
+    });
+    await expect(assembler.compose({
+      ctx: smallBudgetCtx(), state: baseState(), turnInput: [{ type: 'text', text: 'q' }],
+    })).rejects.toThrow(BudgetExceededError);
   });
 });

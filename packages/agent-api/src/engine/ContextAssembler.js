@@ -12,26 +12,55 @@ class ContextAssembler {
     const config = this._agentConfig(ctx.brandContext.agent, ctx.brandContext.brand);
     const messages = [];
     const cacheBreakpoints = [];
-    let estimatedInputTokens = 0;
 
-    // Stage 1: system prompt (cached)
     const systemPrompt = `${ctx.agentSystemPrompt}\n\n${ctx.standingRules}`;
     cacheBreakpoints.push({ position: 0, kind: 'system' });
-    estimatedInputTokens += this._estimateTokens(systemPrompt);
+    const systemTokens = this._estimateTokens(systemPrompt);
 
-    // Stage 2: brand context (cached at brandRevision)
     const brandText = await this._brandReader(
       ctx.brandContext.brand, ctx.brandContext.isolationToken,
     );
-    messages.push({
+    const brandMsg = {
       role: 'system',
       content: [{ type: 'text', text: `Brand context:\n${brandText}` }],
-    });
+    };
+    messages.push(brandMsg);
     cacheBreakpoints.push({ position: messages.length, kind: 'brand' });
-    estimatedInputTokens += this._estimateTokens(brandText);
+    const brandTokens = this._estimateTokens(brandText);
 
-    // Stage 3: lessons (cached per brandRevision)
-    const lessons = await this._readAndRankLessons({ ctx, state, turnInput, config });
+    let lessons = await this._readAndRankLessons({ ctx, state, turnInput, config });
+
+    const history = this._historySinceLastBoundary(state.items);
+    const historyMsgs = [];
+    let historyTokens = 0;
+    for (const item of history) {
+      const msg = this._itemToMessage(item);
+      if (msg) {
+        historyMsgs.push(msg);
+        historyTokens += this._estimateTokens(JSON.stringify(msg.content));
+      }
+    }
+
+    const turnTokens = this._estimateTokens(JSON.stringify(turnInput));
+    const fixedTokens = systemTokens + brandTokens + historyTokens + turnTokens;
+
+    const lessonTokensFor = (ls) => ls.reduce(
+      (sum, l) => sum + this._estimateTokens(`- ${l.text}`), 0,
+    );
+
+    while (true) {
+      const lessonTokens = lessonTokensFor(lessons);
+      const total = fixedTokens + lessonTokens;
+      if (total <= config.inputTokenBudget) break;
+      if (lessons.length === 0) {
+        throw new BudgetExceededError('context exceeds budget after dropping all lessons', {
+          budget: config.inputTokenBudget, estimated: total,
+        });
+      }
+      lessons.sort((a, b) => (a._score || 0) - (b._score || 0));
+      lessons.shift();
+    }
+
     if (lessons.length > 0) {
       const lessonText = lessons.map((l) => `- ${l.text}`).join('\n');
       messages.push({
@@ -39,35 +68,29 @@ class ContextAssembler {
         content: [{ type: 'text', text: `Lessons:\n${lessonText}` }],
       });
       cacheBreakpoints.push({ position: messages.length, kind: 'lessons' });
-      estimatedInputTokens += this._estimateTokens(lessonText);
     }
 
-    // Stage 4: history since last compaction_boundary
-    const history = this._historySinceLastBoundary(state.items);
-    for (const item of history) {
-      const msg = this._itemToMessage(item);
-      if (msg) {
-        messages.push(msg);
-        estimatedInputTokens += this._estimateTokens(JSON.stringify(msg.content));
-      }
+    for (const m of historyMsgs) {
+      messages.push(m);
     }
     cacheBreakpoints.push({ position: messages.length, kind: 'history' });
 
-    // Stage 5: turn input (uncached, last)
     messages.push({ role: 'user', content: turnInput });
-    estimatedInputTokens += this._estimateTokens(JSON.stringify(turnInput));
+
+    const lessonTokens = lessonTokensFor(lessons);
+    const estimatedInputTokens = systemTokens + brandTokens + lessonTokens + historyTokens + turnTokens;
 
     return {
       systemPrompt,
       messages,
-      tools: [], // populated by engine in Plan 02 with tool_allowlist resolution
+      tools: [],
       cacheBreakpoints,
       budget: {
         inputTokenBudget: config.inputTokenBudget,
         estimatedInputTokens,
-        cacheableTokens: 0, // computed in Plan 02 once tokenizer is wired
+        cacheableTokens: 0,
       },
-      lessonsApplied: lessons.map((l) => ({ id: l.id, score: l._score })),
+      lessonsApplied: lessons.map((l) => ({ id: l.id, score: l._score || 0 })),
     };
   }
 

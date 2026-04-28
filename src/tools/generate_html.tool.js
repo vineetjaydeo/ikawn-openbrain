@@ -74,7 +74,7 @@ function validateHtml(html) {
 
 module.exports = {
   name: 'generate_html',
-  description: 'Generate a complete, self-contained HTML page. The HTML must include all styles inline (or via CDN links) and be fully functional as a standalone file. Use this for landing pages, dashboards, prototypes, data visualizations, and interactive demos.',
+  description: 'Generate a complete, self-contained, BRAND-AWARE HTML report or page. ALWAYS use this when the user asks for a "report", "investor brief", "one-pager", "memo", "summary document", landing page, dashboard, prototype, or visualization. The HTML must include all styles inline, must use the active brand\'s color palette and typography (passed via injected brand context), and must be fully functional as a standalone file. Do NOT use this for casual replies, greetings, or short factual questions — those stay as plain text in chat.',
   tier: 'direct',
   costTier: 'medium',
 
@@ -97,11 +97,43 @@ module.exports = {
   },
 
   async execute(config, context) {
-    const { html, title, summary } = config;
+    const { html: rawHtml, title, summary } = config;
     const { brandId = 'ikawn', userId, conversationId, pool } = context;
 
-    if (!html || !title) {
+    if (!rawHtml || !title) {
       return { success: false, data: null, summary: 'Missing required fields: html and title' };
+    }
+
+    // Load brand context (palette, fonts) for guaranteed branding
+    let brandPalette = null;
+    let brandDisplayName = brandId;
+    if (pool) {
+      try {
+        const { rows } = await pool.query(
+          `SELECT display_name, preferences FROM brand_context WHERE brand_id = $1 LIMIT 1`,
+          [brandId]
+        );
+        if (rows.length > 0) {
+          brandDisplayName = rows[0].display_name || brandId;
+          const prefs = rows[0].preferences || {};
+          brandPalette = {
+            primary:    prefs.colors && prefs.colors.primary    ? prefs.colors.primary    : null,
+            secondary:  prefs.colors && prefs.colors.secondary  ? prefs.colors.secondary  : null,
+            background: prefs.colors && prefs.colors.background ? prefs.colors.background : '#FFFFFF',
+            heading:    prefs.fonts  && prefs.fonts.heading     ? prefs.fonts.heading     : 'Inter',
+            body:       prefs.fonts  && prefs.fonts.body        ? prefs.fonts.body        : 'Inter',
+          };
+        }
+      } catch (err) {
+        console.warn('[generate_html] Brand context load failed:', err.message);
+      }
+    }
+
+    // Inject brand CSS variables into <head> if palette present and HTML has not already styled itself with brand vars
+    let html = rawHtml;
+    if (brandPalette && brandPalette.primary && /<head[^>]*>/i.test(html) && !/--brand-primary/i.test(html)) {
+      const brandStyle = `<style>:root{--brand-primary:${brandPalette.primary};--brand-secondary:${brandPalette.secondary || brandPalette.primary};--brand-bg:${brandPalette.background};--brand-heading:'${brandPalette.heading}',sans-serif;--brand-body:'${brandPalette.body}',sans-serif;}body{font-family:var(--brand-body);background:var(--brand-bg);}h1,h2,h3,h4{font-family:var(--brand-heading);color:var(--brand-primary);}a{color:var(--brand-primary);}</style>`;
+      html = html.replace(/<head[^>]*>/i, function(m) { return m + brandStyle; });
     }
 
     // Validate HTML
@@ -143,7 +175,7 @@ module.exports = {
 
       return {
         success: true,
-        data: { url, filename, title, size: `${sizeKb} KB` },
+        data: { url, filename, title, size: `${sizeKb} KB`, brandId, brandDisplayName, palette: brandPalette },
         summary: summary
           ? `${summary}\n\nYour page is ready: ${url}`
           : `Generated "${title}" (${sizeKb} KB). View it here: ${url}`,

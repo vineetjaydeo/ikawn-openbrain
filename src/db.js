@@ -1542,6 +1542,48 @@ async function initSchema() {
       )
     `);
 
+    // -- Plan 02: Task 16 — learning_signals + lessons --------------------
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS learning_signals (
+        id BIGSERIAL PRIMARY KEY,
+        brand TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        detail JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS learning_signals_brand_kind_idx
+        ON learning_signals (brand, kind, created_at DESC)
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lessons (
+        id BIGSERIAL PRIMARY KEY,
+        brand TEXT,
+        cross_brand BOOLEAN NOT NULL DEFAULT false,
+        agent TEXT,
+        topic TEXT,
+        text TEXT NOT NULL,
+        quality_score REAL NOT NULL DEFAULT 0.5,
+        embedding JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT lessons_scope_check CHECK (
+          (cross_brand = true AND brand IS NULL) OR
+          (cross_brand = false AND brand IS NOT NULL)
+        )
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS lessons_brand_agent_idx
+        ON lessons (brand, agent) WHERE cross_brand = false
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS lessons_cross_brand_idx
+        ON lessons (agent) WHERE cross_brand = true
+    `);
+
     console.log('Database schema initialized (v24 — design studio)');
   } finally {
     client.release();

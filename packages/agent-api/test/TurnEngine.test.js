@@ -236,3 +236,84 @@ describe('TurnEngine tool_use dispatch', () => {
     expect(types[types.length - 1]).toBe('end_turn');
   });
 });
+
+const { BudgetExceededError } = require('../src/errors.js');
+
+describe('TurnEngine error surfaces', () => {
+  it('aborts turn on isolation_violation tool_result', async () => {
+    // brandContext.brand !== state.brand triggers isolation_violation in executor
+    const session = new MemorySession();
+    const state = createRunState({ conversationId: 'c1', userId: 'u1', brand: 'acme', brandRevision: 1, agent: 'general' });
+    await session.save(state);
+
+    const echo = makeEchoTool();
+    const registry = new ToolRegistry();
+    registry.register(echo);
+
+    const provider = new MemoryProvider({ script: [] });
+    provider.invoke = async function* (_args) {
+      this.calls.push(_args);
+      yield { type: 'tool_use', toolUseId: 'tu_x', name: 'echo', input: { msg: 'go' } };
+      yield { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } };
+    };
+
+    const engine = new TurnEngine({
+      session,
+      learningSink: new MemoryLearningSink(),
+      contextAssembler: new ContextAssembler({
+        brandReader: async () => '',
+        lessonReader: async () => [],
+        learningSink: new MemoryLearningSink(),
+        agentConfig: () => ({ inputTokenBudget: 100000, maxRetrieval: 8 }),
+        estimateTokens: (t) => Math.ceil((t || '').length / 4),
+      }),
+      provider,
+      registry,
+    });
+
+    const items = [];
+    for await (const item of engine.submitMessage({
+      input: 'hi',
+      // Mismatched brand: ctx says 'evil', state was created with 'acme'
+      ctx: { ...ctxFor('evil'), conversationId: 'c1' },
+    })) {
+      items.push(item);
+    }
+
+    const result = items.find((i) => i.type === 'tool_result');
+    expect(result.output).toEqual(expect.objectContaining({ ok: false, kind: 'isolation_violation' }));
+    expect(items[items.length - 1]).toEqual({ status: 'end_turn' });
+    expect(provider.calls).toHaveLength(1); // engine did NOT loop after isolation_violation
+  });
+
+  it('surfaces BudgetExceededError as a controlled assistant message and ends', async () => {
+    const session = await setupSession();
+    const provider = new MemoryProvider({ script: [] });
+    let composeCount = 0;
+    const assembler = {
+      compose: async () => {
+        composeCount++;
+        const err = new BudgetExceededError({ budget: 1000, estimated: 5000 });
+        throw err;
+      },
+    };
+    const engine = new TurnEngine({
+      session,
+      learningSink: new MemoryLearningSink(),
+      contextAssembler: assembler,
+      provider,
+      registry: new ToolRegistry(),
+    });
+
+    const items = [];
+    for await (const item of engine.submitMessage({ input: 'hi', ctx: { ...ctxFor(), conversationId: 'c1' } })) {
+      items.push(item);
+    }
+
+    const asst = items.find((i) => i.type === 'assistant_message');
+    expect(asst.content).toMatch(/context for this turn is too large/i);
+    expect(items[items.length - 1]).toEqual({ status: 'end_turn' });
+    expect(composeCount).toBe(1);
+    expect(provider.calls).toHaveLength(0); // no provider call when budget exceeded
+  });
+});

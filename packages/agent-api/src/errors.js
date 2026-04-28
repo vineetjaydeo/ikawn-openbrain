@@ -27,7 +27,11 @@ class BrandIsolationError extends Error {
 }
 
 class BudgetExceededError extends Error {
-  constructor(message, { budget, estimated }) {
+  constructor(messageOrOpts, opts) {
+    // Allow both (message, { budget, estimated }) and ({ budget, estimated })
+    const isOptsFirst = messageOrOpts && typeof messageOrOpts === 'object' && !opts;
+    const { budget, estimated } = isOptsFirst ? messageOrOpts : (opts || {});
+    const message = isOptsFirst ? `Budget exceeded: estimated ${estimated}, budget ${budget}` : messageOrOpts;
     super(message);
     this.name = 'BudgetExceededError';
     this.budget = budget;

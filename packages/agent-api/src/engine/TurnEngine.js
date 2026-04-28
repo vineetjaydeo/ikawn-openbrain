@@ -38,7 +38,21 @@ class TurnEngine {
     const usageAccum = { inputTokens: 0, outputTokens: 0, cacheReads: 0, cacheWrites: 0 };
     let safety = 0;
     while (safety++ < 10) {
-      const assembled = await this._assembler.compose({ ctx, state, turnInput: input });
+      let assembled;
+      try {
+        assembled = await this._assembler.compose({ ctx, state, turnInput: input });
+      } catch (e) {
+        if (e && e.name === 'BudgetExceededError') {
+          const msg = 'The context for this turn is too large to send safely; some background was dropped.';
+          const asstItem = { type: 'assistant_message', content: msg, ts: Date.now() };
+          state = appendItem(state, asstItem);
+          await this._session.appendItem(ctx.conversationId, asstItem);
+          yield asstItem;
+          break;
+        }
+        throw e;
+      }
+
       const providerArgs = {
         systemPrompt: assembled.systemPrompt,
         messages: assembled.messages,
@@ -88,11 +102,16 @@ class TurnEngine {
       }
 
       const results = await executor.dispatchBatch(pendingToolUses, ctx, state);
+      let isolationAbort = false;
       for (const r of results) {
         state = appendItem(state, r);
         await this._session.appendItem(ctx.conversationId, r);
         yield r;
+        if (r.type === 'tool_result' && r.output && r.output.ok === false && r.output.kind === 'isolation_violation') {
+          isolationAbort = true;
+        }
       }
+      if (isolationAbort) break;
 
       if (stopReason !== 'tool_use') break;
     }

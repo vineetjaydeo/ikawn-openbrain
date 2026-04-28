@@ -2,6 +2,7 @@ FROM node:20-alpine
 RUN apk add --no-cache git
 WORKDIR /app
 COPY package*.json ./
+COPY packages/ ./packages/
 RUN npm ci --only=production
 RUN git config --global user.name "Lucy (OpenBrain)" && \
     git config --global user.email "lucy@ikawn.com" && \

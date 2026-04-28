@@ -4577,7 +4577,7 @@ function chatPage(user, isDirectChat = false) {
       if (!ta) return;
       var text = (ta.value || '').trim();
       if (!text || !_activeArtifact) return;
-      var prefix = 'Re: ' + (_activeArtifact.title || 'report') + ' — ';
+      var prefix = 'Re: ' + (_activeArtifact.title || 'report') + ' - ';
       var input = document.getElementById('msg-input');
       if (input) {
         input.value = prefix + text + '\n\n[artifact: ' + _activeArtifact.url + ']';

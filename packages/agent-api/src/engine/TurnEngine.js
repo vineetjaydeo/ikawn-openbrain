@@ -103,6 +103,8 @@ class TurnEngine {
 
       const results = await executor.dispatchBatch(pendingToolUses, ctx, state);
       let isolationAbort = false;
+      let approvalSuspend = false;
+      let asyncSuspend = false;
       for (const r of results) {
         state = appendItem(state, r);
         await this._session.appendItem(ctx.conversationId, r);
@@ -110,8 +112,22 @@ class TurnEngine {
         if (r.type === 'tool_result' && r.output && r.output.ok === false && r.output.kind === 'isolation_violation') {
           isolationAbort = true;
         }
+        if (r.type === 'approval_pending') approvalSuspend = true;
+        if (r.type === 'tool_async_pending') asyncSuspend = true;
       }
       if (isolationAbort) break;
+      if (approvalSuspend) {
+        state = { ...state, currentStep: 'awaiting_approval' };
+        await this._session.save(state);
+        yield { status: 'awaiting_approval' };
+        return;
+      }
+      if (asyncSuspend) {
+        state = { ...state, currentStep: 'awaiting_job' };
+        await this._session.save(state);
+        yield { status: 'awaiting_job' };
+        return;
+      }
 
       if (stopReason !== 'tool_use') break;
     }

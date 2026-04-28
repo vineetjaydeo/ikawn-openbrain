@@ -317,3 +317,57 @@ describe('TurnEngine error surfaces', () => {
     expect(provider.calls).toHaveLength(0); // no provider call when budget exceeded
   });
 });
+
+describe('TurnEngine suspension stubs', () => {
+  it('yields awaiting_approval terminal when an approval_pending item is produced', async () => {
+    const session = await setupSession();
+    // Stub registry/tool that returns approval_pending RunItem.
+    const stubExecutorTool = defineTool({
+      name: 'sensitive',
+      description: 'd',
+      parameters: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      mode: 'sync',
+      concurrency: 'safe',
+      needsApproval: true,
+      timeoutMs: 1000,
+      retry: { maxAttempts: 0 },
+      async execute() {
+        return { ok: true };
+      },
+    });
+    const registry = new ToolRegistry();
+    registry.register(stubExecutorTool);
+
+    const provider = new MemoryProvider({ script: [] });
+    provider.invoke = async function* () {
+      yield { type: 'tool_use', toolUseId: 'tu_a', name: 'sensitive', input: {} };
+      yield { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } };
+    };
+
+    const engine = new TurnEngine({
+      session,
+      learningSink: new MemoryLearningSink(),
+      contextAssembler: new ContextAssembler({
+        brandReader: async () => '',
+        lessonReader: async () => [],
+        learningSink: new MemoryLearningSink(),
+        agentConfig: () => ({ inputTokenBudget: 100000, maxRetrieval: 8 }),
+        estimateTokens: (t) => Math.ceil((t || '').length / 4),
+      }),
+      provider,
+      registry,
+    });
+
+    const items = [];
+    // canUseTool returns 'pending' to signal approval required (Plan 02 stub convention).
+    for await (const item of engine.submitMessage({
+      input: 'hi',
+      ctx: { ...ctxFor(), conversationId: 'c1', canUseTool: async () => 'pending' },
+    })) {
+      items.push(item);
+    }
+
+    expect(items[items.length - 1]).toEqual({ status: 'awaiting_approval' });
+  });
+});

@@ -25,6 +25,15 @@ class StreamingToolExecutor {
     }
 
     const allowed = await Promise.resolve(this._canUseTool(tool, validated.data, ctx));
+    if (allowed === 'pending') {
+      return {
+        type: 'approval_pending',
+        toolUseId,
+        toolName: name,
+        input: validated.data,
+        ts,
+      };
+    }
     if (!allowed) {
       return {
         type: 'denial',

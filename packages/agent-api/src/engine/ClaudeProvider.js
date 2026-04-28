@@ -12,9 +12,54 @@ class ClaudeProvider {
     const params = this._buildParams({ systemPrompt, messages, tools, cacheBreakpoints, model, maxTokens });
     const stream = this._client.messages.stream(params);
 
+    const blocks = new Map(); // index -> { type, toolUseId?, name?, jsonBuf? }
+
     for await (const event of stream) {
-      const out = this._mapEvent(event);
-      if (out) yield out;
+      if (!event || !event.type) continue;
+      if (event.type === 'content_block_start') {
+        const cb = event.content_block;
+        if (cb.type === 'tool_use') {
+          blocks.set(event.index, { type: 'tool_use', toolUseId: cb.id, name: cb.name, jsonBuf: '' });
+        } else if (cb.type === 'text') {
+          blocks.set(event.index, { type: 'text' });
+        }
+      } else if (event.type === 'content_block_delta') {
+        const block = blocks.get(event.index);
+        if (!block) continue;
+        if (event.delta.type === 'text_delta') {
+          yield { type: 'text_delta', text: event.delta.text };
+        } else if (event.delta.type === 'input_json_delta') {
+          block.jsonBuf = (block.jsonBuf || '') + event.delta.partial_json;
+        }
+      } else if (event.type === 'content_block_stop') {
+        const block = blocks.get(event.index);
+        if (!block) continue;
+        if (block.type === 'tool_use') {
+          let parsed = {};
+          if (block.jsonBuf && block.jsonBuf.length > 0) {
+            try {
+              parsed = JSON.parse(block.jsonBuf);
+            } catch (e) {
+              throw new Error(`ClaudeProvider tool_use input JSON parse failed: ${e.message}; buffer="${block.jsonBuf}"`);
+            }
+          }
+          yield { type: 'tool_use', toolUseId: block.toolUseId, name: block.name, input: parsed };
+        }
+        blocks.delete(event.index);
+      } else if (event.type === 'message_stop') {
+        const msg = event.message || {};
+        const usage = msg.usage || {};
+        yield {
+          type: 'message_stop',
+          stopReason: msg.stop_reason,
+          usage: {
+            inputTokens: usage.input_tokens || 0,
+            outputTokens: usage.output_tokens || 0,
+            cacheReadInputTokens: usage.cache_read_input_tokens || 0,
+            cacheCreationInputTokens: usage.cache_creation_input_tokens || 0,
+          },
+        };
+      }
     }
   }
 
@@ -49,24 +94,6 @@ class ClaudeProvider {
     };
   }
 
-  _mapEvent(_event) {
-    // Streaming event mapping is implemented in Task 6.
-    // For Task 5 we only verify request shaping; a single message_stop event
-    // is the minimum the test fakes deliver, so map it here.
-    if (_event && _event.type === 'message_stop' && _event.message) {
-      return {
-        type: 'message_stop',
-        stopReason: _event.message.stop_reason,
-        usage: {
-          inputTokens: _event.message.usage.input_tokens,
-          outputTokens: _event.message.usage.output_tokens,
-          cacheReadInputTokens: _event.message.usage.cache_read_input_tokens || 0,
-          cacheCreationInputTokens: _event.message.usage.cache_creation_input_tokens || 0,
-        },
-      };
-    }
-    return null;
-  }
 }
 
 module.exports = { ClaudeProvider };

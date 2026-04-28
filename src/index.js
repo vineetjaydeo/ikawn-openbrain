@@ -205,7 +205,52 @@ app.use(designPage);
 app.use(requireBrandAccess, missionControlRoute);
 
 // Chat API + upload — requires auth
-app.use(requireAuth, chatApi);
+if (process.env.OPENBRAIN_BRAIN === 'v2') {
+  const { createLegacyHttpRouter, ClaudeProvider, buildBrandContext } = require('@ikawn/agent-api');
+  const ClaudeSDK = require('@anthropic-ai/sdk');
+  const { captureMessage } = require('./utils/capture.js');
+  const { searchWeb } = require('./utils/web-search.js');
+  const { getBrandContextForUser } = require('./utils/brand-context.js');
+  const { getEmbedding } = require('./embeddings.js');
+
+  const anthropicClient = new ClaudeSDK({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const provider = new ClaudeProvider({ client: anthropicClient });
+
+  const v2Router = createLegacyHttpRouter({
+    pool,
+    captureMessage,
+    provider,
+    // Plan 01's buildBrandContext takes an options object — see
+    // packages/agent-api/src/engine/brandContext.js for the full signature.
+    // The `brandAllowlist: [req.brand_id]` opts the user out of transition mode.
+    buildBrandContext: async (req) => buildBrandContext({
+      authPrincipal: {
+        userId: req.session?.user?.id,
+        brandAllowlist: [req.brand_id],
+      },
+      requestedBrand: req.brand_id,
+      agent: 'general',
+      deps: {
+        getUser: async (id) => ({ id }),
+        isBrandMember: async () => true,
+        isAgentAllowed: async () => true,
+        resolvePermissions: async () => new Set(),
+      },
+      brandRevision: 0,
+    }),
+    toolDeps: {
+      vectorSearch: { getEmbedding, query: pool.query.bind(pool) },
+      brandContextRead: {
+        getBrandProfile: async ({ brand, userId }) => getBrandContextForUser(userId, brand, pool),
+      },
+      webSearch: { searchWeb },
+    },
+  });
+  app.use(requireAuth, v2Router);
+  console.log('[index] OPENBRAIN_BRAIN=v2 — chat served by agent-api legacyHttp transport');
+} else {
+  app.use(requireAuth, chatApi);
+}
 app.use(requireAuth, uploadRoute);
 app.use(requireAuth, ruhiChatRoute);
 

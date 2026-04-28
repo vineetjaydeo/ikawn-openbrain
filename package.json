@@ -19,6 +19,7 @@
     "build:design": "cd src/design-app && npm run build"
   },
   "dependencies": {
+    "@ikawn/agent-api": "workspace:*",
     "@anthropic-ai/sdk": "^0.78.0",
     "@aws-sdk/client-s3": "^3.1002.0",
     "@aws-sdk/s3-request-presigner": "^3.1002.0",

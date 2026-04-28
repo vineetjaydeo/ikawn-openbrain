@@ -48,7 +48,7 @@ const vectorSearch = defineTool({
     const deps = ctx.deps && ctx.deps.vectorSearch;
     if (!deps) throw new Error('vector_search requires ctx.deps.vectorSearch = { getEmbedding, query }');
     const brand = ctx.brandContext.brand;
-    const limit = input.limit;
+    const limit = input.limit !== undefined ? input.limit : 10;
 
     const embedding = await deps.getEmbedding(input.query);
     let rows;

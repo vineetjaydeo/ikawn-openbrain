@@ -732,7 +732,7 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
       toolChoice = { type: 'tool', name: 'generate_pdf' };
     } else if (/\b(create|make|generate|write)\b.{0,30}\b(spreadsheet|xlsx|excel)\b/i.test(lc)) {
       toolChoice = { type: 'tool', name: 'generate_spreadsheet' };
-    } else if (/\b(create|make|generate|build|design|code|write)\b.{0,40}\b(html|webpage|web ?page|landing ?page|prototype|mockup|website|page|site|form|dashboard|ui|interface|layout|app)\b/i.test(lc)) {
+    } else if (/\b(create|make|generate|build|design|code|write|prepare|draft)\b.{0,40}\b(html|webpage|web ?page|landing ?page|prototype|mockup|website|page|site|form|dashboard|ui|interface|layout|app|report|brief|investor brief|one[- ]?pager|memo|summary)\b/i.test(lc)) {
       toolChoice = { type: 'tool', name: 'generate_html' };
     }
     if (toolChoice) {

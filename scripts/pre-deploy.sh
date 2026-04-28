@@ -12,8 +12,8 @@ echo "  Lint passed."
 echo ""
 
 # Step 2: Tests
-echo "[2/3] Running tests..."
-npx vitest run tests/ --reporter=verbose
+echo "[2/3] Running tests (root + packages/agent-api)..."
+npx vitest run tests/ packages/agent-api/test/ --reporter=verbose
 echo "  Tests passed."
 echo ""
 

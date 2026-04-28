@@ -1,6 +1,7 @@
 'use strict';
 
 const { appendItem } = require('./runState.js');
+const { StreamingToolExecutor } = require('../tools/StreamingToolExecutor.js');
 
 class TurnEngine {
   constructor({ session, learningSink, contextAssembler, provider, registry }) {
@@ -29,48 +30,74 @@ class TurnEngine {
     await this._session.appendItem(ctx.conversationId, userItem);
     yield userItem;
 
-    const assembled = await this._assembler.compose({ ctx, state, turnInput: input });
+    const executor = new StreamingToolExecutor({
+      registry: this._registry,
+      canUseTool: ctx.canUseTool || (async () => true),
+    });
 
-    let assistantText = '';
-    const providerArgs = {
-      systemPrompt: assembled.systemPrompt,
-      messages: assembled.messages,
-      tools: this._registry.list().map((t) => ({ name: t.name, description: t.description, input_schema: t.jsonSchema })),
-      cacheBreakpoints: assembled.cacheBreakpoints,
-      model: ctx.model,
-    };
-    let lastStop;
-    for await (const chunk of this._provider.invoke(providerArgs)) {
-      if (chunk.type === 'text_delta') {
-        assistantText += chunk.text;
-      } else if (chunk.type === 'tool_use') {
-        // Tool dispatch implemented in Task 8.
-        throw new Error('tool_use dispatch not implemented in TurnEngine skeleton');
-      } else if (chunk.type === 'message_stop') {
-        lastStop = chunk;
-      }
-    }
-
-    if (assistantText.length > 0) {
-      const asstItem = { type: 'assistant_message', content: assistantText, ts: Date.now() };
-      state = appendItem(state, asstItem);
-      await this._session.appendItem(ctx.conversationId, asstItem);
-      yield asstItem;
-    }
-
-    if (lastStop && lastStop.usage) {
-      state = {
-        ...state,
-        usage: {
-          inputTokens: (state.usage?.inputTokens || 0) + lastStop.usage.inputTokens,
-          outputTokens: (state.usage?.outputTokens || 0) + lastStop.usage.outputTokens,
-          cacheReads: (state.usage?.cacheReads || 0) + lastStop.usage.cacheReadInputTokens,
-          cacheWrites: (state.usage?.cacheWrites || 0) + lastStop.usage.cacheCreationInputTokens,
-        },
+    const usageAccum = { inputTokens: 0, outputTokens: 0, cacheReads: 0, cacheWrites: 0 };
+    let safety = 0;
+    while (safety++ < 10) {
+      const assembled = await this._assembler.compose({ ctx, state, turnInput: input });
+      const providerArgs = {
+        systemPrompt: assembled.systemPrompt,
+        messages: assembled.messages,
+        tools: this._registry.list().map((t) => ({ name: t.name, description: t.description, input_schema: t.jsonSchema })),
+        cacheBreakpoints: assembled.cacheBreakpoints,
+        model: ctx.model,
       };
+
+      let assistantText = '';
+      const pendingToolUses = [];
+      let stopReason = null;
+      for await (const chunk of this._provider.invoke(providerArgs)) {
+        if (chunk.type === 'text_delta') {
+          assistantText += chunk.text;
+        } else if (chunk.type === 'tool_use') {
+          // Plan 01's StreamingToolExecutor reads `toolUse.id`. The provider yields
+          // `toolUseId`. Normalize at the engine boundary so executor + RunItem fields
+          // both work.
+          pendingToolUses.push({ type: 'tool_use', id: chunk.toolUseId, toolUseId: chunk.toolUseId, name: chunk.name, input: chunk.input });
+        } else if (chunk.type === 'message_stop') {
+          stopReason = chunk.stopReason;
+          if (chunk.usage) {
+            usageAccum.inputTokens += chunk.usage.inputTokens || 0;
+            usageAccum.outputTokens += chunk.usage.outputTokens || 0;
+            usageAccum.cacheReads += chunk.usage.cacheReadInputTokens || 0;
+            usageAccum.cacheWrites += chunk.usage.cacheCreationInputTokens || 0;
+          }
+        }
+      }
+
+      if (assistantText.length > 0) {
+        const asstItem = { type: 'assistant_message', content: assistantText, ts: Date.now() };
+        state = appendItem(state, asstItem);
+        await this._session.appendItem(ctx.conversationId, asstItem);
+        yield asstItem;
+      }
+
+      if (pendingToolUses.length === 0) {
+        break;
+      }
+
+      for (const tu of pendingToolUses) {
+        const callItem = { type: 'tool_call', toolUseId: tu.toolUseId, name: tu.name, input: tu.input, ts: Date.now() };
+        state = appendItem(state, callItem);
+        await this._session.appendItem(ctx.conversationId, callItem);
+        yield callItem;
+      }
+
+      const results = await executor.dispatchBatch(pendingToolUses, ctx, state);
+      for (const r of results) {
+        state = appendItem(state, r);
+        await this._session.appendItem(ctx.conversationId, r);
+        yield r;
+      }
+
+      if (stopReason !== 'tool_use') break;
     }
 
-    state = { ...state, currentStep: 'idle' };
+    state = { ...state, currentStep: 'idle', usage: { ...(state.usage || {}), ...usageAccum } };
     await this._session.save(state);
     yield { status: 'end_turn' };
   }

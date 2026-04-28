@@ -197,3 +197,65 @@ describe('ContextAssembler budget gating', () => {
     })).rejects.toThrow(BudgetExceededError);
   });
 });
+
+describe('ContextAssembler lesson ranking', () => {
+  it('selects top-N by weighted score using default weights', async () => {
+    const sink = new MemoryLearningSink();
+    const now = Date.now();
+    await sink.writeLesson({ brand: 'ikawn' }, {
+      id: 'low', agent: 'ruhi', topic: 't', text: 'low score lesson',
+      embedding: [], quality_score: 0.1, created_at: now - 10_000_000,
+    });
+    await sink.writeLesson({ brand: 'ikawn' }, {
+      id: 'high', agent: 'ruhi', topic: 't', text: 'high score lesson',
+      embedding: [], quality_score: 0.9, created_at: now,
+    });
+    const assembler = new ContextAssembler({
+      learningSink: sink,
+      brandReader: fakeBrandReader(),
+      agentConfig: () => ({
+        inputTokenBudget: 200000,
+        maxRetrieval: 1,
+        lessonInjectionWeights: { similarity: 0.5, recency: 0.3, quality_score: 0.2 },
+        toolAllowlist: [],
+      }),
+      estimateTokens: () => 5,
+      similarityFn: () => 0.5, // constant
+    });
+    const out = await assembler.compose({
+      ctx: baseCtx(), state: baseState(), turnInput: [{ type: 'text', text: 'q' }],
+    });
+    // Top 1 should be the high-quality, more-recent lesson
+    expect(out.lessonsApplied.map((l) => l.id)).toEqual(['high']);
+  });
+
+  it('respects per-agent weight overrides', async () => {
+    const sink = new MemoryLearningSink();
+    const now = Date.now();
+    await sink.writeLesson({ brand: 'ikawn' }, {
+      id: 'recent_low_quality', agent: 'ruhi', topic: 't', text: 'r',
+      embedding: [], quality_score: 0.0, created_at: now,
+    });
+    await sink.writeLesson({ brand: 'ikawn' }, {
+      id: 'old_high_quality', agent: 'ruhi', topic: 't', text: 'o',
+      embedding: [], quality_score: 1.0, created_at: now - 1_000_000_000,
+    });
+    const assembler = new ContextAssembler({
+      learningSink: sink,
+      brandReader: fakeBrandReader(),
+      // Pure quality weighting -> old_high_quality wins
+      agentConfig: () => ({
+        inputTokenBudget: 200000,
+        maxRetrieval: 1,
+        lessonInjectionWeights: { similarity: 0, recency: 0, quality_score: 1 },
+        toolAllowlist: [],
+      }),
+      estimateTokens: () => 5,
+      similarityFn: () => 0.5,
+    });
+    const out = await assembler.compose({
+      ctx: baseCtx(), state: baseState(), turnInput: [{ type: 'text', text: 'q' }],
+    });
+    expect(out.lessonsApplied[0].id).toBe('old_high_quality');
+  });
+});

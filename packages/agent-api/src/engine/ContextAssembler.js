@@ -1,11 +1,12 @@
 const { BudgetExceededError } = require('../errors.js');
 
 class ContextAssembler {
-  constructor({ learningSink, brandReader, agentConfig, estimateTokens }) {
+  constructor({ learningSink, brandReader, agentConfig, estimateTokens, similarityFn }) {
     this._learningSink = learningSink;
     this._brandReader = brandReader;
     this._agentConfig = agentConfig;
     this._estimateTokens = estimateTokens;
+    this._similarityFn = similarityFn || (() => 0);
   }
 
   async compose({ ctx, state, turnInput }) {
@@ -94,13 +95,29 @@ class ContextAssembler {
     };
   }
 
-  // Lesson ranking is wired in Task 11; for Task 9 it returns the unranked top-N.
-  async _readAndRankLessons({ ctx, config }) {
+  async _readAndRankLessons({ ctx, turnInput, config }) {
     const candidates = await this._learningSink.readLessons(
       { brand: ctx.brandContext.brand, agent: ctx.brandContext.agent },
-      config.maxRetrieval || 8,
+      Math.max(config.maxRetrieval * 2, 0), // pull a wider pool, then rank
     );
-    return candidates.map((c) => ({ ...c, _score: 0 }));
+    if (candidates.length === 0) return [];
+    const weights = config.lessonInjectionWeights || {
+      similarity: 0.5, recency: 0.3, quality_score: 0.2,
+    };
+    const now = Date.now();
+    const RECENCY_HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+    const ranked = candidates.map((c) => {
+      const sim = this._similarityFn(c, turnInput);
+      const ageMs = Math.max(now - (c.created_at || 0), 0);
+      const recency = Math.exp(-ageMs / RECENCY_HALF_LIFE_MS);
+      const quality = c.quality_score || 0;
+      const score = weights.similarity * sim
+                  + weights.recency * recency
+                  + weights.quality_score * quality;
+      return { ...c, _score: score };
+    });
+    ranked.sort((a, b) => b._score - a._score);
+    return ranked.slice(0, config.maxRetrieval || 8);
   }
 
   _historySinceLastBoundary(items) {

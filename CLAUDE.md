@@ -225,6 +225,34 @@ Always use context7 when working with any library, framework, or API.
 
 ---
 
+## OpenBrain — `OPENBRAIN_BRAIN` flag (v1 / v2)
+
+The OpenBrain chat path is dual-implementation behind one env var.
+
+| Value | Path | Status |
+|-------|------|--------|
+| unset / `v1` | `src/routes/chat-api.js` (legacy reasoning loop) | Production today |
+| `v2` | `packages/agent-api/` `legacyHttp` (TurnEngine + 3 pioneer tools) | Plan 02 cutover; Lucy soak |
+
+### Activate / rollback
+
+```bash
+# Activate on Lucy
+~/.fly/bin/flyctl secrets set OPENBRAIN_BRAIN=v2 --app ikawn-openbrain
+
+# Rollback (instant)
+~/.fly/bin/flyctl secrets unset OPENBRAIN_BRAIN --app ikawn-openbrain
+```
+
+### Hard rules
+
+- Lucy first. NEVER set `OPENBRAIN_BRAIN=v2` on `ruhi-os-brain` without V's explicit approval (`feedback_lucy_first_ruhi_safe.md`).
+- Soak window: minimum one week on Lucy before any Ruhi Brain consideration.
+- Under v2, attachments / mentions / generations / skills / titles / drafts are **not yet supported** -- Plans 03-05 close the gap.
+- `npm run pre-deploy` MUST pass before any deploy. The gate now covers both root and `packages/agent-api/` test suites.
+
+---
+
 ## OpenBrain — Non-Negotiable Rules
 
 1. **`captureMessage()` is the ONLY door** — no direct INSERTs into memories anywhere, ever

@@ -2244,6 +2244,14 @@ function chatPage(user, isDirectChat = false) {
         const welcome = document.getElementById('welcome');
         if (welcome) welcome.style.display = 'none';
         document.querySelector('.main').classList.add('in-chat');
+        const inner = document.getElementById('messages-inner');
+        if (inner && !inner.children.length) {
+          const loader = document.createElement('div');
+          loader.className = 'convo-loading';
+          loader.style.cssText = 'padding:32px 16px;text-align:center;color:#888;font-size:13px;';
+          loader.textContent = 'Loading conversation…';
+          inner.appendChild(loader);
+        }
       } else {
         setGreeting();
       }
@@ -2680,6 +2688,14 @@ function chatPage(user, isDirectChat = false) {
         restoreActiveTasks();
       } catch (err) {
         showToast(err.message, 'error');
+        const inner = document.getElementById('messages-inner');
+        if (inner) {
+          inner.textContent = '';
+          const errEl = document.createElement('div');
+          errEl.style.cssText = 'padding:48px 16px;text-align:center;color:#999;font-size:14px;';
+          errEl.textContent = 'Could not load this conversation. Try refreshing the page.';
+          inner.appendChild(errEl);
+        }
       }
     }
 
@@ -3148,8 +3164,6 @@ function chatPage(user, isDirectChat = false) {
 
       isStreaming = true;
       updateSendBtn();
-
-      await new Promise(r => setTimeout(r, 350));
 
       let staleTimer = null;
       try {

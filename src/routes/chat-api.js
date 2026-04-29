@@ -818,6 +818,13 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
 
     const pendingGenerations = [];
     const TOOL_TIMEOUT_MS = 30000;
+    const TOOL_TIMEOUTS = {
+      generate_pptx: 120000,
+      generate_pdf: 120000,
+      generate_html: 60000,
+      generate_docx: 90000,
+      generate_xlsx: 90000,
+    };
 
     // ── Reasoning Loop: replaces manual multi-turn tool loop ──
     // Map chat tiers to engine tiers
@@ -841,7 +848,7 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
       }
 
       try {
-        const timeoutMs = TOOL_TIMEOUT_MS;
+        const timeoutMs = TOOL_TIMEOUTS[toolName] || TOOL_TIMEOUT_MS;
         const execResult = await Promise.race([
           registryTool.execute(
             toolInput || {},

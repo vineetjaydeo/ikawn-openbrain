@@ -29,7 +29,7 @@ function needsWebSearch(text) {
   if (lower.includes('?')) return true;
   const questionWords = /^(what|who|where|when|why|how|is|are|do|does|can|will|should|which)\b/;
   if (questionWords.test(lower)) return true;
-  const searchKeywords = /\b(search|find|look up|lookup|latest|current|news|today|recent|update|price|weather|stock)\b/;
+  const searchKeywords = /\b(search|find|look up|lookup|latest|current|news|today|recent|update|price|weather|stock|report|brief|earnings|valuation|financial|quarterly|annual|share\s*price|market\s*cap|q[1-4]\s*(?:fy)?\d+|fy\s*\d+|aum|revenue|profit|guidance)\b/;
   return searchKeywords.test(lower);
 }
 
@@ -590,6 +590,7 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
 - PRESENTATIONS: When asked to create/generate/make a presentation, deck, slides, or PPTX — ALWAYS call the generate_pptx tool. Never say "Building your deck..." without actually invoking generate_pptx in the same response. The user expects a real file, not a description.
 - DOCUMENTS: When asked to create/write/draft a document, report, or PDF — ALWAYS call generate_document or generate_pdf. Never describe writing it without invoking the tool.
 - IMAGES: When asked to create/generate an image, visual, or graphic — ALWAYS call the appropriate image generation tool. Never describe creating it without invoking the tool.
+- FACTUAL REPORTS / RESEARCH: When generating any report, brief, one-pager, deck, or analysis about a real company, market, financial metric (revenue, AUM, valuation, earnings, share price, KPIs), product launch, or current event — you MUST call web_search FIRST to ground your numbers and recent context, THEN call the generate_* tool with researched data. NEVER write financial figures, market sizes, valuations, recent earnings, or current events from training memory. If web_search returns nothing useful, say so explicitly in the report rather than estimating. Cite sources at the bottom of the artifact (Source: <publisher>, <date>).
 - GENERAL RULE: If you have a tool that does what the user asked for, CALL IT. Describing the action without calling the tool is a failure mode. The user wants the artifact, not a narration of your intent to create it.`
       };
     }
@@ -742,7 +743,16 @@ CRITICAL: Call generate_pptx EXACTLY ONCE per request. Never generate multiple v
         console.error(`[Harness] tool_choice ${toolChoice.name} not in tool registry — clearing`);
         toolChoice = undefined;
       } else {
-        console.log(`[Harness] Intent detected -> forcing tool_choice: ${toolChoice.name} for: "${lc.slice(0, 80)}"`);
+        // Always attach web_search alongside any document-generation intent so the
+        // model can ground factual reports. Switch tool_choice to 'any' (must call
+        // some tool) instead of forcing the document tool, so the model is free to
+        // call web_search first then generate.
+        if (!toolSchemas.find(t => t.name === 'web_search')) {
+          toolSchemas.push({ type: 'web_search_20250305', name: 'web_search', max_uses: 5 });
+        }
+        const intendedTool = toolChoice.name;
+        toolChoice = { type: 'any' };
+        console.log(`[Harness] Intent detected -> ${intendedTool} + web_search; tool_choice=any for: "${lc.slice(0, 80)}"`);
       }
     }
 

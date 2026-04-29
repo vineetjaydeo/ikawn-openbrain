@@ -78,14 +78,15 @@ function requireAuthOrApiKey(req, res, next) {
 }
 
 function requireBrand(req, res, next) {
-  // Resolution order: API key brand_id → API key org_id → x-brand-id header → session → default 'ikawn'
+  // Resolution order: API key brand_id → API key org_id → x-brand-id header → session → default (env BRAND_ID or 'ikawn')
+  const defaultBrand = (process.env.BRAND_ID || '').trim() || 'ikawn';
   const resolved = req.brand_id_from_key || req.orgId || req.headers['x-brand-id'] || req.session?.brand_id || null;
   if (resolved) {
     req.brand_id = resolved;
   } else {
-    req.brand_id = 'ikawn';
+    req.brand_id = defaultBrand;
     // Log fallback so we can track unscoped requests
-    console.warn(`[BrandFallback] ${req.method} ${req.path} defaulted to 'ikawn'`);
+    console.warn(`[BrandFallback] ${req.method} ${req.path} defaulted to '${defaultBrand}'`);
   }
   next();
 }

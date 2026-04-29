@@ -22,7 +22,7 @@ function chatPage(user, isDirectChat = false) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="robots" content="noindex, nofollow">
-  <title>Lucy | iKawn Intelligence</title>
+  <title>${INSTANCE_NAME} | iKawn Intelligence</title>
   ${RUHI_FAVICON_LINK}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1975,7 +1975,7 @@ function chatPage(user, isDirectChat = false) {
 
     <!-- Icon Rail (always visible on desktop) -->
     <nav class="sidebar-rail" id="sidebar-rail" onclick="toggleSidebar()">
-      <div class="rail-logo" title="Lucy" onclick="event.stopPropagation(); goHome()" style="cursor:pointer">
+      <div class="rail-logo" title="${INSTANCE_NAME}" onclick="event.stopPropagation(); goHome()" style="cursor:pointer">
         \u2726
       </div>
 
@@ -2104,7 +2104,7 @@ function chatPage(user, isDirectChat = false) {
         <div class="messages-inner" id="messages-inner">
           <div class="welcome-screen${isDirectChat ? ' hidden-on-load' : ''}" id="welcome">
             ${SPACETIME_HTML}
-            <div class="welcome-logo"><span class="sparkle">\u2726</span> Lucy</div>
+            <div class="welcome-logo"><span class="sparkle">\u2726</span> ${INSTANCE_NAME}</div>
             <div class="welcome-tagline" id="welcome-tagline"></div>
             <div class="capabilities-hint" id="capabilities-hint">
               <div class="cap-row">
@@ -3388,7 +3388,7 @@ function chatPage(user, isDirectChat = false) {
 
         // Detect premature stream close (connection died without 'done' event)
         if (!receivedDone && fullText.length === 0) {
-          showToast('Connection lost — Lucy may still be thinking. Try sending your message again.', 'error');
+          showToast('Connection lost — ${INSTANCE_NAME} may still be thinking. Try sending your message again.', 'error');
         } else if (!receivedDone && fullText.length > 0) {
           // Partial response received — let user know it was cut short
           if (bubble) {
@@ -4580,7 +4580,7 @@ function chatPage(user, isDirectChat = false) {
       var prefix = 'Re: ' + (_activeArtifact.title || 'report') + ' - ';
       var input = document.getElementById('msg-input');
       if (input) {
-        input.value = prefix + text + '\n\n[artifact: ' + _activeArtifact.url + ']';
+        input.value = prefix + text + '\\n\\n[artifact: ' + _activeArtifact.url + ']';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         if (typeof sendMessage === 'function') sendMessage();
       }

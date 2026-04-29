@@ -1,5 +1,16 @@
 FROM node:20-alpine
-RUN apk add --no-cache git
+# Install git + Chromium for puppeteer-core (HTML artifact -> PDF rendering)
+RUN apk add --no-cache \
+    git \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 WORKDIR /app
 COPY package*.json ./
 COPY packages/ ./packages/

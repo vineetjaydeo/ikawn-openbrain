@@ -16,11 +16,16 @@ interface StreamEventDelta {
   conversation_id?: string;
 }
 
+const DEDUPE_WINDOW_MS = 5000;
+
 export function useStreamChat() {
   const abortRef = useRef<AbortController | null>(null);
   const addMessage = useChatStore((s) => s.addMessage);
   const updateStreamingMessage = useChatStore(
     (s) => s.updateStreamingMessage,
+  );
+  const attachArtifact = useChatStore(
+    (s) => s.attachArtifactToStreamingMessage,
   );
   const setIsStreaming = useChatStore((s) => s.setIsStreaming);
   const markLastMessageIncomplete = useChatStore(
@@ -37,13 +42,32 @@ export function useStreamChat() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      // Add user message optimistically
-      addMessage({
-        id: crypto.randomUUID(),
-        role: 'user',
-        content,
-        timestamp: new Date(),
-      });
+      // Dedupe guard: if the last message is a user message with the same content
+      // sent within the last 5 seconds, skip the optimistic add. This prevents the
+      // 3x duplication that occurred when ChatView's hydration effect raced with
+      // the optimistic insert + post-stream refetch.
+      const { messages } = useChatStore.getState();
+      const lastMsg = messages[messages.length - 1];
+      const lastTs =
+        lastMsg?.timestamp instanceof Date
+          ? lastMsg.timestamp.getTime()
+          : lastMsg?.timestamp
+            ? new Date(lastMsg.timestamp).getTime()
+            : 0;
+      const isDuplicate =
+        lastMsg?.role === 'user' &&
+        lastMsg.content === content &&
+        Date.now() - lastTs < DEDUPE_WINDOW_MS;
+
+      if (!isDuplicate) {
+        // Add user message optimistically
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'user',
+          content,
+          timestamp: new Date(),
+        });
+      }
 
       // Add placeholder assistant message for streaming
       addMessage({
@@ -121,11 +145,14 @@ export function useStreamChat() {
                 fullContent += parsed.content ?? parsed.text ?? '';
                 updateStreamingMessage(fullContent);
               } else if (parsed.type === 'artifact_ready' && (parsed as any).url) {
-                const artifact = parsed as any;
-                const label = artifact.filename || artifact.tool || 'Download';
-                const downloadLine = `\n\n[${label}](${artifact.url})`;
-                fullContent += downloadLine;
-                updateStreamingMessage(fullContent);
+                const a = parsed as any;
+                attachArtifact({
+                  tool: a.tool || 'unknown',
+                  url: a.url,
+                  title: a.title || a.filename || 'Artifact',
+                  filename: a.filename,
+                  type: a.tool === 'generate_html' ? 'html' : (a.type || 'html'),
+                });
               } else if (parsed.type === 'task_started' && parsed.taskId) {
                 const { addActiveTask } = useChatStore.getState();
                 addActiveTask({
@@ -167,7 +194,7 @@ export function useStreamChat() {
         abortRef.current = null;
       }
     },
-    [addMessage, updateStreamingMessage, setIsStreaming, markLastMessageIncomplete],
+    [addMessage, updateStreamingMessage, attachArtifact, setIsStreaming, markLastMessageIncomplete],
   );
 
   const cancelStream = useCallback(() => {

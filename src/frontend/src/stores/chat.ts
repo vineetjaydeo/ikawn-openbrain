@@ -1,5 +1,18 @@
 import { create } from 'zustand'
 
+export interface Artifact {
+  /** Tool that produced this artifact. */
+  tool: string
+  /** Public R2 url to the rendered artifact (HTML for now). */
+  url: string
+  /** Display title (used in card header and PDF filename). */
+  title?: string
+  /** Underlying filename on R2 (e.g. "report-2026-04-29-abc12345.html"). */
+  filename?: string
+  /** MIME type / artifact type. Defaults to 'html'. */
+  type?: string
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -7,6 +20,8 @@ export interface Message {
   created_at?: string
   timestamp?: Date
   attachments?: { name: string; type: string; url: string }[]
+  /** Tool-produced artifacts attached to this assistant turn. */
+  artifacts?: Artifact[]
   isStreaming?: boolean
   incomplete?: boolean
 }
@@ -47,6 +62,7 @@ interface ChatState {
   setMessages: (messages: Message[]) => void
   addMessage: (message: Message) => void
   updateStreamingMessage: (content: string) => void
+  attachArtifactToStreamingMessage: (artifact: Artifact) => void
   setIsStreaming: (streaming: boolean) => void
   setDraftText: (text: string) => void
   clearMessages: () => void
@@ -71,6 +87,18 @@ export const useChatStore = create<ChatState>((set) => ({
       const last = msgs[msgs.length - 1]
       if (last && last.isStreaming) {
         msgs[msgs.length - 1] = { ...last, content }
+      }
+      return { messages: msgs }
+    }),
+  attachArtifactToStreamingMessage: (artifact) =>
+    set((state) => {
+      const msgs = [...state.messages]
+      const last = msgs[msgs.length - 1]
+      if (last && last.role === 'assistant') {
+        const existing = last.artifacts || []
+        // Dedupe by url — same tool can fire artifact_ready twice on retries.
+        if (existing.some((a) => a.url === artifact.url)) return state
+        msgs[msgs.length - 1] = { ...last, artifacts: [...existing, artifact] }
       }
       return { messages: msgs }
     }),

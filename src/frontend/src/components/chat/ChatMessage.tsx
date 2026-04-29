@@ -6,6 +6,7 @@ import rehypeHighlight from 'rehype-highlight'
 import type { Components } from 'react-markdown'
 import { cn } from '@/lib/utils'
 import { StreamingIndicator } from '@/components/chat/StreamingIndicator'
+import { ArtifactCard } from '@/components/chat/ArtifactCard'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import type { Message } from '@/stores/chat'
@@ -232,6 +233,10 @@ export function ChatMessage({ message, onContinue }: ChatMessageProps) {
                 {message.content}
               </ReactMarkdown>
             </div>
+
+            {message.artifacts?.map((artifact) => (
+              <ArtifactCard key={artifact.url} artifact={artifact} />
+            ))}
 
             {message.isStreaming && <StreamingIndicator />}
 

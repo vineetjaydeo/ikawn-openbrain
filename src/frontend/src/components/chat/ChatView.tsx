@@ -119,12 +119,28 @@ export function ChatView() {
   const { data: detail, isLoading: isLoadingMessages } =
     useConversationDetail(activeConversationId)
 
-  // Sync fetched messages into store (only when not streaming, to avoid overwriting)
+  // Hydrate fetched messages into the store EXACTLY ONCE per conversation switch.
+  // Re-hydrating on every refetch overwrites in-memory streamed messages with the
+  // stale server snapshot, which produces ghost duplicates and wipes the assistant
+  // turn mid-stream. We track the conversation id we've already hydrated so refetches
+  // from TanStack Query are ignored after the initial load.
+  const hydratedConvIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (detail?.messages && !isStreaming) {
-      setMessages(detail.messages)
+    // Reset the guard whenever the active conversation changes.
+    if (hydratedConvIdRef.current !== activeConversationId) {
+      hydratedConvIdRef.current = null
     }
-  }, [detail?.messages, isStreaming, setMessages])
+    if (
+      detail?.messages &&
+      !isStreaming &&
+      activeConversationId &&
+      hydratedConvIdRef.current !== activeConversationId &&
+      messages.length === 0
+    ) {
+      setMessages(detail.messages)
+      hydratedConvIdRef.current = activeConversationId
+    }
+  }, [detail?.messages, isStreaming, setMessages, activeConversationId, messages.length])
 
   // Restore active tasks on page load / conversation switch
   const addActiveTask = useChatStore((s) => s.addActiveTask)

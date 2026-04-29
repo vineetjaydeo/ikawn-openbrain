@@ -1,6 +1,6 @@
 {
   "name": "ikawn-openbrain",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "description": "iKawn's Enterprise AI Intelligence Layer — memory, RAG, chat, agent platform",
   "main": "src/index.js",
   "workspaces": ["packages/*"],
@@ -47,6 +47,7 @@
     "pdfkit": "^0.18.0",
     "pg": "^8.13.0",
     "pptxgenjs": "^4.0.1",
+    "puppeteer-core": "^24.5.0",
     "resend": "^6.9.3",
     "sharp": "^0.34.5"
   },

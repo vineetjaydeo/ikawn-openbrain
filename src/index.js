@@ -42,6 +42,7 @@ const flowConfigRoute = require('./routes/flow-config');
 const connectorRoutes = require('./routes/connector-routes');
 const vaultApiRoute = require('./routes/vault-api');
 const vaultPage = require('./routes/vault-page');
+const artifactPdfRoute = require('./routes/artifact-pdf');
 const designApi = require('./routes/design-api');
 const designPage = require('./routes/design-page');
 const { startScheduler, triggerSync } = require('./scheduler');
@@ -185,6 +186,8 @@ app.use(skillsRoute);
 app.use(flowConfigRoute);
 app.use(connectorRoutes);
 app.use('/api/vault', requireAuth, vaultApiRoute);
+// Artifact PDF render — requires auth or API key (mounted BEFORE SPA fallback)
+app.use(requireAuthOrApiKey, artifactPdfRoute);
 
 // Vault page — requires auth (handled inside router)
 app.use(vaultPage);

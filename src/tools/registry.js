@@ -4,6 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 
+const PAYING_BRANDS = ['fedfina', 'shubhkart'];
+const IKAWN_ONLY_TOOLS = ['bash_exec', 'deploy_openbrain'];
+const PAYING_BRAND_TOOLS = ['manage_automation', 'brand_analysis'];
+
 const tools = new Map();
 
 /**
@@ -95,6 +99,14 @@ function checkToolPermission(toolName, context = {}) {
   // External brands: block high-tier tools unless explicitly enabled
   if (tier === 'high') {
     return { allowed: false, tier, reason: `Tool '${toolName}' is restricted for external brands. Contact admin to enable.` };
+  }
+
+  if (IKAWN_ONLY_TOOLS.includes(toolName)) {
+    return { allowed: false, tier, reason: `Tool '${toolName}' is restricted for external brands. Contact admin to enable.` };
+  }
+
+  if (PAYING_BRAND_TOOLS.includes(toolName) && !PAYING_BRANDS.includes(brandId)) {
+    return { allowed: false, tier, reason: `Tool '${toolName}' is restricted to paying brands.` };
   }
 
   return { allowed: true, tier };

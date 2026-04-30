@@ -77,6 +77,18 @@ describe('tool permissions', () => {
       expect(result.tier).toBe('high');
     });
 
+    it('paying brand allowed for critical tool (deploy_openbrain)', () => {
+      const result = checkToolPermission('deploy_openbrain', { brandId: 'fedfina' });
+      expect(result.allowed).toBe(true);
+      expect(result.tier).toBe('critical');
+    });
+
+    it('paying brand allowed for high tool (bash_exec)', () => {
+      const result = checkToolPermission('bash_exec', { brandId: 'fedfina' });
+      expect(result.allowed).toBe(true);
+      expect(result.tier).toBe('high');
+    });
+
     it('external brand allowed for low tools (system_status)', () => {
       const result = checkToolPermission('system_status', { brandId: 'maxfashion' });
       expect(result.allowed).toBe(true);

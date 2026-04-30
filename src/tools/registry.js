@@ -87,7 +87,7 @@ function checkToolPermission(toolName, context = {}) {
   const tier = getToolCostTier(toolName);
 
   // Internal (ikawn brand) has full access
-  if (brandId === 'ikawn' || isInternal) {
+  if (brandId === 'ikawn' || PAYING_BRANDS.includes(brandId) || isInternal) {
     return { allowed: true, tier };
   }
 

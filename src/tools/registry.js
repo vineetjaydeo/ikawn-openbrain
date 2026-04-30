@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PAYING_BRANDS = ['fedfina', 'shubhkart'];
-const IKAWN_ONLY_TOOLS = ['bash_exec', 'deploy_openbrain'];
+const IKAWN_ONLY_TOOLS = [];
 const PAYING_BRAND_TOOLS = ['manage_automation', 'brand_analysis'];
 
 const tools = new Map();

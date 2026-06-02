@@ -6,6 +6,7 @@ const { getTool } = require('./tools/registry');
 const { executeAgentTask } = require('./agent/executor');
 const { calculateNextRun, isInActiveWindow } = require('./utils/schedule');
 const { sendTelegramMessage } = require('./utils/telegram');
+const { startApiHealthMonitor, stopApiHealthMonitor } = require('./workers/api-health-monitor');
 const eventBus = require('./utils/event-bus');
 const { captureMessage } = require('./utils/capture');
 const { INSTANCE_NAME } = require('./utils/ruhi-assets');
@@ -92,7 +93,10 @@ function startScheduler() {
   // ── Event Bus: trigger-based tasks ──
   setupEventListeners();
 
-  console.log('Scheduler started: GitHub 30min, Calendar 2hr, Retention daily, Tasks 30s, Connectors active');
+  // ── API Health Monitor: spend + embedding-failure alarms ──
+  startApiHealthMonitor();
+
+  console.log('Scheduler started: GitHub 30min, Calendar 2hr, Retention daily, Tasks 30s, Connectors active, ApiHealth 15min');
 }
 
 /**
@@ -533,6 +537,7 @@ function stopScheduler() {
   if (outlookCalendarSyncInterval) clearInterval(outlookCalendarSyncInterval);
   if (analyticsSyncInterval) clearInterval(analyticsSyncInterval);
   if (metaSyncInterval) clearInterval(metaSyncInterval);
+  stopApiHealthMonitor();
   stopFlushTimer();
 }
 
